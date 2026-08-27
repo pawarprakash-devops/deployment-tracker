@@ -77,7 +77,7 @@ export default function Home() {
   const loadData = async () => {
     try {
       const [deploymentsRes, environmentsRes] = await Promise.all([
-        fetch('/api/deployments?limit=500'),
+        fetch('/api/deployments?limit=1000'),
         fetch('/api/environments'),
       ]);
       

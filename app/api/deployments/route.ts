@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get('limit') || '500', 10);
+    const offset = parseInt(searchParams.get('offset') || '0', 10);
+    
     const result = await pool.query(
-      'SELECT * FROM deployments ORDER BY started_at DESC LIMIT 100'
+      'SELECT * FROM deployments ORDER BY started_at DESC LIMIT $1 OFFSET $2',
+      [Math.min(limit, 1000), offset]
     );
     return NextResponse.json(result.rows);
   } catch (error) {
@@ -22,6 +27,7 @@ export async function POST(request: Request) {
     const {
       environment,
       status,
+      deployment_type = 'standard',
       branch,
       version,
       requested_by,
@@ -33,18 +39,20 @@ export async function POST(request: Request) {
       started_at,
       completed_at,
       duration_seconds,
+      duration, // legacy field
     } = body;
 
     const result = await pool.query(
       `INSERT INTO deployments (
-        environment, status, branch, version, requested_by, approved_by, 
+        environment, status, deployment_type, branch, version, requested_by, approved_by, 
         tested_by, deployed_by, ticket_link, notes, started_at, 
         completed_at, duration_seconds
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         environment,
         status,
+        deployment_type,
         branch,
         version,
         requested_by,
