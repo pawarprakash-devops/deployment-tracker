@@ -45,6 +45,8 @@ export default function Home() {
   // Comparison
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [compareData, setCompareData] = useState<any>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
   
   // Modal states
   const [showDeployModal, setShowDeployModal] = useState(false);
@@ -319,6 +321,55 @@ export default function Home() {
       if (prev.length >= 2) return [prev[1], id];
       return [...prev, id];
     });
+  };
+
+  const openCompare = async () => {
+    setShowCompareModal(true);
+    setCompareLoading(true);
+    setCompareData(null);
+
+    const d1 = deployments.find(d => d.id === compareIds[0]);
+    const d2 = deployments.find(d => d.id === compareIds[1]);
+    if (!d1 || !d2) { setCompareLoading(false); return; }
+
+    // Determine older and newer deployment
+    const [older, newer] = new Date(d1.started_at) < new Date(d2.started_at) ? [d1, d2] : [d2, d1];
+
+    // Get branches to compare
+    const olderBranch = older.frontend_branch || older.backend_branch || older.branch;
+    const newerBranch = newer.frontend_branch || newer.backend_branch || newer.branch;
+
+    // Determine repo - FE or BE
+    const isFE = !!(newer.frontend_branch || (!newer.backend_branch && newer.notes?.includes('frontend')));
+    const repo = isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-node';
+
+    try {
+      // Try comparing branches
+      if (olderBranch && newerBranch && olderBranch !== newerBranch) {
+        const res = await fetch(`/api/compare?repo=${encodeURIComponent(repo)}&base=${encodeURIComponent(olderBranch)}&head=${encodeURIComponent(newerBranch)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.error) {
+            setCompareData({ ...data, repo, older, newer });
+            setCompareLoading(false);
+            return;
+          }
+        }
+      }
+      
+      // Fallback: get recent commits on the newer branch
+      if (newerBranch) {
+        const res = await fetch(`/api/compare?repo=${encodeURIComponent(repo)}&head=${encodeURIComponent(newerBranch)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCompareData({ ...data, repo, older, newer, fallback: true });
+        }
+      }
+    } catch (error) {
+      console.error('Compare fetch failed:', error);
+    } finally {
+      setCompareLoading(false);
+    }
   };
 
   const openNewDeploy = () => {
@@ -615,7 +666,7 @@ export default function Home() {
           <div className="compare-bar">
             <span>{compareIds.length}/2 selected for comparison</span>
             {compareIds.length === 2 && (
-              <button className="btn primary small" onClick={() => setShowCompareModal(true)}>
+              <button className="btn primary small" onClick={openCompare}>
                 Compare
               </button>
             )}
@@ -882,10 +933,12 @@ export default function Home() {
       {/* Compare Modal */}
       {showCompareModal && compareDeployments.length === 2 && compareDeployments[0] && compareDeployments[1] && (
         <div className="overlay open" onClick={(e) => e.target === e.currentTarget && setShowCompareModal(false)}>
-          <div className="modal" style={{ minWidth: '700px', maxWidth: '800px' }}>
+          <div className="modal" style={{ minWidth: '750px', maxWidth: '900px', maxHeight: '90vh', overflow: 'auto' }}>
             <h2>Compare Deployments</h2>
+            
+            {/* Deployment Info Grid */}
             <div className="compare-grid">
-              {(['environment', 'status', 'branch', 'frontend_branch', 'backend_branch', 'version', 'started_at', 'requested_by', 'deployed_by', 'notes'] as const).map(field => {
+              {(['environment', 'status', 'frontend_branch', 'backend_branch', 'version', 'started_at', 'requested_by', 'deployed_by', 'notes'] as const).map(field => {
                 const v1 = String((compareDeployments[0] as any)?.[field] || '—');
                 const v2 = String((compareDeployments[1] as any)?.[field] || '—');
                 const isDiff = v1 !== v2;
@@ -902,18 +955,151 @@ export default function Home() {
                   </div>
                 );
               })}
-              {/* Time difference */}
-              {compareDeployments[0] && compareDeployments[1] && (
-                <div className="compare-row">
-                  <div className="compare-label">Time Difference</div>
-                  <div className="compare-val" style={{ gridColumn: 'span 2', textAlign: 'center', color: 'var(--accent)' }}>
-                    {formatDuration(Math.abs(Math.round((new Date(compareDeployments[0].started_at).getTime() - new Date(compareDeployments[1].started_at).getTime()) / 1000)))}
-                  </div>
+              <div className="compare-row">
+                <div className="compare-label">Time Difference</div>
+                <div className="compare-val" style={{ gridColumn: 'span 2', textAlign: 'center', color: 'var(--accent)' }}>
+                  {formatDuration(Math.abs(Math.round((new Date(compareDeployments[0].started_at).getTime() - new Date(compareDeployments[1].started_at).getTime()) / 1000)))}
+                </div>
+              </div>
+            </div>
+
+            {/* Code Changes Section */}
+            <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 14px', fontFamily: 'Space Grotesk, sans-serif' }}>
+                Code Changes
+              </h3>
+
+              {compareLoading && (
+                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--muted)' }}>
+                  Loading commits from GitHub...
                 </div>
               )}
+
+              {!compareLoading && !compareData && (
+                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--faint)' }}>
+                  Could not fetch code changes. GitHub token may not have access to the repository.
+                </div>
+              )}
+
+              {!compareLoading && compareData && (
+                <>
+                  {/* Summary */}
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                    <div className="code-stat">
+                      <span className="code-stat-num">{compareData.total_commits || 0}</span>
+                      <span className="code-stat-label">Commits</span>
+                    </div>
+                    {compareData.files_changed !== undefined && (
+                      <div className="code-stat">
+                        <span className="code-stat-num">{compareData.files_changed}</span>
+                        <span className="code-stat-label">Files Changed</span>
+                      </div>
+                    )}
+                    {compareData.repo && (
+                      <div className="code-stat">
+                        <span className="code-stat-num" style={{ fontSize: '12px' }}>{compareData.repo.split('/')[1]}</span>
+                        <span className="code-stat-label">Repository</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {compareData.fallback && (
+                    <div style={{ fontSize: '12px', color: 'var(--warn)', marginBottom: '12px', padding: '8px', background: 'var(--warn-bg)', borderRadius: '6px' }}>
+                      Showing recent commits on branch (exact diff unavailable — branches may be same or merged)
+                    </div>
+                  )}
+
+                  {/* Commits List */}
+                  {compareData.commits && compareData.commits.length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)', margin: '0 0 10px' }}>
+                        COMMITS ({compareData.commits.length})
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '300px', overflowY: 'auto' }}>
+                        {compareData.commits.map((c: any) => (
+                          <div key={c.sha} style={{
+                            padding: '10px 12px',
+                            background: 'var(--panel-2)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '6px',
+                            fontSize: '13px'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 500, marginBottom: '4px', lineHeight: 1.4 }}>
+                                  {c.message.split('\n')[0]}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--muted)' }}>
+                                  {c.author_avatar && (
+                                    <img src={c.author_avatar} alt="" style={{ width: '16px', height: '16px', borderRadius: '50%' }} />
+                                  )}
+                                  <span style={{ fontWeight: 600 }}>{c.author_login || c.author}</span>
+                                  <span>{new Date(c.date).toLocaleString()}</span>
+                                </div>
+                              </div>
+                              <a href={c.url} target="_blank" rel="noopener noreferrer" style={{
+                                fontFamily: 'JetBrains Mono, monospace',
+                                fontSize: '11px',
+                                color: 'var(--accent)',
+                                background: 'rgba(91,141,239,0.08)',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                textDecoration: 'none',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {c.short_sha}
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Files Changed */}
+                  {compareData.files && compareData.files.length > 0 && (
+                    <div>
+                      <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)', margin: '0 0 10px' }}>
+                        FILES CHANGED ({compareData.files_changed})
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '250px', overflowY: 'auto' }}>
+                        {compareData.files.map((f: any, idx: number) => (
+                          <div key={idx} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 10px',
+                            background: 'var(--panel-2)',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontFamily: 'JetBrains Mono, monospace'
+                          }}>
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              color: '#fff',
+                              background: f.status === 'added' ? 'var(--ok)' : f.status === 'removed' ? 'var(--bad)' : f.status === 'renamed' ? 'var(--warn)' : 'var(--accent)'
+                            }}>
+                              {f.status === 'added' ? 'A' : f.status === 'removed' ? 'D' : f.status === 'renamed' ? 'R' : 'M'}
+                            </span>
+                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {f.filename}
+                            </span>
+                            <span style={{ color: 'var(--ok)', fontSize: '11px' }}>+{f.additions}</span>
+                            <span style={{ color: 'var(--bad)', fontSize: '11px' }}>-{f.deletions}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
             <div className="modal-footer">
-              <button className="btn ghost" onClick={() => { setShowCompareModal(false); setCompareIds([]); }}>Close</button>
+              <button className="btn ghost" onClick={() => { setShowCompareModal(false); setCompareIds([]); setCompareData(null); }}>Close</button>
             </div>
           </div>
         </div>
@@ -1043,6 +1229,14 @@ export default function Home() {
         .compare-label { padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; align-items: center; }
         .compare-val { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 12px; word-break: break-all; }
         .compare-val.diff { background: rgba(91,141,239,0.08); color: var(--accent); }
+
+        .code-stat {
+          display: flex; flex-direction: column; align-items: center; gap: 2px;
+          padding: 10px 16px; background: var(--panel-2); border: 1px solid var(--border);
+          border-radius: 8px; min-width: 80px;
+        }
+        .code-stat-num { font-size: 20px; font-weight: 700; color: var(--accent); }
+        .code-stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 
         .filter-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
         select, input[type=text], input[type=search], input[type=date], textarea {
