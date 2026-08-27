@@ -23,6 +23,10 @@ export async function POST(request: NextRequest) {
       deployment_type = 'standard',
       branch,
       version,
+      frontend_branch,
+      backend_branch,
+      frontend_version,
+      backend_version,
       requested_by,
       approved_by,
       tested_by,
@@ -57,7 +61,11 @@ export async function POST(request: NextRequest) {
         status,
         deployment_type,
         branch, 
-        version, 
+        version,
+        frontend_branch,
+        backend_branch,
+        frontend_version,
+        backend_version,
         requested_by, 
         approved_by,
         tested_by,
@@ -67,7 +75,7 @@ export async function POST(request: NextRequest) {
         started_at, 
         completed_at, 
         duration_seconds
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *`,
       [
         environment,
@@ -75,6 +83,10 @@ export async function POST(request: NextRequest) {
         deployment_type,
         branch,
         version,
+        frontend_branch,
+        backend_branch,
+        frontend_version,
+        backend_version,
         requested_by,
         approved_by,
         tested_by,
