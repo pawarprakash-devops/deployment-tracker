@@ -1,0 +1,137 @@
+name: Log Deployment to Tracker
+
+# This is a reusable workflow that logs deployments to the deployment tracker
+# Call this from other workflows using:
+#
+# jobs:
+#   log-deployment:
+#     uses: ./.github/workflows/log-deployment.yaml
+#     with:
+#       environment: "QA"
+#       status: "Success"
+#       branch: ${{ github.ref_name }}
+#       version: ${{ github.event.inputs.image_tag }}
+#       requested_by: ${{ github.actor }}
+#     secrets:
+#       TRACKER_WEBHOOK_URL: ${{ secrets.TRACKER_WEBHOOK_URL }}
+#       TRACKER_WEBHOOK_SECRET: ${{ secrets.TRACKER_WEBHOOK_SECRET }}
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Environment name (QA, Stage, Preview, Pre-Prod, Production, etc.)'
+        required: true
+        type: string
+      status:
+        description: 'Deployment status (Success, In Progress, Failed, Cancelled)'
+        required: true
+        type: string
+      branch:
+        description: 'Git branch deployed'
+        required: false
+        type: string
+      version:
+        description: 'Version/tag deployed'
+        required: false
+        type: string
+      requested_by:
+        description: 'Who requested the deployment'
+        required: false
+        type: string
+      approved_by:
+        description: 'Who approved the deployment'
+        required: false
+        type: string
+      tested_by:
+        description: 'Who tested the deployment'
+        required: false
+        type: string
+      deployed_by:
+        description: 'Who/what deployed (usually GitHub Actions)'
+        required: false
+        type: string
+        default: 'GitHub Actions'
+      ticket_link:
+        description: 'Link to ticket or PR'
+        required: false
+        type: string
+      notes:
+        description: 'Additional notes'
+        required: false
+        type: string
+      started_at:
+        description: 'When deployment started (ISO 8601 format)'
+        required: false
+        type: string
+      completed_at:
+        description: 'When deployment completed (ISO 8601 format)'
+        required: false
+        type: string
+    secrets:
+      TRACKER_WEBHOOK_URL:
+        description: 'Deployment tracker webhook URL'
+        required: true
+      TRACKER_WEBHOOK_SECRET:
+        description: 'Webhook authentication token'
+        required: true
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Calculate deployment duration
+        id: duration
+        run: |
+          if [ -n "${{ inputs.started_at }}" ] && [ -n "${{ inputs.completed_at }}" ]; then
+            start=$(date -d "${{ inputs.started_at }}" +%s)
+            end=$(date -d "${{ inputs.completed_at }}" +%s)
+            duration=$((end - start))
+            echo "duration_seconds=$duration" >> $GITHUB_OUTPUT
+          else
+            echo "duration_seconds=null" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send webhook to deployment tracker
+        run: |
+          # Use current time if started_at not provided
+          STARTED_AT="${{ inputs.started_at }}"
+          if [ -z "$STARTED_AT" ]; then
+            STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          fi
+          
+          # Build JSON payload
+          cat > payload.json <<EOF
+          {
+            "environment": "${{ inputs.environment }}",
+            "status": "${{ inputs.status }}",
+            "branch": "${{ inputs.branch }}",
+            "version": "${{ inputs.version }}",
+            "requested_by": "${{ inputs.requested_by }}",
+            "approved_by": "${{ inputs.approved_by }}",
+            "tested_by": "${{ inputs.tested_by }}",
+            "deployed_by": "${{ inputs.deployed_by }}",
+            "ticket_link": "${{ inputs.ticket_link || github.event.head_commit.url || '' }}",
+            "notes": "${{ inputs.notes }}",
+            "started_at": "$STARTED_AT",
+            "completed_at": "${{ inputs.completed_at }}",
+            "duration_seconds": ${{ steps.duration.outputs.duration_seconds }}
+          }
+          EOF
+          
+          # Send webhook
+          curl -X POST "${{ secrets.TRACKER_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.TRACKER_WEBHOOK_SECRET }}" \
+            -d @payload.json \
+            --fail \
+            --show-error \
+            --silent
+
+      - name: Log result
+        if: success()
+        run: echo "✅ Deployment logged to tracker successfully"
+
+      - name: Log error
+        if: failure()
+        run: echo "⚠️ Failed to log deployment to tracker (non-blocking)"
