@@ -341,7 +341,7 @@ export default function Home() {
 
     // Determine repo - FE or BE
     const isFE = !!(newer.frontend_branch || (!newer.backend_branch && newer.notes?.includes('frontend')));
-    const repo = isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-node';
+    const repo = isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-backend';
 
     try {
       // Try comparing branches
