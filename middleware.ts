@@ -9,6 +9,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Auth endpoints - always allow
+  if (pathname.startsWith('/api/auth')) {
+    return NextResponse.next();
+  }
+
   // All GET requests are public (no auth required for viewing)
   if (request.method === 'GET') {
     return NextResponse.next();
