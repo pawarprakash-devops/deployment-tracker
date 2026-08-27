@@ -244,20 +244,22 @@ export default function Home() {
     return { status: 'healthy', label: '', color: 'var(--ok)' };
   };
 
-  // Deployment frequency stats
-  const getEnvFrequency = (envName: string) => {
-    const envDeps = deployments.filter(d => d.environment === envName);
-    if (envDeps.length === 0) return null;
+  // Last deploy times for FE and BE
+  const getLastDeployTimes = (envName: string) => {
+    const envDeps = deployments
+      .filter(d => d.environment === envName && d.status === 'Success')
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
     
-    const now = Date.now();
-    const last7d = envDeps.filter(d => now - new Date(d.started_at).getTime() < 7 * 86400000).length;
-    const last30d = envDeps.filter(d => now - new Date(d.started_at).getTime() < 30 * 86400000).length;
+    let lastFE: string | null = null;
+    let lastBE: string | null = null;
     
-    return {
-      last7d,
-      last30d,
-      avgPerWeek: last30d > 0 ? (last30d / 4.3).toFixed(1) : '0'
-    };
+    for (const d of envDeps) {
+      if (!lastFE && d.frontend_branch) lastFE = d.started_at;
+      if (!lastBE && d.backend_branch) lastBE = d.started_at;
+      if (lastFE && lastBE) break;
+    }
+    
+    return { feAgo: lastFE ? timeAgo(lastFE) : null, beAgo: lastBE ? timeAgo(lastBE) : null };
   };
 
   // Timeline data for last 14 days
@@ -516,7 +518,7 @@ export default function Home() {
             const latest = latestForEnv(env.name);
             const branches = latestBranchesForEnv(env.name);
             const health = getEnvHealth(env.name);
-            const freq = getEnvFrequency(env.name);
+            const lastTimes = getLastDeployTimes(env.name);
             return (
               <div key={env.name} className={`card ${env.isProd ? 'is-prod' : ''} ${health.status === 'critical' ? 'health-critical' : health.status === 'warning' ? 'health-warning' : ''}`}>
                 <div className="stripe" style={{ background: env.color }} />
@@ -553,12 +555,11 @@ export default function Home() {
                         latest.branch && <div className="branch">{latest.branch}</div>
                       )}
                     </div>
-                    {/* Frequency Stats */}
-                    {freq && (
+                    {/* Last deploy times */}
+                    {(lastTimes.feAgo || lastTimes.beAgo) && (
                       <div className="freq-stats">
-                        <span title="Last 7 days">{freq.last7d}/7d</span>
-                        <span title="Last 30 days">{freq.last30d}/30d</span>
-                        <span title="Avg per week">~{freq.avgPerWeek}/wk</span>
+                        {lastTimes.feAgo && <span>FE deployed {lastTimes.feAgo}</span>}
+                        {lastTimes.beAgo && <span>BE deployed {lastTimes.beAgo}</span>}
                       </div>
                     )}
                   </>
