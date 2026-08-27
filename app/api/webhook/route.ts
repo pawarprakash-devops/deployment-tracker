@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     const {
       environment,
       status,
+      deployment_type = 'standard',
       branch,
       version,
       requested_by,
@@ -41,11 +42,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Auto-calculate duration if completed_at is provided and duration_seconds is not
+    let calculatedDuration = duration_seconds;
+    if (completed_at && !duration_seconds) {
+      const startTime = new Date(started_at).getTime();
+      const endTime = new Date(completed_at).getTime();
+      calculatedDuration = Math.round((endTime - startTime) / 1000);
+    }
+
     // Insert deployment
     const result = await pool.query(
       `INSERT INTO deployments (
         environment, 
-        status, 
+        status,
+        deployment_type,
         branch, 
         version, 
         requested_by, 
@@ -57,11 +67,12 @@ export async function POST(request: NextRequest) {
         started_at, 
         completed_at, 
         duration_seconds
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         environment,
         status,
+        deployment_type,
         branch,
         version,
         requested_by,
@@ -72,7 +83,7 @@ export async function POST(request: NextRequest) {
         notes,
         started_at,
         completed_at,
-        duration_seconds,
+        calculatedDuration,
       ]
     );
 

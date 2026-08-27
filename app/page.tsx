@@ -6,6 +6,7 @@ interface Deployment {
   id: string;
   environment: string;
   status: string;
+  deployment_type?: string;
   branch?: string;
   version?: string;
   requested_by?: string;
@@ -145,12 +146,20 @@ export default function Home() {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Deployment Tracker</h1>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            + New Deployment
-          </button>
+          <div className="flex gap-3">
+            <a
+              href="/health"
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+            >
+              Environment Health
+            </a>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              + New Deployment
+            </button>
+          </div>
         </div>
 
         {showForm && (
@@ -303,10 +312,16 @@ export default function Home() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Type
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Branch
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Version
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Duration
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Requested By
@@ -319,7 +334,7 @@ export default function Home() {
             <tbody className="bg-white divide-y divide-gray-200">
               {deployments.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
                     No deployments yet. Click &quot;New Deployment&quot; to add one.
                   </td>
                 </tr>
@@ -339,10 +354,27 @@ export default function Home() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {deployment.branch || '-'}
+                      {deployment.deployment_type ? (
+                        <span className={`px-2 py-1 text-xs rounded ${
+                          deployment.deployment_type === 'rollback' ? 'bg-yellow-100 text-yellow-800' :
+                          deployment.deployment_type === 'hotfix' ? 'bg-orange-100 text-orange-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {deployment.deployment_type}
+                        </span>
+                      ) : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {deployment.version || '-'}
+                      {deployment.branch || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
+                      {deployment.version ? deployment.version.slice(0, 12) : '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {deployment.duration_seconds ? 
+                        `${Math.floor(deployment.duration_seconds / 60)}m ${deployment.duration_seconds % 60}s` : 
+                        '-'
+                      }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {deployment.requested_by || '-'}
