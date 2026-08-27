@@ -1,26 +1,52 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0B0E14;
+  --panel: #121722;
+  --panel-2: #171D2B;
+  --border: #242C3D;
+  --text: #E7EAF0;
+  --muted: #8A93A8;
+  --faint: #5A6478;
+  --accent: #5B8DEF;
+  --ok: #3DD68C;
+  --ok-bg: rgba(61, 214, 140, 0.12);
+  --warn: #F5B942;
+  --warn-bg: rgba(245, 185, 66, 0.12);
+  --bad: #FF6B6B;
+  --bad-bg: rgba(255, 107, 107, 0.12);
+  --neutral: #8A93A8;
+  --neutral-bg: rgba(138, 147, 168, 0.12);
+  --prod: #F5A623;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: 
+    radial-gradient(1200px 600px at 10% -10%, rgba(91, 141, 239, 0.08), transparent),
+    radial-gradient(900px 500px at 100% 0%, rgba(245, 166, 35, 0.05), transparent),
+    var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }

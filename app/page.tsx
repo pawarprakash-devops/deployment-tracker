@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface Deployment {
   id: string;
@@ -27,372 +28,516 @@ interface Environment {
   display_order: number;
 }
 
+interface EnvHealth {
+  environment: string;
+  status: string | null;
+  branch: string | null;
+  version: string | null;
+  deployed_by: string | null;
+  last_deployed_at: string | null;
+  is_production: boolean;
+}
+
 export default function Home() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [envHealth, setEnvHealth] = useState<EnvHealth[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    environment: '',
-    status: 'In Progress',
-    branch: '',
-    version: '',
-    requested_by: '',
-    approved_by: '',
-    tested_by: '',
-    deployed_by: '',
-    ticket_link: '',
-    notes: '',
-    started_at: new Date().toISOString().slice(0, 16),
-  });
+  
+  // Filters
+  const [filterEnv, setFilterEnv] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterDate, setFilterDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5000); // Refresh every 5 seconds
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const fetchData = async () => {
     try {
-      const [deploymentsRes, environmentsRes] = await Promise.all([
+      const [deploymentsRes, environmentsRes, healthRes] = await Promise.all([
         fetch('/api/deployments'),
         fetch('/api/environments'),
+        fetch('/api/health'),
       ]);
       
       const deploymentsData = await deploymentsRes.json();
       const environmentsData = await environmentsRes.json();
+      const healthData = await healthRes.json();
       
-      // Ensure data is an array before setting state
-      if (Array.isArray(deploymentsData)) {
-        setDeployments(deploymentsData);
-      } else {
-        console.error('Deployments data is not an array:', deploymentsData);
-        setDeployments([]);
-      }
-      
-      if (Array.isArray(environmentsData)) {
-        setEnvironments(environmentsData);
-      } else {
-        console.error('Environments data is not an array:', environmentsData);
-        setEnvironments([]);
-      }
+      if (Array.isArray(deploymentsData)) setDeployments(deploymentsData);
+      if (Array.isArray(environmentsData)) setEnvironments(environmentsData);
+      if (Array.isArray(healthData)) setEnvHealth(healthData);
     } catch (error) {
       console.error('Error fetching data:', error);
-      setDeployments([]);
-      setEnvironments([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await fetch('/api/deployments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      if (response.ok) {
-        setShowForm(false);
-        fetchData();
-        // Reset form
-        setFormData({
-          environment: '',
-          status: 'In Progress',
-          branch: '',
-          version: '',
-          requested_by: '',
-          approved_by: '',
-          tested_by: '',
-          deployed_by: '',
-          ticket_link: '',
-          notes: '',
-          started_at: new Date().toISOString().slice(0, 16),
-        });
-      }
-    } catch (error) {
-      console.error('Error creating deployment:', error);
+  const getStatusClass = (status: string) => {
+    switch (status) {
+      case 'Success': return 'success';
+      case 'In Progress': return 'progress';
+      case 'Failed': return 'failed';
+      case 'Rolled Back': return 'rollback';
+      case 'Cancelled': return 'cancelled';
+      default: return 'none';
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Success':
-        return 'bg-green-100 text-green-800';
-      case 'In Progress':
-        return 'bg-blue-100 text-blue-800';
-      case 'Failed':
-        return 'bg-red-100 text-red-800';
-      case 'Cancelled':
-        return 'bg-gray-100 text-gray-800';
-      case 'Rolled Back':
-        return 'bg-yellow-100 text-yellow-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const getTypeColor = (type: string | undefined) => {
+    switch (type) {
+      case 'rollback': return 'bg-[rgba(138,147,168,0.12)] text-[#8A93A8]';
+      case 'hotfix': return 'bg-[rgba(245,166,35,0.12)] text-[#F5A623]';
+      default: return 'bg-[rgba(91,141,239,0.08)] text-[#5B8DEF]';
     }
   };
+
+  const timeAgo = (isoDate: string) => {
+    const diff = (Date.now() - new Date(isoDate).getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  };
+
+  const formatDuration = (seconds: number | undefined) => {
+    if (!seconds) return '—';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  };
+
+  // Filter deployments
+  const filteredDeployments = deployments.filter(d => {
+    if (filterEnv && d.environment !== filterEnv) return false;
+    if (filterStatus && d.status !== filterStatus) return false;
+    if (filterDate && !d.started_at.startsWith(filterDate)) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return [d.branch, d.version, d.ticket_link, d.requested_by, d.deployed_by, d.notes]
+        .some(field => field?.toLowerCase().includes(q));
+    }
+    return true;
+  });
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center">
+      <div className="text-xl" style={{color: 'var(--muted)'}}>Loading...</div>
+    </div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Deployment Tracker</h1>
-          <div className="flex gap-3">
-            <a
-              href="/health"
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              Environment Health
-            </a>
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              + New Deployment
-            </button>
+    <div className="min-h-screen" style={{padding: '32px clamp(16px, 2vw, 24px) 80px'}}>
+      {/* Header */}
+      <header className="flex justify-between items-end flex-wrap gap-4 mb-7">
+        <div>
+          <h1 className="text-[28px] font-bold m-0 mb-1" style={{fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '-0.02em'}}>
+            Deployment Tracker
+          </h1>
+          <div className="text-sm" style={{color: 'var(--muted)'}}>
+            <span style={{color: 'var(--ok)'}}>●</span> Live status across QA, Stage, Preview, Pre-Prod, Pre-Prod USW & Production
           </div>
         </div>
+        <div className="flex gap-3 flex-wrap">
+          <Link href="/health" className="btn-ghost">
+            Environment Health
+          </Link>
+          <button className="btn-primary">+ New Deployment</button>
+        </div>
+      </header>
 
-        {showForm && (
-          <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-            <h2 className="text-xl font-semibold mb-4">New Deployment</h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Environment *
-                </label>
-                <select
-                  required
-                  value={formData.environment}
-                  onChange={(e) => setFormData({ ...formData, environment: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value="">Select environment</option>
-                  {environments.map((env) => (
-                    <option key={env.id} value={env.name}>
-                      {env.name}
-                    </option>
-                  ))}
-                </select>
+      {/* Environment Cards */}
+      <div className="grid gap-[14px] mb-8" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))'}}>
+        {envHealth.map((env) => {
+          const daysSince = env.last_deployed_at 
+            ? Math.floor((Date.now() - new Date(env.last_deployed_at).getTime()) / (1000 * 60 * 60 * 24))
+            : null;
+          
+          return (
+            <div key={env.environment} className={`card ${env.is_production ? 'is-prod' : ''}`}>
+              <div className="stripe" style={{background: env.is_production ? 'var(--prod)' : 'var(--accent)'}} />
+              <div className="env-name">
+                {env.environment}
+                {env.is_production && <span className="prod-tag">LIVE</span>}
               </div>
+              {env.status ? (
+                <>
+                  <span className={`badge ${getStatusClass(env.status)}`}>
+                    <span className="b-dot" />
+                    {env.status}
+                  </span>
+                  <div className="meta">
+                    <b>{env.last_deployed_at ? new Date(env.last_deployed_at).toLocaleString() : '—'}</b>
+                    {daysSince !== null && ` · ${daysSince === 0 ? 'today' : `${daysSince}d ago`}`}
+                    <br />
+                    by {env.deployed_by || '—'}
+                    {env.branch && <div className="branch">{env.branch}</div>}
+                  </div>
+                </>
+              ) : (
+                <span className="badge none">
+                  <span className="b-dot" />
+                  No deploys yet
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status *
-                </label>
-                <select
-                  required
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value="Success">Success</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Failed">Failed</option>
-                  <option value="Cancelled">Cancelled</option>
-                  <option value="Rolled Back">Rolled Back</option>
-                </select>
-              </div>
+      {/* Filters */}
+      <div className="filter-row">
+        <select value={filterEnv} onChange={(e) => setFilterEnv(e.target.value)} className="filter-select">
+          <option value="">All Environments</option>
+          {environments.map((env) => (
+            <option key={env.id} value={env.name}>{env.name}</option>
+          ))}
+        </select>
+        
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="filter-select">
+          <option value="">All Statuses</option>
+          <option value="Success">Success</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Failed">Failed</option>
+          <option value="Cancelled">Cancelled</option>
+          <option value="Rolled Back">Rolled Back</option>
+        </select>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
-                <input
-                  type="text"
-                  value={formData.branch}
-                  onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
-                <input
-                  type="text"
-                  value={formData.version}
-                  onChange={(e) => setFormData({ ...formData, version: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Requested By
-                </label>
-                <input
-                  type="text"
-                  value={formData.requested_by}
-                  onChange={(e) => setFormData({ ...formData, requested_by: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deployed By
-                </label>
-                <input
-                  type="text"
-                  value={formData.deployed_by}
-                  onChange={(e) => setFormData({ ...formData, deployed_by: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Started At *
-                </label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={formData.started_at}
-                  onChange={(e) => setFormData({ ...formData, started_at: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ticket Link
-                </label>
-                <input
-                  type="url"
-                  value={formData.ticket_link}
-                  onChange={(e) => setFormData({ ...formData, ticket_link: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
-                  rows={3}
-                />
-              </div>
-
-              <div className="col-span-2 flex gap-2 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Create Deployment
-                </button>
-              </div>
-            </form>
-          </div>
+        <input
+          type="date"
+          value={filterDate}
+          onChange={(e) => setFilterDate(e.target.value)}
+          className="filter-select"
+          style={{colorScheme: 'dark'}}
+        />
+        
+        {filterDate && (
+          <button onClick={() => setFilterDate('')} className="btn-ghost-small">
+            ✕ Clear date
+          </button>
         )}
 
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Environment
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Branch
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Version
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Duration
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Requested By
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Started At
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {deployments.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
-                    No deployments yet. Click &quot;New Deployment&quot; to add one.
-                  </td>
-                </tr>
-              ) : (
-                deployments.map((deployment) => (
-                  <tr key={deployment.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {deployment.environment}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full ${getStatusColor(
-                          deployment.status
-                        )}`}
-                      >
-                        {deployment.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {deployment.deployment_type ? (
-                        <span className={`px-2 py-1 text-xs rounded ${
-                          deployment.deployment_type === 'rollback' ? 'bg-yellow-100 text-yellow-800' :
-                          deployment.deployment_type === 'hotfix' ? 'bg-orange-100 text-orange-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                          {deployment.deployment_type}
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {deployment.branch || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
-                      {deployment.version ? deployment.version.slice(0, 12) : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {deployment.duration_seconds ? 
-                        `${Math.floor(deployment.duration_seconds / 60)}m ${deployment.duration_seconds % 60}s` : 
-                        '-'
-                      }
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {deployment.requested_by || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(deployment.started_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="flex-1" style={{minWidth: '240px'}}>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search branch, version, ticket, or names…"
+            className="filter-select w-full"
+          />
         </div>
 
-        <div className="mt-4 text-sm text-gray-500 text-center">
-          Auto-refreshing every 5 seconds • Last updated: {new Date().toLocaleTimeString()}
+        <div className="text-xs" style={{color: 'var(--faint)', marginLeft: 'auto'}}>
+          {filteredDeployments.length} {filteredDeployments.length === 1 ? 'entry' : 'entries'}
         </div>
       </div>
+
+      {/* Table */}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Environment</th>
+              <th>Status</th>
+              <th>Type</th>
+              <th>Branch / Version</th>
+              <th>Duration</th>
+              <th>Requested By</th>
+              <th>Deployed By</th>
+              <th>Started At</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredDeployments.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="empty-state">
+                  <div className="big">No deployments found</div>
+                  <div style={{color: 'var(--faint)', fontSize: '13px', marginTop: '4px'}}>
+                    {searchQuery || filterEnv || filterStatus || filterDate
+                      ? 'Try adjusting your filters'
+                      : 'Click "+ New Deployment" to add the first entry'}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filteredDeployments.map((d) => (
+                <tr key={d.id}>
+                  <td className="env-cell">{d.environment}</td>
+                  <td>
+                    <span className={`badge ${getStatusClass(d.status)}`}>
+                      <span className="b-dot" />
+                      {d.status}
+                    </span>
+                  </td>
+                  <td>
+                    {d.deployment_type && (
+                      <span className={`type-badge ${getTypeColor(d.deployment_type)}`}>
+                        {d.deployment_type}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="mono">{d.branch || '—'}</div>
+                    {d.version && (
+                      <div style={{color: 'var(--muted)', fontSize: '11.5px', marginTop: '2px'}}>
+                        {d.version.slice(0, 12)}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{color: 'var(--muted)', fontSize: '12.5px'}}>
+                    {formatDuration(d.duration_seconds)}
+                  </td>
+                  <td className="who">{d.requested_by || '—'}</td>
+                  <td className="who">{d.deployed_by || '—'}</td>
+                  <td style={{color: 'var(--muted)', fontSize: '12.5px'}}>
+                    {new Date(d.started_at).toLocaleString()}
+                    <div style={{color: 'var(--faint)', fontSize: '11px', marginTop: '2px'}}>
+                      {timeAgo(d.started_at)}
+                    </div>
+                  </td>
+                  <td className="notes">
+                    {d.ticket_link && (
+                      <div className="mono" style={{color: 'var(--muted)', marginBottom: '4px'}}>
+                        {d.ticket_link}
+                      </div>
+                    )}
+                    {d.notes && <div>{d.notes}</div>}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer */}
+      <footer className="mt-7 text-center text-[11.5px]" style={{color: 'var(--faint)', lineHeight: '1.6'}}>
+        Auto-refreshing every 5 seconds • Last updated: {new Date().toLocaleTimeString()}
+      </footer>
+
+      <style jsx>{`
+        .btn-ghost, .btn-primary, .btn-ghost-small {
+          font-family: inherit;
+          cursor: pointer;
+          padding: 10px 16px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          transition: 0.15s;
+          text-decoration: none;
+        }
+        .btn-ghost {
+          background: var(--panel-2);
+          border: 1px solid var(--border);
+          color: var(--text);
+        }
+        .btn-ghost:hover {
+          border-color: var(--accent);
+          color: #fff;
+        }
+        .btn-ghost-small {
+          padding: 6px 10px;
+          font-size: 12px;
+          background: transparent;
+          border: 1px solid var(--border);
+          color: var(--text);
+        }
+        .btn-ghost-small:hover {
+          border-color: var(--accent);
+        }
+        .btn-primary {
+          background: var(--accent);
+          border: 1px solid var(--accent);
+          color: #0B0E14;
+        }
+        .btn-primary:hover {
+          background: #7AA3F5;
+        }
+        .card {
+          background: var(--panel);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 16px;
+          position: relative;
+          overflow: hidden;
+          min-height: 132px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        .card.is-prod {
+          border-color: rgba(245, 166, 35, 0.35);
+        }
+        .stripe {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+        }
+        .env-name {
+          font-family: 'Space Grotesk', sans-serif;
+          font-weight: 600;
+          font-size: 15px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .prod-tag {
+          font-size: 9px;
+          background: var(--prod);
+          color: #1a1300;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+        }
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 3px 9px;
+          border-radius: 100px;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          width: fit-content;
+        }
+        .b-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+        }
+        .badge.success { background: var(--ok-bg); color: var(--ok); }
+        .badge.success .b-dot { background: var(--ok); }
+        .badge.progress { background: var(--warn-bg); color: var(--warn); }
+        .badge.progress .b-dot { background: var(--warn); animation: pulse 1.4s infinite; }
+        .badge.failed { background: var(--bad-bg); color: var(--bad); }
+        .badge.failed .b-dot { background: var(--bad); }
+        .badge.rollback { background: var(--neutral-bg); color: var(--neutral); }
+        .badge.rollback .b-dot { background: var(--neutral); }
+        .badge.cancelled { background: rgba(138, 147, 168, 0.14); color: #B7BECC; }
+        .badge.cancelled .b-dot { background: #B7BECC; }
+        .badge.none { background: rgba(255, 255, 255, 0.04); color: var(--faint); }
+        .badge.none .b-dot { background: var(--faint); }
+        .meta {
+          font-size: 12px;
+          color: var(--muted);
+          line-height: 1.6;
+        }
+        .meta b {
+          color: var(--text);
+          font-weight: 500;
+        }
+        .branch {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          color: var(--accent);
+          background: rgba(91, 141, 239, 0.08);
+          padding: 2px 6px;
+          border-radius: 4px;
+          display: inline-block;
+          margin-top: 4px;
+        }
+        .filter-row {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          align-items: center;
+          margin-bottom: 16px;
+        }
+        .filter-select {
+          background: var(--panel-2);
+          border: 1px solid var(--border);
+          color: var(--text);
+          padding: 9px 12px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: inherit;
+        }
+        .filter-select:focus {
+          outline: none;
+          border-color: var(--accent);
+        }
+        .table-wrap {
+          background: var(--panel);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          overflow-x: auto;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+          min-width: 1100px;
+        }
+        thead th {
+          text-align: left;
+          padding: 12px 14px;
+          background: var(--panel-2);
+          color: var(--muted);
+          font-weight: 600;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          border-bottom: 1px solid var(--border);
+          white-space: nowrap;
+        }
+        tbody td {
+          padding: 13px 14px;
+          border-bottom: 1px solid var(--border);
+          vertical-align: top;
+        }
+        tbody tr:last-child td {
+          border-bottom: none;
+        }
+        tbody tr:hover {
+          background: rgba(255, 255, 255, 0.015);
+        }
+        .env-cell {
+          font-weight: 600;
+        }
+        .mono {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 12px;
+          color: var(--accent);
+        }
+        .who {
+          color: var(--muted);
+          font-size: 12.5px;
+        }
+        .notes {
+          color: var(--muted);
+          max-width: 220px;
+          font-size: 12.5px;
+        }
+        .empty-state {
+          padding: 60px 20px;
+          text-align: center;
+          color: var(--faint);
+        }
+        .empty-state .big {
+          font-size: 15px;
+          color: var(--muted);
+          margin-bottom: 6px;
+        }
+        .type-badge {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+      `}</style>
     </div>
   );
 }
