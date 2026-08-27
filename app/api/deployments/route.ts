@@ -7,8 +7,13 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '500', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     
+    // Exclude deployment-tracker's own deployments
     const result = await pool.query(
-      'SELECT * FROM deployments ORDER BY started_at DESC LIMIT $1 OFFSET $2',
+      `SELECT * FROM deployments 
+       WHERE deployed_by NOT LIKE '%Deployment Tracker%' 
+       OR deployed_by IS NULL
+       ORDER BY started_at DESC 
+       LIMIT $1 OFFSET $2`,
       [Math.min(limit, 1000), offset]
     );
     return NextResponse.json(result.rows);

@@ -40,31 +40,8 @@ jobs:
           echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
           echo "✅ Deployed to: $DEPLOYMENT_URL"
 
-      - name: Log deployment to tracker
+      - name: Deployment complete
         if: success()
-        continue-on-error: true
-        run: |
-          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          COMMIT_MSG=$(echo '${{ github.event.head_commit.message }}' | head -n1 | sed 's/"/\\"/g')
-          
-          curl -X POST "${{ secrets.TRACKER_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.TRACKER_WEBHOOK_SECRET }}" \
-            -d "{
-              \"environment\": \"Production\",
-              \"status\": \"Success\",
-              \"branch\": \"${{ github.ref_name }}\",
-              \"version\": \"${{ github.sha }}\",
-              \"requested_by\": \"${{ github.actor }}\",
-              \"deployed_by\": \"GitHub Actions - Deployment Tracker\",
-              \"ticket_link\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
-              \"notes\": \"Auto-deploy: ${COMMIT_MSG}\",
-              \"started_at\": \"${TIMESTAMP}\"
-            }"
-
-      - name: Comment on commit
-        if: success()
-        continue-on-error: true
         run: |
           echo "✅ Deployment successful!"
           echo "🌐 Production URL: ${{ steps.deploy.outputs.url }}"
