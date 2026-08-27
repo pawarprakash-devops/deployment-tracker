@@ -564,11 +564,144 @@ export default function Home() {
       {/* Environment Modal */}
       {showEnvModal && (
         <div className="overlay open" onClick={(e) => e.target === e.currentTarget && setShowEnvModal(false)}>
-          <div className="modal">
-            <h2>Manage Environments</h2>
-            <div style={{ marginBottom: '18px', color: 'var(--muted)', fontSize: '13px' }}>
-              Environment management will be available in the next update.
+          <div className="modal" style={{ minWidth: '500px' }}>
+            <h2>⚙ Manage Environments</h2>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--muted)' }}>
+                Current Environments
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {environments.map((env, idx) => (
+                  <div key={idx} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '10px 12px',
+                    background: 'var(--panel)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px'
+                  }}>
+                    <div style={{
+                      width: '12px',
+                      height: '12px',
+                      background: env.color,
+                      borderRadius: '3px'
+                    }}></div>
+                    <span style={{ flex: 1, fontSize: '13px', fontWeight: 500 }}>
+                      {env.name}
+                      {env.isProd && <span style={{ 
+                        marginLeft: '8px',
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        background: 'var(--prod)',
+                        color: '#0B0E14',
+                        borderRadius: '4px',
+                        fontWeight: 700
+                      }}>LIVE</span>}
+                    </span>
+                    <button 
+                      className="btn small danger"
+                      onClick={async () => {
+                        if (confirm(`Delete "${env.name}" environment? This cannot be undone.`)) {
+                          try {
+                            const envs = await fetch('/api/environments');
+                            const envData = await envs.json();
+                            const envToDelete = envData.find((e: any) => e.name === env.name);
+                            
+                            if (envToDelete) {
+                              const res = await fetch(`/api/environments/${envToDelete.id}`, {
+                                method: 'DELETE'
+                              });
+                              if (res.ok) {
+                                loadData();
+                              }
+                            }
+                          } catch (error) {
+                            console.error('Error deleting environment:', error);
+                          }
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
+
+            <div style={{ 
+              padding: '16px',
+              background: 'var(--panel-2)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+                Add New Environment
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <input
+                  type="text"
+                  placeholder="Environment name"
+                  value={newEnvForm.name}
+                  onChange={(e) => setNewEnvForm({...newEnvForm, name: e.target.value})}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'var(--panel)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    color: 'var(--text)',
+                    fontSize: '13px'
+                  }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                    <input
+                      type="checkbox"
+                      checked={newEnvForm.isProd}
+                      onChange={(e) => setNewEnvForm({...newEnvForm, isProd: e.target.checked})}
+                    />
+                    Production environment
+                  </label>
+                </div>
+                <button 
+                  className="btn primary small"
+                  onClick={async () => {
+                    if (!newEnvForm.name.trim()) {
+                      alert('Environment name is required');
+                      return;
+                    }
+                    
+                    try {
+                      const res = await fetch('/api/environments', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          name: newEnvForm.name,
+                          is_production: newEnvForm.isProd,
+                          display_order: environments.length + 1
+                        })
+                      });
+                      
+                      if (res.ok) {
+                        setNewEnvForm({ name: '', color: '#5B8DEF', isProd: false, description: '' });
+                        loadData();
+                      } else {
+                        const error = await res.json();
+                        alert('Error: ' + (error.error || 'Failed to create environment'));
+                      }
+                    } catch (error) {
+                      console.error('Error creating environment:', error);
+                      alert('Failed to create environment');
+                    }
+                  }}
+                >
+                  + Add Environment
+                </button>
+              </div>
+            </div>
+
             <div className="modal-footer">
               <button className="btn ghost" onClick={() => setShowEnvModal(false)}>Done</button>
             </div>
