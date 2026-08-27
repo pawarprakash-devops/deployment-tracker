@@ -192,6 +192,24 @@ export default function Home() {
       .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
   };
 
+  // Find the latest successful FE and BE branches for an environment
+  const latestBranchesForEnv = (envName: string) => {
+    const envDeployments = deployments
+      .filter(d => d.environment === envName && d.status === 'Success')
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+    
+    let latestFE: string | null = null;
+    let latestBE: string | null = null;
+    
+    for (const d of envDeployments) {
+      if (!latestFE && d.frontend_branch) latestFE = d.frontend_branch;
+      if (!latestBE && d.backend_branch) latestBE = d.backend_branch;
+      if (latestFE && latestBE) break;
+    }
+    
+    return { fe: latestFE, be: latestBE };
+  };
+
   const openNewDeploy = () => {
     setEditingDeployId(null);
     const now = new Date();
@@ -404,6 +422,7 @@ export default function Home() {
         <div className="cards">
           {environments.map((env) => {
             const latest = latestForEnv(env.name);
+            const branches = latestBranchesForEnv(env.name);
             return (
               <div key={env.name} className={`card ${env.isProd ? 'is-prod' : ''}`}>
                 <div className="stripe" style={{ background: env.color }} />
@@ -422,22 +441,17 @@ export default function Home() {
                       <b>{new Date(latest.started_at).toLocaleString()}</b> · {timeAgo(latest.started_at)}
                       <br />
                       by {latest.deployed_by || latest.requested_by || '—'}
-                      {(latest.frontend_branch || latest.backend_branch) && (
+                      {(branches.fe || branches.be) ? (
                         <div style={{ marginTop: '8px', fontSize: '12px' }}>
-                          {latest.frontend_branch && (
-                            <div className="branch" style={{ marginBottom: '4px' }}>
-                              FE: {latest.frontend_branch}
-                            </div>
-                          )}
-                          {latest.backend_branch && (
-                            <div className="branch">
-                              BE: {latest.backend_branch}
-                            </div>
-                          )}
+                          <div className="branch" style={{ marginBottom: '4px' }}>
+                            <span style={{ color: 'var(--accent)', fontWeight: 600, fontSize: '10px' }}>FE:</span> {branches.fe || '—'}
+                          </div>
+                          <div className="branch">
+                            <span style={{ color: 'var(--ok)', fontWeight: 600, fontSize: '10px' }}>BE:</span> {branches.be || '—'}
+                          </div>
                         </div>
-                      )}
-                      {!latest.frontend_branch && !latest.backend_branch && latest.branch && (
-                        <div className="branch">{latest.branch}</div>
+                      ) : (
+                        latest.branch && <div className="branch">{latest.branch}</div>
                       )}
                     </div>
                   </>
