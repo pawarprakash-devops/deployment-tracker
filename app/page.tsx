@@ -33,6 +33,9 @@ export default function Home() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginPassword, setLoginPassword] = useState('');
   
   // Modal states
   const [showDeployModal, setShowDeployModal] = useState(false);
@@ -72,11 +75,54 @@ export default function Home() {
 
   useEffect(() => {
     loadData();
+    checkAuth();
     const interval = setInterval(() => {
       loadData();
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const checkAuth = async () => {
+    try {
+      const res = await fetch('/api/auth/session');
+      const data = await res.json();
+      setIsAdmin(data.authenticated);
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      setIsAdmin(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: loginPassword })
+      });
+      
+      if (res.ok) {
+        setIsAdmin(true);
+        setShowLoginModal(false);
+        setLoginPassword('');
+        alert('✅ Logged in as admin');
+      } else {
+        alert('❌ Invalid password');
+      }
+    } catch (error) {
+      alert('Login failed');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth', { method: 'DELETE' });
+      setIsAdmin(false);
+      alert('Logged out');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -313,25 +359,44 @@ export default function Home() {
             </div>
           </div>
           <div className="actions">
-            <button className="btn ghost small" onClick={() => setShowEnvModal(true)}>
-              ⚙ Manage Environments
-            </button>
-            <button className="btn ghost small" onClick={exportJSON}>
-              ⭳ Export JSON
-            </button>
-            <label className="btn ghost small" style={{ margin: 0 }}>
-              ⭱ Import JSON
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/json"
-                onChange={importJSON}
-                style={{ display: 'none' }}
-              />
-            </label>
-            <button className="btn primary" onClick={openNewDeploy}>
-              + New Deployment
-            </button>
+            {isAdmin ? (
+              <>
+                <button className="btn ghost small" onClick={() => setShowEnvModal(true)}>
+                  ⚙ Manage Environments
+                </button>
+                <button className="btn ghost small" onClick={exportJSON}>
+                  ⭳ Export JSON
+                </button>
+                <label className="btn ghost small" style={{ margin: 0 }}>
+                  ⭱ Import JSON
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/json"
+                    onChange={importJSON}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+                <button className="btn primary" onClick={openNewDeploy}>
+                  + New Deployment
+                </button>
+                <button className="btn ghost small" onClick={() => window.location.href = '/admin'}>
+                  📊 Admin Dashboard
+                </button>
+                <button className="btn ghost small danger" onClick={handleLogout}>
+                  🚪 Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn ghost small" onClick={exportJSON}>
+                  ⭳ Export JSON
+                </button>
+                <button className="btn primary" onClick={() => setShowLoginModal(true)}>
+                  🔐 Admin Login
+                </button>
+              </>
+            )}
           </div>
         </header>
 
@@ -514,14 +579,16 @@ export default function Home() {
                       {d.notes && <div>{d.notes}</div>}
                     </td>
                     <td>
-                      <div className="row-actions">
-                        <button className="btn small ghost" onClick={() => openEditDeploy(d)}>
-                          Edit
-                        </button>
-                        <button className="btn small ghost danger" onClick={() => deleteDeploy(d.id)}>
-                          Del
-                        </button>
-                      </div>
+                      {isAdmin && (
+                        <div className="row-actions">
+                          <button className="btn small ghost" onClick={() => openEditDeploy(d)}>
+                            Edit
+                          </button>
+                          <button className="btn small ghost danger" onClick={() => deleteDeploy(d.id)}>
+                            Del
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -751,6 +818,49 @@ export default function Home() {
 
             <div className="modal-footer">
               <button className="btn ghost" onClick={() => setShowEnvModal(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="overlay open" onClick={(e) => e.target === e.currentTarget && setShowLoginModal(false)}>
+          <div className="modal" style={{ minWidth: '400px' }}>
+            <h2>🔐 Admin Login</h2>
+            <div style={{ marginBottom: '20px', color: 'var(--muted)', fontSize: '13px' }}>
+              Enter admin password to access management features
+            </div>
+            
+            <input
+              type="password"
+              placeholder="Admin password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: 'var(--panel)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                color: 'var(--text)',
+                fontSize: '14px',
+                marginBottom: '20px'
+              }}
+            />
+
+            <div className="modal-footer">
+              <button className="btn ghost" onClick={() => {
+                setShowLoginModal(false);
+                setLoginPassword('');
+              }}>
+                Cancel
+              </button>
+              <button className="btn primary" onClick={handleLogin}>
+                Login
+              </button>
             </div>
           </div>
         </div>
