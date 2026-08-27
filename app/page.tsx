@@ -8,6 +8,10 @@ interface Deployment {
   status: string;
   branch?: string;
   version?: string;
+  frontend_branch?: string;
+  backend_branch?: string;
+  frontend_version?: string;
+  backend_version?: string;
   requested_by?: string;
   approved_by?: string;
   tested_by?: string;
@@ -353,7 +357,23 @@ export default function Home() {
                       <b>{new Date(latest.started_at).toLocaleString()}</b> · {timeAgo(latest.started_at)}
                       <br />
                       by {latest.deployed_by || latest.requested_by || '—'}
-                      {latest.branch && <div className="branch">{latest.branch}</div>}
+                      {(latest.frontend_branch || latest.backend_branch) && (
+                        <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                          {latest.frontend_branch && (
+                            <div className="branch" style={{ marginBottom: '4px' }}>
+                              FE: {latest.frontend_branch}
+                            </div>
+                          )}
+                          {latest.backend_branch && (
+                            <div className="branch">
+                              BE: {latest.backend_branch}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {!latest.frontend_branch && !latest.backend_branch && latest.branch && (
+                        <div className="branch">{latest.branch}</div>
+                      )}
                     </div>
                   </>
                 ) : (
@@ -446,10 +466,37 @@ export default function Home() {
                       </span>
                     </td>
                     <td>
-                      <div className="mono">{d.branch || '—'}</div>
-                      {d.version && (
-                        <div style={{ color: 'var(--muted)', fontSize: '11.5px', marginTop: '2px' }}>
-                          {d.version}
+                      {d.frontend_branch || d.backend_branch ? (
+                        <div>
+                          {d.frontend_branch && (
+                            <div className="mono" style={{ marginBottom: '4px' }}>
+                              <span style={{ color: 'var(--accent)', fontSize: '10px', fontWeight: 600 }}>FE:</span> {d.frontend_branch}
+                              {d.frontend_version && (
+                                <div style={{ color: 'var(--muted)', fontSize: '11px', marginTop: '2px', marginLeft: '20px' }}>
+                                  {d.frontend_version}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {d.backend_branch && (
+                            <div className="mono">
+                              <span style={{ color: 'var(--ok)', fontSize: '10px', fontWeight: 600 }}>BE:</span> {d.backend_branch}
+                              {d.backend_version && (
+                                <div style={{ color: 'var(--muted)', fontSize: '11px', marginTop: '2px', marginLeft: '20px' }}>
+                                  {d.backend_version}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="mono">{d.branch || '—'}</div>
+                          {d.version && (
+                            <div style={{ color: 'var(--muted)', fontSize: '11.5px', marginTop: '2px' }}>
+                              {d.version}
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
