@@ -514,7 +514,14 @@ export default function Home() {
 
         {/* Environment Cards */}
         <div className="cards">
-          {environments.map((env) => {
+          {[...environments].sort((a, b) => {
+            const latestA = latestForEnv(a.name);
+            const latestB = latestForEnv(b.name);
+            if (!latestA && !latestB) return 0;
+            if (!latestA) return 1;
+            if (!latestB) return -1;
+            return new Date(latestB.started_at).getTime() - new Date(latestA.started_at).getTime();
+          }).map((env) => {
             const latest = latestForEnv(env.name);
             const branches = latestBranchesForEnv(env.name);
             const health = getEnvHealth(env.name);
