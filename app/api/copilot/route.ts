@@ -86,12 +86,6 @@ export async function GET() {
       ? fmtDate(yesterday)
       : null;
 
-    // 5. Org-level 28-day report for totals
-    const orgReport28 = await ghFetch(
-      `${GH_API}/orgs/${GITHUB_ORG}/copilot/metrics/reports/organization-28-day/latest`
-    );
-    const orgRows = (await downloadReport(orgReport28.download_links)) as any[];
-
     // --- Aggregate 28-day per-user ---
     const userMap: Record<string, any> = {};
 
@@ -191,19 +185,15 @@ export async function GET() {
 
     users.sort((a, b) => b.dollars_used - a.dollars_used);
 
-    // Org totals
-    const orgTotals = orgRows.reduce(
-      (acc, row) => {
-        acc.credits += row.ai_credits_used || 0;
-        acc.loc_suggested += row.loc_suggested_to_add_sum || 0;
-        acc.loc_accepted += row.loc_added_sum || 0;
-        acc.interactions += row.user_initiated_interaction_count || 0;
-        acc.code_generations += row.code_generation_activity_count || 0;
-        return acc;
-      },
-      { credits: 0, loc_suggested: 0, loc_accepted: 0, interactions: 0, code_generations: 0 }
-    );
-    orgTotals.dollars = orgTotals.credits / CREDITS_PER_DOLLAR;
+    // Org totals — computed from per-user data (org-level report doesn't have ai_credits_used)
+    const orgTotals = {
+      ai_credits_used: users.reduce((sum, u) => sum + u.credits_used, 0),
+      dollars: users.reduce((sum, u) => sum + u.dollars_used, 0),
+      loc_suggested: users.reduce((sum, u) => sum + u.loc_suggested, 0),
+      loc_accepted: users.reduce((sum, u) => sum + u.loc_accepted, 0),
+      interactions: users.reduce((sum, u) => sum + u.interactions, 0),
+      code_generations: users.reduce((sum, u) => sum + u.code_generations, 0),
+    };
 
     return NextResponse.json({
       report_period: {
