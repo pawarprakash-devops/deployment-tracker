@@ -187,7 +187,7 @@ export async function GET() {
 
     // Org totals — computed from per-user data (org-level report doesn't have ai_credits_used)
     const orgTotals = {
-      credits: users.reduce((sum, u) => sum + u.credits_used, 0),
+      ai_credits_used: users.reduce((sum, u) => sum + u.credits_used, 0),
       dollars: users.reduce((sum, u) => sum + u.dollars_used, 0),
       loc_suggested: users.reduce((sum, u) => sum + u.loc_suggested, 0),
       loc_accepted: users.reduce((sum, u) => sum + u.loc_accepted, 0),
