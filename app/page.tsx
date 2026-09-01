@@ -536,6 +536,10 @@ export default function Home() {
             <div className="sub">
               <span className={`live-dot ${isRefreshing ? 'refreshing' : ''}`}>●</span>
               {' '}Live status · Last updated: {lastUpdated.toLocaleTimeString()}
+              {' '}·{' '}
+              <a href="/copilot" style={{ color: '#a78bfa', textDecoration: 'none', fontWeight: 500 }}>
+                🤖 Copilot Usage
+              </a>
             </div>
           </div>
           <div className="actions">

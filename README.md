@@ -9,6 +9,7 @@ A real-time deployment tracking system built with Next.js 16, Neon Postgres, and
 ✅ **REST API** - Full CRUD operations for deployments  
 ✅ **Environment Management** - Track multiple environments  
 ✅ **Modern UI** - Built with Tailwind CSS  
+✅ **GitHub Copilot Usage Dashboard** - Per-user AI credits, lines suggested/accepted, chat/agent usage, adoption phase
 
 ## Database Schema
 
