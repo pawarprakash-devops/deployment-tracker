@@ -6,6 +6,7 @@ interface UserSummary {
   user_login: string;
   user_id: number;
   avatar_url?: string;
+  // From API row
   ai_credits_used: number;
   loc_suggested: number;
   loc_accepted: number;
@@ -21,6 +22,15 @@ interface UserSummary {
   last_authenticated_at?: string;
   plan_type?: string;
   pending_cancellation?: boolean;
+  // Budget fields (computed from route)
+  included_credits: number;
+  credits_used: number;
+  credits_remaining: number;
+  credits_pct: number; // 0-100
+  over_budget: boolean;
+  dollars_used: number;
+  dollars_remaining: number;
+  budget_pct: number; // 0-100
 }
 
 interface Billing {
@@ -44,12 +54,15 @@ interface OrgTotals {
   loc_accepted: number;
   interactions: number;
   code_generations: number;
+  dollars: number;
 }
 
 interface CopilotData {
   report_period: { start: string; end: string };
   billing: Billing;
   org_totals: OrgTotals;
+  budget_per_user: number;
+  credits_per_dollar: number;
   users: UserSummary[];
 }
 
@@ -196,10 +209,10 @@ export default function CopilotPage() {
               { label: 'Total Seats', value: data.billing.seat_breakdown.total, color: 'text-white' },
               { label: 'Active', value: data.billing.seat_breakdown.active_this_cycle, color: 'text-green-400' },
               { label: 'Inactive', value: data.billing.seat_breakdown.inactive_this_cycle, color: 'text-red-400' },
-              { label: 'AI Credits Used', value: fmt(data.org_totals.ai_credits_used, 1), color: 'text-yellow-400' },
-              { label: 'Lines Suggested', value: fmt(data.org_totals.loc_suggested), color: 'text-blue-400' },
-              { label: 'Lines Accepted', value: fmt(data.org_totals.loc_accepted), color: 'text-green-400' },
+              { label: 'Org Credits', value: fmt(data.org_totals.ai_credits_used, 1), color: 'text-yellow-400' },
+              { label: 'Org Spend', value: '$' + fmt(data.org_totals.dollars, 2), color: 'text-yellow-300' },
               { label: 'Interactions', value: fmt(data.org_totals.interactions), color: 'text-purple-400' },
+              { label: 'Code Gen', value: fmt(data.org_totals.code_generations), color: 'text-gray-300' },
             ].map(card => (
               <div key={card.label} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">{card.label}</p>
@@ -310,9 +323,32 @@ export default function CopilotPage() {
                       </td>
                       {/* AI Credits */}
                       <td className="px-3 py-3">
-                        <span className={`font-mono font-bold ${u.ai_credits_used > 0 ? 'text-yellow-400' : 'text-gray-600'}`}>
-                          {u.ai_credits_used.toFixed(1)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 min-w-[80px]">
+                            <div className="flex justify-between text-xs mb-0.5">
+                              <span className={`font-mono font-bold ${u.over_budget ? 'text-red-400' : u.credits_pct > 80 ? 'text-yellow-400' : 'text-yellow-300'}`}>
+                                {u.credits_used.toLocaleString()}
+                              </span>
+                              <span className="text-gray-500">/ {u.included_credits.toLocaleString()}</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  u.over_budget ? 'bg-red-500'
+                                  : u.credits_pct > 80 ? 'bg-yellow-500'
+                                  : 'bg-green-500'
+                                }`}
+                                style={{ width: `${Math.min(100, u.credits_pct)}%` }}
+                              />
+                            </div>
+                          </div>
+                          {u.over_budget && (
+                            <span className="text-xs bg-red-900/40 text-red-400 px-1 rounded whitespace-nowrap">OVER</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          ${u.dollars_used.toFixed(2)} / ${u.dollars_remaining.toFixed(2)} remaining
+                        </div>
                       </td>
                       {/* Lines Suggested */}
                       <td className="px-3 py-3 font-mono text-blue-300">
@@ -385,6 +421,7 @@ export default function CopilotPage() {
 
           {/* Footer note */}
           <p className="text-xs text-gray-600 mt-4">
+            GitHub Copilot Enterprise · {data.billing.plan_type} · {data.budget_per_user.toLocaleString()} credits/user/month (${data.budget_per_user.toFixed(2)}) ·
             Data from GitHub Copilot Metrics API · 28-day rolling window ending {data.report_period.end} ·
             Cached 5 min server-side
           </p>
