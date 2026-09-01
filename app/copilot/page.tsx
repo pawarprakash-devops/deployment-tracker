@@ -61,6 +61,8 @@ interface CopilotData {
   report_period: { start: string; end: string };
   billing: Billing;
   org_totals: OrgTotals;
+  budget_per_user: number;
+  credits_per_dollar: number;
   users: UserSummary[];
 }
 
