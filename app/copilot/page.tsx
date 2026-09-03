@@ -58,7 +58,11 @@ interface OrgTotals {
 }
 
 interface CopilotData {
-  report_period: { start: string; end: string };
+  report_period: {
+    start: string;
+    end: string;
+    daily_date?: string | null;
+  };
   billing: Billing;
   org_totals: OrgTotals;
   budget_per_user: number;
