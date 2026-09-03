@@ -6,31 +6,44 @@ interface UserSummary {
   user_login: string;
   user_id: number;
   avatar_url?: string;
-  // From API row
-  ai_credits_used: number;
-  loc_suggested: number;
-  loc_accepted: number;
-  interactions: number;
-  code_generations: number;
-  code_acceptances: number;
-  used_chat: boolean;
-  used_agent: boolean;
-  active_days: number;
-  ai_adoption_phase: string;
   last_activity_at?: string;
   last_activity_editor?: string;
   last_authenticated_at?: string;
   plan_type?: string;
   pending_cancellation?: boolean;
-  // Budget fields (computed from route)
+  ai_adoption_phase: string;
+  // MTD (Month-To-Date / Current Month)
+  credits_mtd: number;
+  dollars_mtd: number;
+  loc_suggested_mtd: number;
+  loc_accepted_mtd: number;
+  interactions_mtd: number;
+  code_generations_mtd: number;
+  code_acceptances_mtd: number;
+  active_days_mtd: number;
+  daily_credits: Record<string, number>;
+  // 28-day rolling window
+  credits_28d: number;
+  dollars_28d: number;
+  loc_suggested_28d: number;
+  loc_accepted_28d: number;
+  interactions_28d: number;
+  code_generations_28d: number;
+  code_acceptances_28d: number;
+  active_days_28d: number;
+  used_chat_28d?: boolean;
+  used_agent_28d?: boolean;
+  // Computed Budget
   included_credits: number;
   credits_used: number;
   credits_remaining: number;
-  credits_pct: number; // 0-100
+  credits_pct: number;
   over_budget: boolean;
+  overage_credits: number;
+  overage_dollars: number;
   dollars_used: number;
   dollars_remaining: number;
-  budget_pct: number; // 0-100
+  budget_pct: number;
 }
 
 interface Billing {
@@ -48,13 +61,33 @@ interface Billing {
   platform_chat: string;
 }
 
+interface EnterpriseLimits {
+  total_included_credits: number;
+  consumed_credits: number;
+  remaining_credits: number;
+  consumed_pct: number;
+  additional_usage_dollars: number;
+  gross_spend_dollars: number;
+  budget_per_user: number;
+  credits_per_dollar: number;
+}
+
+interface DailyHistoryItem {
+  date: string;
+  credits: number;
+  dollars: number;
+  active_users: number;
+}
+
 interface OrgTotals {
   ai_credits_used: number;
+  dollars: number;
   loc_suggested: number;
   loc_accepted: number;
   interactions: number;
   code_generations: number;
-  dollars: number;
+  rolling_28d_credits?: number;
+  rolling_28d_dollars?: number;
 }
 
 interface CopilotData {
@@ -62,9 +95,19 @@ interface CopilotData {
     start: string;
     end: string;
     daily_date?: string | null;
+    is_mtd: boolean;
+    period_label: string;
+    days_in_period: number;
+    available_days: string[];
+    reset_date_str: string;
+    days_until_reset: number;
+    rolling_28d_start?: string;
+    rolling_28d_end?: string;
   };
   billing: Billing;
+  enterprise_limits: EnterpriseLimits;
   org_totals: OrgTotals;
+  daily_history: DailyHistoryItem[];
   budget_per_user: number;
   credits_per_dollar: number;
   users: UserSummary[];
@@ -103,22 +146,26 @@ function acceptanceRate(accepted: number, suggested: number) {
 }
 
 function phaseColor(phase: string) {
-  if (phase.includes('1')) return 'bg-red-900/50 text-red-300';
-  if (phase.includes('2')) return 'bg-yellow-900/50 text-yellow-300';
-  if (phase.includes('3')) return 'bg-blue-900/50 text-blue-300';
-  if (phase.includes('4')) return 'bg-green-900/50 text-green-300';
-  return 'bg-gray-700 text-gray-300';
+  if (phase.includes('1')) return 'bg-red-900/50 text-red-300 border border-red-800/40';
+  if (phase.includes('2')) return 'bg-yellow-900/50 text-yellow-300 border border-yellow-800/40';
+  if (phase.includes('3')) return 'bg-blue-900/50 text-blue-300 border border-blue-800/40';
+  if (phase.includes('4')) return 'bg-green-900/50 text-green-300 border border-green-800/40';
+  return 'bg-gray-800 text-gray-400 border border-gray-700/50';
 }
 
-type SortKey = keyof UserSummary;
+type ViewMode = 'mtd' | 'daily' | 'rolling_28d';
+type FilterStatus = 'all' | 'over_budget' | 'under_budget' | 'inactive';
 
 export default function CopilotPage() {
   const [data, setData] = useState<CopilotData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>('ai_credits_used');
-  const [sortAsc, setSortAsc] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('mtd');
+  const [selectedDay, setSelectedDay] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<string>('credits');
+  const [sortAsc, setSortAsc] = useState(false);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(300);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -129,26 +176,24 @@ export default function CopilotPage() {
     try {
       const res = await fetch('/api/copilot');
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to fetch');
+      if (!res.ok) throw new Error(json.error || 'Failed to fetch Copilot usage');
       setData(json);
+      if (json.report_period?.available_days?.length && !selectedDay) {
+        setSelectedDay(json.report_period.available_days[json.report_period.available_days.length - 1]);
+      }
       setLastFetched(new Date());
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedDay]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  function handleSort(key: SortKey) {
-    if (sortKey === key) setSortAsc(!sortAsc);
-    else { setSortKey(key); setSortAsc(false); }
-  }
-
-  // Auto-refresh countdown
+  // Auto-refresh timer
   useEffect(() => {
     if (!autoRefresh) return;
     const timer = setInterval(() => {
@@ -163,294 +208,582 @@ export default function CopilotPage() {
     return () => clearInterval(timer);
   }, [autoRefresh, fetchData]);
 
-  // Reset countdown on manual refresh
   const handleRefresh = () => {
     setCountdown(300);
     fetchData();
   };
 
-  const SortIcon = ({ k }: { k: SortKey }) =>
-    sortKey === k ? (sortAsc ? ' ↑' : ' ↓') : '';
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(false);
+    }
+  };
 
-  const users = data?.users
-    .filter(u => u.user_login.toLowerCase().includes(search.toLowerCase()))
+  // Filter and sort users based on viewMode
+  const filteredUsers = (data?.users || [])
+    .filter((u) => {
+      // Search
+      const matchSearch =
+        u.user_login.toLowerCase().includes(search.toLowerCase()) ||
+        (u.last_activity_editor && u.last_activity_editor.toLowerCase().includes(search.toLowerCase())) ||
+        (u.ai_adoption_phase && u.ai_adoption_phase.toLowerCase().includes(search.toLowerCase()));
+      if (!matchSearch) return false;
+
+      // Status filter
+      if (statusFilter === 'over_budget') return u.over_budget;
+      if (statusFilter === 'under_budget') return !u.over_budget && u.credits_mtd > 0;
+      if (statusFilter === 'inactive') return u.credits_mtd === 0 && u.code_generations_mtd === 0;
+      return true;
+    })
     .sort((a, b) => {
-      const av = a[sortKey] as any;
-      const bv = b[sortKey] as any;
-      if (av == null) return 1;
-      if (bv == null) return -1;
-      return sortAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
-    }) ?? [];
+      let av = 0;
+      let bv = 0;
+
+      if (viewMode === 'mtd') {
+        if (sortKey === 'credits') { av = a.credits_mtd; bv = b.credits_mtd; }
+        else if (sortKey === 'loc_suggested') { av = a.loc_suggested_mtd; bv = b.loc_suggested_mtd; }
+        else if (sortKey === 'loc_accepted') { av = a.loc_accepted_mtd; bv = b.loc_accepted_mtd; }
+        else if (sortKey === 'interactions') { av = a.interactions_mtd; bv = b.interactions_mtd; }
+        else if (sortKey === 'code_gen') { av = a.code_generations_mtd; bv = b.code_generations_mtd; }
+        else if (sortKey === 'user') { return sortAsc ? a.user_login.localeCompare(b.user_login) : b.user_login.localeCompare(a.user_login); }
+      } else if (viewMode === 'daily') {
+        const dayA = a.daily_credits[selectedDay] || 0;
+        const dayB = b.daily_credits[selectedDay] || 0;
+        if (sortKey === 'credits') { av = dayA; bv = dayB; }
+        else { av = a.credits_mtd; bv = b.credits_mtd; }
+      } else {
+        // rolling_28d
+        if (sortKey === 'credits') { av = a.credits_28d; bv = b.credits_28d; }
+        else if (sortKey === 'loc_suggested') { av = a.loc_suggested_28d; bv = b.loc_suggested_28d; }
+        else if (sortKey === 'loc_accepted') { av = a.loc_accepted_28d; bv = b.loc_accepted_28d; }
+        else if (sortKey === 'interactions') { av = a.interactions_28d; bv = b.interactions_28d; }
+        else if (sortKey === 'code_gen') { av = a.code_generations_28d; bv = b.code_generations_28d; }
+        else if (sortKey === 'user') { return sortAsc ? a.user_login.localeCompare(b.user_login) : b.user_login.localeCompare(a.user_login); }
+      }
+
+      return sortAsc ? av - bv : bv - av;
+    });
+
+  const overBudgetCount = (data?.users || []).filter((u) => u.over_budget).length;
+  const underBudgetCount = (data?.users || []).filter((u) => !u.over_budget && u.credits_mtd > 0).length;
+  const inactiveCount = (data?.users || []).filter((u) => u.credits_mtd === 0 && u.code_generations_mtd === 0).length;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
+    <div className="min-h-screen bg-gray-950 text-gray-100 p-4 md:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
-          <a href="/" className="text-gray-400 hover:text-white text-sm">← Deployments</a>
+          <a href="/" className="text-gray-400 hover:text-white text-sm transition-colors">
+            ← Deployments
+          </a>
           <span className="text-gray-600">/</span>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <span>🤖</span> GitHub Copilot Usage
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <span className="text-2xl">🤖</span> GitHub Copilot AI Usage
           </h1>
+          <span className="text-xs bg-purple-950/70 border border-purple-800 text-purple-300 font-semibold px-2 py-0.5 rounded">
+            Enterprise
+          </span>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-3 flex-wrap">
           {lastFetched && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-400">
               Updated {timeAgo(lastFetched.toISOString())}
               {autoRefresh && (
                 <span className="ml-2 text-blue-400">
-                  · Next refresh in {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+                  · Refresh in {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
                 </span>
               )}
             </span>
           )}
-          <label className="flex items-center gap-1.5 cursor-pointer">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={autoRefresh}
-              onChange={e => { setAutoRefresh(e.target.checked); if (e.target.checked) setCountdown(300); }}
-              className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500"
+              onChange={(e) => {
+                setAutoRefresh(e.target.checked);
+                if (e.target.checked) setCountdown(300);
+              }}
+              className="w-3.5 h-3.5 rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-blue-500"
             />
             <span className="text-xs text-gray-400">Auto</span>
           </label>
           <button
             onClick={handleRefresh}
             disabled={loading}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-sm font-medium"
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-sm font-medium transition-colors flex items-center gap-1.5 shadow-sm"
           >
-            {loading ? 'Loading…' : '↻ Refresh'}
+            <span>↻</span>
+            <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-900/40 border border-red-700 rounded p-4 mb-6 text-red-300">
-          {error}
+        <div className="bg-red-950/60 border border-red-800 text-red-300 rounded-lg p-4 mb-6 text-sm">
+          ⚠️ {error}
         </div>
       )}
 
       {loading && !data && (
-        <div className="flex items-center justify-center h-64 text-gray-400">
-          Loading Copilot usage data…
+        <div className="flex flex-col items-center justify-center h-72 text-gray-400 gap-3">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p>Loading GitHub Copilot Enterprise metrics…</p>
         </div>
       )}
 
       {data && (
         <>
-          {/* Report period */}
-          <p className="text-xs text-gray-500 mb-4">
-            Report period: {data.report_period.start} → {data.report_period.end} &nbsp;·&nbsp;
-            Plan: <span className="text-purple-400 capitalize">{data.billing.plan_type}</span> &nbsp;·&nbsp;
-            Org: <span className="text-blue-400">vidaisolutions</span>
-          </p>
-
-          {/* Top stat cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
-            {[
-              { label: 'Total Seats', value: data.billing.seat_breakdown.total, color: 'text-white' },
-              { label: 'Active', value: data.billing.seat_breakdown.active_this_cycle, color: 'text-green-400' },
-              { label: 'Inactive', value: data.billing.seat_breakdown.inactive_this_cycle, color: 'text-red-400' },
-              { label: 'Org Credits', value: fmt(data.org_totals.ai_credits_used, 1), color: 'text-yellow-400' },
-              { label: 'Org Spend', value: '$' + fmt(data.org_totals.dollars, 2), color: 'text-yellow-300' },
-              { label: 'Interactions', value: fmt(data.org_totals.interactions), color: 'text-purple-400' },
-              { label: 'Code Gen', value: fmt(data.org_totals.code_generations), color: 'text-gray-300' },
-            ].map(card => (
-              <div key={card.label} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1">{card.label}</p>
-                <p className={`text-xl font-bold ${card.color}`}>{card.value}</p>
+          {/* Top Enterprise Hero Cards (Matching GitHub Enterprise UI) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {/* Card 1: Included Credits */}
+            <div className="bg-gray-900/90 border border-gray-800 rounded-xl p-5 flex flex-col justify-between shadow-lg">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Included Credits</p>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-3xl font-extrabold text-white">
+                    {data.enterprise_limits.consumed_credits.toLocaleString()}
+                  </span>
+                  <span className="text-sm font-medium text-gray-400">
+                    / {data.enterprise_limits.total_included_credits.toLocaleString()} AI credits
+                  </span>
+                </div>
+                {/* Progress bar */}
+                <div className="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden mb-2">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      data.enterprise_limits.consumed_pct > 90
+                        ? 'bg-red-500'
+                        : data.enterprise_limits.consumed_pct > 70
+                        ? 'bg-yellow-500'
+                        : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${Math.min(100, data.enterprise_limits.consumed_pct)}%` }}
+                  />
+                </div>
               </div>
-            ))}
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Included AI credits consumed by users in your account. Monthly limit resets in{' '}
+                <span className="text-blue-300 font-semibold">{data.report_period.days_until_reset} days</span> on{' '}
+                <span className="text-gray-300 font-semibold">{data.report_period.reset_date_str}</span>.
+              </p>
+            </div>
+
+            {/* Card 2: Additional Usage */}
+            <div className="bg-gray-900/90 border border-gray-800 rounded-xl p-5 flex flex-col justify-between shadow-lg">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Additional Usage</p>
+                  <span className="text-xs text-gray-500">Cap: $0.00</span>
+                </div>
+                <div className="text-3xl font-extrabold text-green-400 mb-2">
+                  ${data.enterprise_limits.additional_usage_dollars.toFixed(2)}
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Spend on additional AI credits exceeding your included credits pool.
+              </p>
+            </div>
+
+            {/* Card 3: Month-to-Date Spend */}
+            <div className="bg-gray-900/90 border border-gray-800 rounded-xl p-5 flex flex-col justify-between shadow-lg">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Gross Value ({data.report_period.period_label})
+                </p>
+                <div className="text-3xl font-extrabold text-yellow-300 mb-2">
+                  ${data.enterprise_limits.gross_spend_dollars.toFixed(2)}
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Total AI consumption value this cycle across all users (calculated at $0.01 per AI credit).
+              </p>
+            </div>
+
+            {/* Card 4: Active Seats & Environment */}
+            <div className="bg-gray-900/90 border border-gray-800 rounded-xl p-5 flex flex-col justify-between shadow-lg">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Enterprise Seats</p>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-3xl font-extrabold text-green-400">
+                    {data.billing.seat_breakdown.active_this_cycle}
+                  </span>
+                  <span className="text-sm font-medium text-gray-400">
+                    / {data.billing.seat_breakdown.total} active seats
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-1.5 flex-wrap text-xs">
+                <span className="px-2 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/50">
+                  IDE: {data.billing.ide_chat}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/50">
+                  Platform: {data.billing.platform_chat}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-green-950/60 text-green-300 border border-green-800/50">
+                  CLI: {data.billing.cli}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* Features enabled */}
-          <div className="flex gap-2 mb-6 flex-wrap">
-            {[
-              { label: 'IDE Chat', val: data.billing.ide_chat },
-              { label: 'Platform Chat', val: data.billing.platform_chat },
-              { label: 'CLI', val: data.billing.cli },
-            ].map(f => (
-              <span
-                key={f.label}
-                className={`px-2 py-1 rounded text-xs font-medium border ${
-                  f.val === 'enabled'
-                    ? 'bg-green-900/30 text-green-400 border-green-800'
-                    : 'bg-gray-800 text-gray-500 border-gray-700'
-                }`}
-              >
-                {f.label}: {f.val}
-              </span>
-            ))}
+          {/* View Mode Navigation Tabs */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-4 mb-6 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1">Timeframe:</span>
+                <button
+                  onClick={() => setViewMode('mtd')}
+                  className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                    viewMode === 'mtd'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'bg-gray-800/80 text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  🗓️ Current Month ({data.report_period.period_label})
+                </button>
+
+                <button
+                  onClick={() => setViewMode('daily')}
+                  className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                    viewMode === 'daily'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'bg-gray-800/80 text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  📅 Daily Breakdown
+                </button>
+
+                <button
+                  onClick={() => setViewMode('rolling_28d')}
+                  className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                    viewMode === 'rolling_28d'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'bg-gray-800/80 text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  📊 28-Day Rolling Window
+                </button>
+              </div>
+
+              {viewMode === 'daily' && data.report_period.available_days?.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">Select Day:</span>
+                  <div className="flex gap-1.5">
+                    {data.report_period.available_days.map((d) => (
+                      <button
+                        key={d}
+                        onClick={() => setSelectedDay(d)}
+                        className={`px-2.5 py-1 rounded text-xs font-mono font-medium transition-colors ${
+                          selectedDay === d
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Daily History Trend Cards in Daily Mode */}
+            {viewMode === 'daily' && data.daily_history?.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4 pt-4 border-t border-gray-800">
+                {data.daily_history.map((dh) => (
+                  <div
+                    key={dh.date}
+                    onClick={() => setSelectedDay(dh.date)}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      selectedDay === dh.date
+                        ? 'bg-blue-950/40 border-blue-600 shadow'
+                        : 'bg-gray-950 border-gray-800/80 hover:border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                      <span className="font-mono font-semibold">{dh.date}</span>
+                      <span>{dh.active_users} active users</span>
+                    </div>
+                    <div className="text-xl font-bold text-yellow-300">
+                      {dh.credits.toLocaleString(undefined, { maximumFractionDigits: 1 })} credits
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">${dh.dollars.toFixed(2)} value</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Search */}
-          <div className="mb-4">
-            <input
-              type="text"
-              placeholder="Search users…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm w-64 focus:outline-none focus:border-blue-500"
-            />
-            <span className="text-xs text-gray-500 ml-3">{users.length} users</span>
+          {/* Filter, Search, and Status Summary */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Search */}
+              <div className="relative w-64">
+                <input
+                  type="text"
+                  placeholder="Filter by user, editor, phase…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="bg-gray-900 border border-gray-800 focus:border-blue-500 rounded-lg pl-8 pr-3 py-2 text-sm w-full focus:outline-none transition-colors"
+                />
+                <span className="absolute left-2.5 top-2.5 text-gray-500 text-xs">🔍</span>
+              </div>
+
+              {/* Status filter buttons */}
+              <div className="flex gap-1.5 text-xs">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    statusFilter === 'all'
+                      ? 'bg-gray-700 text-white'
+                      : 'bg-gray-900 border border-gray-800 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  All ({data.users.length})
+                </button>
+                <button
+                  onClick={() => setStatusFilter('over_budget')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    statusFilter === 'over_budget'
+                      ? 'bg-red-900/60 text-red-200 border border-red-700'
+                      : 'bg-gray-900 border border-gray-800 text-red-400 hover:text-red-300'
+                  }`}
+                >
+                  Over Budget ({overBudgetCount})
+                </button>
+                <button
+                  onClick={() => setStatusFilter('under_budget')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    statusFilter === 'under_budget'
+                      ? 'bg-green-900/60 text-green-200 border border-green-700'
+                      : 'bg-gray-900 border border-gray-800 text-green-400 hover:text-green-300'
+                  }`}
+                >
+                  Under Budget ({underBudgetCount})
+                </button>
+                <button
+                  onClick={() => setStatusFilter('inactive')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    statusFilter === 'inactive'
+                      ? 'bg-gray-700 text-gray-200'
+                      : 'bg-gray-900 border border-gray-800 text-gray-500 hover:text-gray-400'
+                  }`}
+                >
+                  Inactive ({inactiveCount})
+                </button>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-400">
+              Showing <span className="font-bold text-white">{filteredUsers.length}</span> of {data.users.length} users
+            </div>
           </div>
 
-          {/* Per-user table */}
-          <div className="overflow-x-auto rounded-lg border border-gray-800">
+          {/* Usage Breakdown Table */}
+          <div className="overflow-x-auto rounded-xl border border-gray-800 bg-gray-900/40 shadow-md">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 bg-gray-900/80">
-                  {[
-                    { key: 'user_login', label: 'User' },
-                    { key: 'ai_credits_used', label: 'AI Credits' },
-                    { key: 'loc_suggested', label: 'Lines Suggested' },
-                    { key: 'loc_accepted', label: 'Lines Accepted' },
-                    { key: null, label: 'Accept Rate' },
-                    { key: 'interactions', label: 'Interactions' },
-                    { key: 'code_generations', label: 'Code Gen' },
-                    { key: 'active_days', label: 'Active Days' },
-                    { key: null, label: 'Features' },
-                    { key: 'ai_adoption_phase', label: 'Phase' },
-                    { key: 'last_activity_at', label: 'Last Active' },
-                    { key: null, label: 'Editor' },
-                  ].map(col => (
-                    <th
-                      key={col.label}
-                      onClick={() => col.key && handleSort(col.key as SortKey)}
-                      className={`px-3 py-3 text-left text-xs font-medium text-gray-400 whitespace-nowrap ${
-                        col.key ? 'cursor-pointer hover:text-white select-none' : ''
-                      }`}
-                    >
-                      {col.label}
-                      {col.key && <SortIcon k={col.key as SortKey} />}
-                    </th>
-                  ))}
+                <tr className="border-b border-gray-800 bg-gray-900/90 select-none">
+                  <th
+                    onClick={() => handleSort('user')}
+                    className="px-4 py-3 text-left text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    User {sortKey === 'user' ? (sortAsc ? '↑' : '↓') : ''}
+                  </th>
+                  <th
+                    onClick={() => handleSort('credits')}
+                    className="px-4 py-3 text-left text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    {viewMode === 'mtd'
+                      ? 'Current Month Credits'
+                      : viewMode === 'daily'
+                      ? `Credits (${selectedDay || 'Day'})`
+                      : '28-Day Credits'}{' '}
+                    {sortKey === 'credits' ? (sortAsc ? '↑' : '↓') : ''}
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Gross Value</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Additional Usage</th>
+                  <th
+                    onClick={() => handleSort('loc_suggested')}
+                    className="px-4 py-3 text-left text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    Suggested / Accepted LOC {sortKey === 'loc_suggested' ? (sortAsc ? '↑' : '↓') : ''}
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Accept Rate</th>
+                  <th
+                    onClick={() => handleSort('interactions')}
+                    className="px-4 py-3 text-left text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    Interactions {sortKey === 'interactions' ? (sortAsc ? '↑' : '↓') : ''}
+                  </th>
+                  <th
+                    onClick={() => handleSort('code_gen')}
+                    className="px-4 py-3 text-left text-xs font-semibold text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    Code Gen {sortKey === 'code_gen' ? (sortAsc ? '↑' : '↓') : ''}
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Phase</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Last Active</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">Editor</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((u, i) => {
-                  const isActive = (u.ai_credits_used > 0 || u.code_generations > 0);
+                {filteredUsers.map((u, i) => {
+                  const creditsDisplay =
+                    viewMode === 'mtd'
+                      ? u.credits_mtd
+                      : viewMode === 'daily'
+                      ? u.daily_credits[selectedDay] || 0
+                      : u.credits_28d;
+
+                  const dollarsDisplay = creditsDisplay / (data.credits_per_dollar || 100);
+                  const locSug = viewMode === 'rolling_28d' ? u.loc_suggested_28d : u.loc_suggested_mtd;
+                  const locAcc = viewMode === 'rolling_28d' ? u.loc_accepted_28d : u.loc_accepted_mtd;
+                  const interactions = viewMode === 'rolling_28d' ? u.interactions_28d : u.interactions_mtd;
+                  const codeGen = viewMode === 'rolling_28d' ? u.code_generations_28d : u.code_generations_mtd;
+
+                  const isOverBudget = viewMode === 'mtd' && u.over_budget;
+                  const budgetCap = data.budget_per_user || 3500;
+
                   return (
                     <tr
                       key={u.user_login}
-                      className={`border-b border-gray-800/50 hover:bg-gray-900/50 transition-colors ${
-                        i % 2 === 0 ? 'bg-gray-950' : 'bg-gray-900/20'
+                      className={`border-b border-gray-800/40 hover:bg-gray-900/60 transition-colors ${
+                        i % 2 === 0 ? 'bg-gray-950/60' : 'bg-gray-900/20'
                       }`}
                     >
                       {/* User */}
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2.5">
                           {u.avatar_url ? (
-                            <img src={u.avatar_url} alt="" className="w-6 h-6 rounded-full" />
+                            <img src={u.avatar_url} alt="" className="w-7 h-7 rounded-full ring-1 ring-gray-700" />
                           ) : (
-                            <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs">
+                            <div className="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-300">
                               {u.user_login[0].toUpperCase()}
                             </div>
                           )}
-                          <a
-                            href={`https://github.com/${u.user_login}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:underline font-medium"
-                          >
-                            {u.user_login}
-                          </a>
-                          {u.pending_cancellation && (
-                            <span className="text-xs bg-red-900/40 text-red-400 px-1 rounded">cancelling</span>
-                          )}
-                          {!isActive && (
-                            <span className="text-xs bg-gray-800 text-gray-500 px-1 rounded">inactive</span>
-                          )}
-                        </div>
-                      </td>
-                      {/* AI Credits */}
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 min-w-[80px]">
-                            <div className="flex justify-between text-xs mb-0.5">
-                              <span className={`font-mono font-bold ${u.over_budget ? 'text-red-400' : u.credits_pct > 80 ? 'text-yellow-400' : 'text-yellow-300'}`}>
-                                {u.credits_used.toLocaleString()}
+                          <div>
+                            <a
+                              href={`https://github.com/${u.user_login}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 font-semibold"
+                            >
+                              {u.user_login}
+                            </a>
+                            {u.pending_cancellation && (
+                              <span className="ml-1.5 text-[10px] bg-red-950 text-red-400 border border-red-800 px-1 rounded">
+                                cancelling
                               </span>
-                              <span className="text-gray-500">/ {u.included_credits.toLocaleString()}</span>
-                            </div>
-                            <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  u.over_budget ? 'bg-red-500'
-                                  : u.credits_pct > 80 ? 'bg-yellow-500'
-                                  : 'bg-green-500'
-                                }`}
-                                style={{ width: `${Math.min(100, u.credits_pct)}%` }}
-                              />
-                            </div>
+                            )}
                           </div>
-                          {u.over_budget && (
-                            <span className="text-xs bg-red-900/40 text-red-400 px-1 rounded whitespace-nowrap">OVER</span>
+                        </div>
+                      </td>
+
+                      {/* AI Credits */}
+                      <td className="px-4 py-3.5 min-w-[200px]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={`font-mono font-bold text-sm ${
+                              isOverBudget
+                                ? 'text-red-400'
+                                : u.credits_pct > 80
+                                ? 'text-yellow-400'
+                                : 'text-gray-100'
+                            }`}
+                          >
+                            {creditsDisplay.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                          {viewMode === 'mtd' && (
+                            <span className="text-xs text-gray-500 font-mono">
+                              / {u.included_credits.toLocaleString()}
+                            </span>
+                          )}
+                          {isOverBudget && (
+                            <span className="text-[10px] font-bold bg-red-950 text-red-400 border border-red-800 px-1.5 py-0.2 rounded">
+                              OVER
+                            </span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          ${u.dollars_used.toFixed(2)} / ${u.dollars_remaining.toFixed(2)} remaining
-                        </div>
-                      </td>
-                      {/* Lines Suggested */}
-                      <td className="px-3 py-3 font-mono text-blue-300">
-                        {u.loc_suggested > 0 ? fmt(u.loc_suggested) : <span className="text-gray-600">0</span>}
-                      </td>
-                      {/* Lines Accepted */}
-                      <td className="px-3 py-3 font-mono text-green-300">
-                        {u.loc_accepted > 0 ? fmt(u.loc_accepted) : <span className="text-gray-600">0</span>}
-                      </td>
-                      {/* Accept Rate */}
-                      <td className="px-3 py-3 text-gray-300">
-                        {acceptanceRate(u.loc_accepted, u.loc_suggested)}
-                      </td>
-                      {/* Interactions */}
-                      <td className="px-3 py-3 font-mono text-purple-300">
-                        {u.interactions > 0 ? fmt(u.interactions) : <span className="text-gray-600">0</span>}
-                      </td>
-                      {/* Code Gen */}
-                      <td className="px-3 py-3 font-mono text-gray-300">
-                        {u.code_generations > 0 ? fmt(u.code_generations) : <span className="text-gray-600">0</span>}
-                      </td>
-                      {/* Active Days */}
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1">
-                          <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+
+                        {/* Progress Bar in MTD Mode */}
+                        {viewMode === 'mtd' && (
+                          <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-blue-500 rounded-full"
-                              style={{ width: `${Math.min(100, (u.active_days / 28) * 100)}%` }}
+                              className={`h-full rounded-full transition-all ${
+                                isOverBudget
+                                  ? 'bg-red-500'
+                                  : u.credits_pct > 80
+                                  ? 'bg-yellow-500'
+                                  : 'bg-green-500'
+                              }`}
+                              style={{ width: `${Math.min(100, (u.credits_mtd / 3500) * 100)}%` }}
                             />
                           </div>
-                          <span className="text-xs text-gray-400">{u.active_days}</span>
-                        </div>
+                        )}
                       </td>
-                      {/* Features */}
-                      <td className="px-3 py-3">
-                        <div className="flex gap-1">
-                          {u.used_chat && (
-                            <span className="text-xs bg-purple-900/40 text-purple-300 px-1.5 py-0.5 rounded">Chat</span>
-                          )}
-                          {u.used_agent && (
-                            <span className="text-xs bg-blue-900/40 text-blue-300 px-1.5 py-0.5 rounded">Agent</span>
-                          )}
-                          {!u.used_chat && !u.used_agent && (
-                            <span className="text-xs text-gray-600">—</span>
-                          )}
-                        </div>
+
+                      {/* Gross Amount */}
+                      <td className="px-4 py-3.5 font-mono text-yellow-300 font-medium">
+                        ${dollarsDisplay.toFixed(2)}
                       </td>
+
+                      {/* Additional Usage */}
+                      <td className="px-4 py-3.5 font-mono text-gray-400">
+                        {isOverBudget ? (
+                          <span className="text-red-400 font-medium">+${u.overage_dollars.toFixed(2)}</span>
+                        ) : (
+                          <span>$0.00</span>
+                        )}
+                      </td>
+
+                      {/* Lines Suggested / Accepted */}
+                      <td className="px-4 py-3.5 font-mono text-xs">
+                        <span className="text-blue-300">{fmt(locSug)}</span>
+                        <span className="text-gray-600 mx-1">/</span>
+                        <span className="text-green-300">{fmt(locAcc)}</span>
+                      </td>
+
+                      {/* Accept Rate */}
+                      <td className="px-4 py-3.5 text-xs text-gray-300 font-mono">
+                        {acceptanceRate(locAcc, locSug)}
+                      </td>
+
+                      {/* Interactions */}
+                      <td className="px-4 py-3.5 font-mono text-purple-300 text-xs">
+                        {interactions > 0 ? fmt(interactions) : <span className="text-gray-600">0</span>}
+                      </td>
+
+                      {/* Code Gen */}
+                      <td className="px-4 py-3.5 font-mono text-gray-300 text-xs">
+                        {codeGen > 0 ? fmt(codeGen) : <span className="text-gray-600">0</span>}
+                      </td>
+
                       {/* Phase */}
-                      <td className="px-3 py-3">
+                      <td className="px-4 py-3.5">
                         {u.ai_adoption_phase ? (
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${phaseColor(u.ai_adoption_phase)}`}>
+                          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${phaseColor(u.ai_adoption_phase)}`}>
                             {u.ai_adoption_phase}
                           </span>
-                        ) : <span className="text-gray-600">—</span>}
+                        ) : (
+                          <span className="text-gray-600 text-xs">—</span>
+                        )}
                       </td>
+
                       {/* Last Active */}
-                      <td className="px-3 py-3 text-xs text-gray-400 whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">
                         {timeAgo(u.last_activity_at)}
                       </td>
+
                       {/* Editor */}
-                      <td className="px-3 py-3 text-xs text-gray-400">
+                      <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">
                         {editorLabel(u.last_activity_editor)}
                       </td>
                     </tr>
@@ -460,18 +793,23 @@ export default function CopilotPage() {
             </table>
           </div>
 
-          {/* Footer note */}
-          <p className="text-xs text-gray-600 mt-4">
-            GitHub Copilot Enterprise · {data.billing.plan_type} · {data.budget_per_user.toLocaleString()} credits/user/month (${data.budget_per_user.toFixed(2)}) ·
-            Data from GitHub Copilot Metrics API · 28-day rolling window ending {data.report_period.end}
-            {data.report_period.daily_date && (
-              <> · Daily data: {data.report_period.daily_date}</>
-            )}
-            {autoRefresh && <> · Auto-refreshing every 5 min</>}
-          </p>
-          <p className="text-xs text-gray-700 mt-1">
-            ℹ️ GitHub Copilot metrics update once per day (~24h delay). Per-user credit totals reflect the 28-day rolling window.
-          </p>
+          {/* Footer explanation */}
+          <div className="mt-6 p-4 rounded-xl bg-gray-900/40 border border-gray-800 text-xs text-gray-400 space-y-1.5">
+            <p className="font-semibold text-gray-300 flex items-center gap-1.5">
+              <span>ℹ️</span> GitHub Copilot Enterprise Metrics & Credit Calculation Guide
+            </p>
+            <p>
+              • <strong>Monthly Cycle ({data.report_period.period_label}):</strong> Aggregated from daily metric reports starting on the 1st of the month. Monthly limit of 3,500 credits/seat resets on{' '}
+              <span className="text-gray-200 font-semibold">{data.report_period.reset_date_str}</span>.
+            </p>
+            <p>
+              • <strong>Daily Update Schedule:</strong> GitHub processes Copilot telemetry once per day (typically ~24h delay). The latest available metric day is{' '}
+              <span className="text-blue-300 font-semibold">{data.report_period.daily_date || 'N/A'}</span>.
+            </p>
+            <p>
+              • <strong>Pricing:</strong> Each AI credit costs $0.01 ($35.00 included budget per user/month).
+            </p>
+          </div>
         </>
       )}
     </div>
