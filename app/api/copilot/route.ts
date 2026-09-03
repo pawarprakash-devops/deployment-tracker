@@ -16,7 +16,7 @@ const GH_HEADERS = {
 };
 
 async function ghFetch(url: string) {
-  const res = await fetch(url, { headers: GH_HEADERS, next: { revalidate: 300 } });
+  const res = await fetch(url, { headers: GH_HEADERS, next: { revalidate: 0 } });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`GitHub API error ${res.status}: ${body}`);

@@ -116,6 +116,8 @@ export default function CopilotPage() {
   const [sortAsc, setSortAsc] = useState(false);
   const [search, setSearch] = useState('');
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [countdown, setCountdown] = useState(300);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -141,6 +143,27 @@ export default function CopilotPage() {
     if (sortKey === key) setSortAsc(!sortAsc);
     else { setSortKey(key); setSortAsc(false); }
   }
+
+  // Auto-refresh countdown
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          fetchData();
+          return 300;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [autoRefresh, fetchData]);
+
+  // Reset countdown on manual refresh
+  const handleRefresh = () => {
+    setCountdown(300);
+    fetchData();
+  };
 
   const SortIcon = ({ k }: { k: SortKey }) =>
     sortKey === k ? (sortAsc ? ' ↑' : ' ↓') : '';
@@ -170,10 +193,24 @@ export default function CopilotPage() {
           {lastFetched && (
             <span className="text-xs text-gray-500">
               Updated {timeAgo(lastFetched.toISOString())}
+              {autoRefresh && (
+                <span className="ml-2 text-blue-400">
+                  · Next refresh in {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+                </span>
+              )}
             </span>
           )}
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={e => { setAutoRefresh(e.target.checked); if (e.target.checked) setCountdown(300); }}
+              className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-400">Auto</span>
+          </label>
           <button
-            onClick={fetchData}
+            onClick={handleRefresh}
             disabled={loading}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-sm font-medium"
           >
@@ -422,8 +459,14 @@ export default function CopilotPage() {
           {/* Footer note */}
           <p className="text-xs text-gray-600 mt-4">
             GitHub Copilot Enterprise · {data.billing.plan_type} · {data.budget_per_user.toLocaleString()} credits/user/month (${data.budget_per_user.toFixed(2)}) ·
-            Data from GitHub Copilot Metrics API · 28-day rolling window ending {data.report_period.end} ·
-            Cached 5 min server-side
+            Data from GitHub Copilot Metrics API · 28-day rolling window ending {data.report_period.end}
+            {data.report_period.daily_date && (
+              <> · Daily data: {data.report_period.daily_date}</>
+            )}
+            {autoRefresh && <> · Auto-refreshing every 5 min</>}
+          </p>
+          <p className="text-xs text-gray-700 mt-1">
+            ℹ️ GitHub Copilot metrics update once per day (~24h delay). Per-user credit totals reflect the 28-day rolling window.
           </p>
         </>
       )}
