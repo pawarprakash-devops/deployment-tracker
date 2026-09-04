@@ -46,6 +46,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Auto-create environment if it doesn't exist
+    const envCheck = await pool.query(
+      'SELECT id FROM environments WHERE name = $1',
+      [environment]
+    );
+
+    if (envCheck.rows.length === 0) {
+      const maxOrder = await pool.query(
+        'SELECT COALESCE(MAX(display_order), 0) + 1 as next_order FROM environments'
+      );
+      const nextOrder = maxOrder.rows[0].next_order;
+      
+      await pool.query(
+        `INSERT INTO environments (name, is_production, display_order) 
+         VALUES ($1, false, $2)`,
+        [environment, nextOrder]
+      );
+      console.log(`✅ Auto-created environment: ${environment}`);
+    }
+
     // Auto-calculate duration if completed_at is provided and duration_seconds is not
     let calculatedDuration = duration_seconds;
     if (completed_at && !duration_seconds) {
