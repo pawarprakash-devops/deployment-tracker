@@ -56,11 +56,12 @@ jobs:
           echo "Yesterday ($YESTERDAY) status: $YESTERDAY_STATUS"
 
           # Determine if new data is available
-          if [ "$TODAY_STATUS" = "200" ]; then
+          # 200 = report ready with data, 204 = report exists but empty (day processed)
+          if [ "$TODAY_STATUS" = "200" ] || [ "$TODAY_STATUS" = "204" ]; then
             echo "✅ Today's report is available!"
             echo "new_data=true" >> $GITHUB_OUTPUT
             echo "latest_day=$TODAY" >> $GITHUB_OUTPUT
-          elif [ "$YESTERDAY_STATUS" = "200" ]; then
+          elif [ "$YESTERDAY_STATUS" = "200" ] || [ "$YESTERDAY_STATUS" = "204" ]; then
             echo "✅ Yesterday's report is available (today's not ready yet)"
             echo "new_data=true" >> $GITHUB_OUTPUT
             echo "latest_day=$YESTERDAY" >> $GITHUB_OUTPUT
