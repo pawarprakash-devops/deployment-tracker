@@ -2,9 +2,10 @@ name: "Copilot Metrics: Auto-Refresh on New Data"
 
 on:
   schedule:
-    # Run daily at 6:00 AM UTC — GitHub daily reports are typically
-    # available by 04:00-05:00 UTC, so 06:00 gives a safe buffer.
-    - cron: '0 6 * * *'
+    # Run hourly at :15 past the hour — catches daily report updates
+    # within ~1 hour. GitHub daily reports are typically available
+    # by 04:00-05:00 UTC.
+    - cron: '15 * * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -96,4 +97,4 @@ jobs:
         run: |
           echo "⏭️ Skipping deploy — no new Copilot daily data available"
           echo "GitHub typically publishes daily reports after 04:00 UTC"
-          echo "Next scheduled check: tomorrow at 06:00 UTC"
+          echo "Next scheduled check: in 1 hour"

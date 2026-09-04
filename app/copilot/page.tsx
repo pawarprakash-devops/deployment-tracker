@@ -113,6 +113,30 @@ interface CopilotData {
   users: UserSummary[];
 }
 
+interface ActivityUser {
+  user_login: string;
+  avatar_url: string;
+  last_activity_at: string;
+  last_activity_editor: string;
+  last_authenticated_at: string;
+  plan_type: string;
+  status: string;
+  minutes_since_active: number;
+  time_ago: string;
+}
+
+interface ActivityData {
+  fetched_at: string;
+  summary: {
+    total_seats: number;
+    active_now: number;
+    active_today: number;
+    active_this_week: number;
+    inactive: number;
+  };
+  users: ActivityUser[];
+}
+
 function fmt(n: number, decimals = 0) {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
@@ -169,6 +193,9 @@ export default function CopilotPage() {
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(300);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [activity, setActivity] = useState<ActivityData | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityExpanded, setActivityExpanded] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -208,9 +235,27 @@ export default function CopilotPage() {
     return () => clearInterval(timer);
   }, [autoRefresh, fetchData]);
 
+  const fetchActivity = useCallback(async () => {
+    try {
+      const res = await fetch('/api/copilot/activity');
+      const json = await res.json();
+      if (res.ok) setActivity(json);
+    } catch {
+      // Silently fail — activity is supplementary
+    }
+  }, []);
+
+  // Poll activity every 30 seconds (near real-time)
+  useEffect(() => {
+    fetchActivity();
+    const timer = setInterval(fetchActivity, 30000);
+    return () => clearInterval(timer);
+  }, [fetchActivity]);
+
   const handleRefresh = () => {
     setCountdown(300);
     fetchData();
+    fetchActivity();
   };
 
   const handleSort = (key: string) => {
@@ -429,6 +474,101 @@ export default function CopilotPage() {
               </div>
             </div>
           </div>
+
+          {/* Live Activity Section */}
+          {activity && (
+            <div className="bg-gray-900/60 border border-gray-800 rounded-xl mb-6 shadow-sm overflow-hidden">
+              <button
+                onClick={() => setActivityExpanded(!activityExpanded)}
+                className="w-full px-5 py-3.5 flex items-center justify-between hover:bg-gray-800/40 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                    <div className="absolute inset-0 w-2.5 h-2.5 bg-green-500 rounded-full animate-ping opacity-75" />
+                  </div>
+                  <h2 className="text-sm font-bold text-gray-100">⚡ Live Activity</h2>
+                  <span className="text-xs text-gray-500">
+                    Refreshes every 30s · Last: {activity.fetched_at ? timeAgo(activity.fetched_at) : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-green-500 rounded-full" />
+                      <span className="text-green-400 font-semibold">Now: {activity.summary.active_now}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                      <span className="text-blue-400 font-semibold">Today: {activity.summary.active_today}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-purple-500 rounded-full" />
+                      <span className="text-purple-400 font-semibold">Week: {activity.summary.active_this_week}</span>
+                    </span>
+                  </div>
+                  <svg
+                    className={`w-4 h-4 text-gray-500 transition-transform ${activityExpanded ? 'rotate-180' : ''}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {activityExpanded && (
+                <div className="px-5 pb-4 border-t border-gray-800">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 mt-3">
+                    {activity.users.map((user) => (
+                      <div
+                        key={user.user_login}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-colors ${
+                          user.status === 'active'
+                            ? 'bg-green-950/30 border-green-800/40'
+                            : user.status === 'today'
+                            ? 'bg-blue-950/30 border-blue-800/40'
+                            : user.status === 'this_week'
+                            ? 'bg-purple-950/30 border-purple-800/40'
+                            : 'bg-gray-900/40 border-gray-800/40'
+                        }`}
+                      >
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full ring-1 ring-gray-700" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-gray-800 flex items-center justify-center text-[10px] font-bold text-gray-300">
+                            {user.user_login[0].toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-gray-200 truncate">{user.user_login}</span>
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                              user.status === 'active' ? 'bg-green-500 animate-pulse' :
+                              user.status === 'today' ? 'bg-blue-500' :
+                              user.status === 'this_week' ? 'bg-purple-500' : 'bg-gray-600'
+                            }`} />
+                          </div>
+                          <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                            <span>{user.time_ago}</span>
+                            <span>·</span>
+                            <span>{editorLabel(user.last_activity_editor)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-gray-800/50 text-[10px] text-gray-500 flex items-center gap-4">
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Active (&lt;1h)</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full" /> Today (&lt;24h)</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-purple-500 rounded-full" /> This Week (&lt;7d)</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-gray-600 rounded-full" /> Inactive (7d+)</span>
+                    <span className="ml-auto text-gray-600">Data from GitHub seats API (near real-time)</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* View Mode Navigation Tabs */}
           <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-4 mb-6 shadow-sm">
