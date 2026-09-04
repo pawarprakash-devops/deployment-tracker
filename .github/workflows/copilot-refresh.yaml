@@ -1,0 +1,98 @@
+name: "Copilot Metrics: Auto-Refresh on New Data"
+
+on:
+  schedule:
+    # Run daily at 6:00 AM UTC — GitHub daily reports are typically
+    # available by 04:00-05:00 UTC, so 06:00 gives a safe buffer.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force redeploy even if no new data detected'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+  actions: write  # Required to trigger the deploy workflow
+
+env:
+  GITHUB_ORG: vidaisolutions
+
+jobs:
+  check-and-refresh:
+    name: Check for new Copilot data → trigger deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if new daily report is available
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Checking for new Copilot daily reports ==="
+
+          # Get today and yesterday dates
+          TODAY=$(date -u +%Y-%m-%d)
+          YESTERDAY=$(date -u -d "yesterday" +%Y-%m-%d)
+          echo "Today: $TODAY"
+          echo "Yesterday: $YESTERDAY"
+
+          # Try today's report first
+          TODAY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/orgs/${{ env.GITHUB_ORG }}/copilot/metrics/reports/users-1-day?day=$TODAY")
+
+          # Try yesterday's report
+          YESTERDAY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/orgs/${{ env.GITHUB_ORG }}/copilot/metrics/reports/users-1-day?day=$YESTERDAY")
+
+          echo "Today ($TODAY) status: $TODAY_STATUS"
+          echo "Yesterday ($YESTERDAY) status: $YESTERDAY_STATUS"
+
+          # Determine if new data is available
+          if [ "$TODAY_STATUS" = "200" ]; then
+            echo "✅ Today's report is available!"
+            echo "new_data=true" >> $GITHUB_OUTPUT
+            echo "latest_day=$TODAY" >> $GITHUB_OUTPUT
+          elif [ "$YESTERDAY_STATUS" = "200" ]; then
+            echo "✅ Yesterday's report is available (today's not ready yet)"
+            echo "new_data=true" >> $GITHUB_OUTPUT
+            echo "latest_day=$YESTERDAY" >> $GITHUB_OUTPUT
+          else
+            echo "⏳ No new daily data available yet"
+            echo "new_data=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger redeploy if new data found
+        if: steps.check.outputs.new_data == 'true' || inputs.force == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Triggering redeploy ==="
+          echo "Latest available day: ${{ steps.check.outputs.latest_day }}"
+
+          # Trigger the existing deploy workflow
+          gh workflow run deploy.yaml \
+            --ref main \
+            --repo ${{ github.repository }}
+
+          echo "✅ Deploy triggered successfully"
+
+          # Wait for the workflow to start
+          sleep 10
+          RUN_ID=$(gh run list --workflow=deploy.yaml --limit=1 --json databaseId --jq '.[0].databaseId')
+          echo "Deploy run ID: $RUN_ID"
+          echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/$RUN_ID"
+
+      - name: Skip — no new data
+        if: steps.check.outputs.new_data == 'false' && inputs.force != 'true'
+        run: |
+          echo "⏭️ Skipping deploy — no new Copilot daily data available"
+          echo "GitHub typically publishes daily reports after 04:00 UTC"
+          echo "Next scheduled check: tomorrow at 06:00 UTC"
