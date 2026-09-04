@@ -28,7 +28,7 @@ jobs:
       - name: Check if new daily report is available
         id: check
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
         run: |
           echo "=== Checking for new Copilot daily reports ==="
 
@@ -72,7 +72,7 @@ jobs:
       - name: Trigger redeploy if new data found
         if: steps.check.outputs.new_data == 'true' || inputs.force == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
         run: |
           echo "=== Triggering redeploy ==="
           echo "Latest available day: ${{ steps.check.outputs.latest_day }}"
