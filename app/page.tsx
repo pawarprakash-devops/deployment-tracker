@@ -101,7 +101,7 @@ export default function Home() {
     checkAuth();
     const interval = setInterval(() => {
       loadData();
-    }, 5000);
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 

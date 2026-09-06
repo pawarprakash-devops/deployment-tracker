@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 import pool from '@/lib/db';
+
+function etag(json: string) {
+  return `"${createHash('sha1').update(json).digest('hex')}"`;
+}
 
 export async function GET(request: Request) {
   try {
@@ -16,7 +21,15 @@ export async function GET(request: Request) {
        LIMIT $1 OFFSET $2`,
       [Math.min(limit, 1000), offset]
     );
-    return NextResponse.json(result.rows);
+    const json = JSON.stringify(result.rows);
+    const tag = etag(json);
+    if (request.headers.get('if-none-match') === tag) {
+      return new NextResponse(null, { status: 304, headers: { ETag: tag } });
+    }
+    return new NextResponse(json, {
+      status: 200,
+      headers: { ETag: tag, 'Cache-Control': 'no-cache', 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('Error fetching deployments:', error);
     return NextResponse.json(

@@ -24,7 +24,7 @@ export default function HealthDashboard() {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 10000); // Refresh every 10 seconds
+    const interval = setInterval(fetchHealth, 60000); // Refresh every 60 seconds
     return () => clearInterval(interval);
   }, []);
 

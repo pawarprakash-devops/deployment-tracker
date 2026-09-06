@@ -245,10 +245,10 @@ export default function CopilotPage() {
     }
   }, []);
 
-  // Poll activity every 30 seconds (near real-time)
+  // Poll activity every 60 seconds
   useEffect(() => {
     fetchActivity();
-    const timer = setInterval(fetchActivity, 30000);
+    const timer = setInterval(fetchActivity, 60000);
     return () => clearInterval(timer);
   }, [fetchActivity]);
 
