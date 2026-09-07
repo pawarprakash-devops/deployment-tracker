@@ -1,24 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  --bg: #0B0E14;
-  --panel: #121722;
-  --panel-2: #171D2B;
-  --border: #242C3D;
-  --text: #E7EAF0;
-  --muted: #8A93A8;
-  --faint: #5A6478;
-  --accent: #5B8DEF;
-  --ok: #3DD68C;
-  --ok-bg: rgba(61, 214, 140, 0.12);
-  --warn: #F5B942;
-  --warn-bg: rgba(245, 185, 66, 0.12);
-  --bad: #FF6B6B;
-  --bad-bg: rgba(255, 107, 107, 0.12);
-  --neutral: #8A93A8;
-  --neutral-bg: rgba(138, 147, 168, 0.12);
-  --prod: #F5A623;
+  --bg: #07090E;
+  --panel: #0D1117;
+  --panel-2: #161B22;
+  --border: #21262D;
+  --border-bright: #30363D;
+  --text: #E6EDF3;
+  --muted: #8B949E;
+  --faint: #484F58;
+  --accent: #00F0FF;
+  --accent-rgb: 0, 240, 255;
+  --ok: #00FF9D;
+  --ok-bg: rgba(0, 255, 157, 0.12);
+  --warn: #F59E0B;
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --bad: #FF3366;
+  --bad-bg: rgba(255, 51, 102, 0.14);
+  --neutral: #8B949E;
+  --neutral-bg: rgba(139, 148, 158, 0.12);
+  --prod: #FF4500;
 }
 
 * {
@@ -27,26 +29,36 @@
 
 body {
   margin: 0;
-  background: 
-    radial-gradient(1200px 600px at 10% -10%, rgba(91, 141, 239, 0.08), transparent),
-    radial-gradient(900px 500px at 100% 0%, rgba(245, 166, 35, 0.05), transparent),
-    var(--bg);
+  background-color: #07090E;
   color: var(--text);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   min-height: 100vh;
 }
 
 ::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
+  height: 6px;
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(13, 17, 23, 0.6);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+  background: #21262D;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #30363D;
 }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(0, 240, 255, 0.3); }
+  50% { box-shadow: 0 0 15px rgba(0, 240, 255, 0.7); }
 }
