@@ -191,7 +191,7 @@ export default function CopilotPage() {
   const [sortKey, setSortKey] = useState<string>('credits');
   const [sortAsc, setSortAsc] = useState(false);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
-  const [countdown, setCountdown] = useState(300);
+  const [countdown, setCountdown] = useState(900);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [activity, setActivity] = useState<ActivityData | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
@@ -227,7 +227,7 @@ export default function CopilotPage() {
       setCountdown((prev) => {
         if (prev <= 1) {
           fetchData();
-          return 300;
+          return 900;
         }
         return prev - 1;
       });
@@ -245,15 +245,15 @@ export default function CopilotPage() {
     }
   }, []);
 
-  // Poll activity every 60 seconds
+  // Poll activity every 5 minutes
   useEffect(() => {
     fetchActivity();
-    const timer = setInterval(fetchActivity, 60000);
+    const timer = setInterval(fetchActivity, 300000);
     return () => clearInterval(timer);
   }, [fetchActivity]);
 
   const handleRefresh = () => {
-    setCountdown(300);
+    setCountdown(900);
     fetchData();
     fetchActivity();
   };
@@ -350,7 +350,7 @@ export default function CopilotPage() {
               checked={autoRefresh}
               onChange={(e) => {
                 setAutoRefresh(e.target.checked);
-                if (e.target.checked) setCountdown(300);
+                if (e.target.checked) setCountdown(900);
               }}
               className="w-3.5 h-3.5 rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-blue-500"
             />
