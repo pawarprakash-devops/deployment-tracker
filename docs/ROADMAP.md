@@ -1,0 +1,265 @@
+# VidAI Branching Strategy & Deployment Tracker — Engineering Roadmap
+
+**Date:** 2026-09-07  
+**Author:** Prakash Pawar (DevOps)  
+**Status:** Approved Architecture & Roadmap  
+**Applicable Repositories:**  
+- `vidaisolutions/vidai-backend` (Django Core / ECS Fargate & EC2)  
+- `vidaisolutions/vidai-react` (React Web / S3 + CloudFront)  
+- `vidaisolutions/vidai-devops` (Centralized Workflows & Configurations)  
+- `pawarprakash-devops/deployment-tracker` (Live Telemetry & Dashboard at `vidai-deployments.vercel.app`)
+
+---
+
+## 1. Executive Summary
+
+This specification outlines the next-phase operational enhancements for VidAI's software delivery lifecycle. It builds upon the environment-isolated branching architecture (`dev` → `qa` → `stage` → `preprod` → `prod_*`) and defines specific enhancements for the **Branching Strategy** and the **Deployment Tracker**.
+
+### Core Objectives:
+1. **Zero Production Divergence:** Prevent un-promoted hotfixes from disappearing when subsequent normal releases occur.
+2. **Automated SemVer & Release Audit:** Automatically tag production releases and trace git commits across environments.
+3. **Environment Parity Visibility:** Expose real-time "Ahead / Behind" commit drift between pipeline stages in the Deployment Tracker.
+4. **Live Telemetry & Availability:** Augment the tracker with real-time health pings to target ECS clusters, moving from passive logs to active monitoring.
+
+---
+
+## 2. Branching Strategy Enhancements
+
+```
+NORMAL PROMOTION PIPELINE:
+[feature/*] ──► [dev] (Preview) ──► [qa] (QA) ──► [stage] (Stage) ──► [preprod] (Pre-Prod) ──► [prod_ank] & [prod_neo] (Prod)
+
+HOTFIX FAST-TRACK & BACKPORTING WORKFLOW:
+                   ┌───────────────────────────────┐
+                   │  hotfix/CORE-XXX-description  │ ◄── branched from prod_ank
+                   └───────────────┬───────────────┘
+                                   │
+                ┌──────────────────┴──────────────────┐
+                ▼                                     ▼
+      [Emergency Prod Deploy]                 [Auto-Backport PR]
+   PR into prod_ank & prod_neo                 PR into stage & dev
+     (DevOps Approval Gate)                   (Auto-created by Actions)
+```
+
+### 2.1 The Standardized Hotfix Fast-Track Workflow
+
+When an emergency defect or critical outage strikes Production (`prod_ank` or `prod_neo`), moving a bugfix sequentially through all five lower environments is impractical. However, patching production directly risks code regression when the next planned release is promoted.
+
+#### Hotfix Lifecycle Rules:
+1. **Branch Creation:** The engineer branches directly off the latest `prod_ank`:
+   ```bash
+   git checkout prod_ank
+   git pull origin prod_ank
+   git checkout -b hotfix/CORE-XXX-short-description
+   ```
+2. **Validation:** Hotfixes must be tested either:
+   - On the Preview cluster via a targeted preview run (`vidai-solutions-stage` / `preview-99999`), or
+   - Locally with targeted integration tests.
+3. **Production PR & Approval:**
+   - Target branch: `prod_ank` (and cherry-picked to `prod_neo`).
+   - Approvals required: **1 Tech Lead** (`saranya13-tech` or `kuldeeplodha` for backend; `dev-prafulk` for frontend) + **DevOps Lead** (`pawarprakash-devops`).
+4. **Automated Reverse Backporting (GitHub Action):**
+   - Upon merge to `prod_ank`, an automated workflow triggers `kodiakhq/backport` or a GitHub Action script:
+     ```yaml
+     name: Auto Backport Hotfix
+     on:
+       pull_request:
+         types: [closed]
+         branches: [prod_ank]
+     jobs:
+       backport:
+         if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'hotfix/')
+         runs-on: ubuntu-latest
+         steps:
+           - uses: actions/checkout@v4
+           - name: Create Backport PR to dev and stage
+             uses: repo-sync/pull-request@v2
+             with:
+               destination_branch: "dev"
+               pr_title: "[BACKPORT] ${{ github.event.pull_request.title }} into dev"
+     ```
+   - **Guaranteed Outcome:** Fixes merged into production are instantly integrated into `dev` and `stage`, eliminating regression bugs.
+
+---
+
+### 2.2 Automated Semantic Release Tagging (`semver`)
+
+Currently, deployments identify commits and branch names, but lack standardized version identifiers.
+
+#### Implementation:
+On every successful deployment to `prod_ank` or `prod_neo`:
+1. The deployment workflow analyzes commit messages (following [Conventional Commits](https://www.conventionalcommits.org/)):
+   - `fix:` bumps PATCH (`v2.14.1`)
+   - `feat:` bumps MINOR (`v2.15.0`)
+   - `BREAKING CHANGE:` bumps MAJOR (`v3.0.0`)
+   - *Fallback pattern:* Calendar versioning `vYYYY.MM.DD.#` (e.g., `v2026.09.07.1`).
+2. GitHub Action automatically creates an annotated Git Tag:
+   ```bash
+   git tag -a v2.15.0 -m "Release v2.15.0: Production Ankura"
+   git push origin v2.15.0
+   ```
+3. The release tag is broadcast via the webhook to the Deployment Tracker database, populating the `version` column and displaying `🏷 v2.15.0` on the dashboard.
+
+---
+
+### 2.3 PR Actor Attribution Fix
+
+* **Issue Identified:** When automatic pipelines deploy (`Full_Deploy_V2`), the deployment tracker recorded `pawarprakash-devops` (the token owner) instead of the developer who authored the pull request.
+* **Resolution in GitHub Actions:**
+  In `.github/workflows/deploy.yml`:
+  ```yaml
+  - name: Extract Deployment Trigger Actor
+    id: actor
+    run: |
+      if [ "${{ github.event_name }}" = "pull_request" ]; then
+        echo "DEPLOY_USER=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
+      elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+        echo "DEPLOY_USER=${{ github.actor }}" >> $GITHUB_OUTPUT
+      else
+        echo "DEPLOY_USER=${{ github.triggering_actor }}" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Notify Deployment Tracker
+    run: |
+      curl -X POST https://vidai-deployments.vercel.app/api/webhook \
+        -H "Content-Type: application/json" \
+        -H "x-tracker-secret: ${{ secrets.TRACKER_WEBHOOK_SECRET }}" \
+        -d '{
+          "environment": "${{ inputs.environment }}",
+          "status": "Success",
+          "deployed_by": "${{ steps.actor.outputs.DEPLOY_USER }}",
+          "requested_by": "${{ steps.actor.outputs.DEPLOY_USER }}"
+        }'
+  ```
+
+---
+
+## 3. Deployment Tracker Enhancements
+
+The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already been upgraded with the **DevOps Cyber Cockpit** theme on both `/` and `/admin`. The following architectural enhancements will transform it into an end-to-end mission control system.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│               VIDAI DEPLOYMENT COMMAND CENTER — PROMOTION RADAR        │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│   Preview (dev) ────[+4 commits]────► QA (qa) ────[+2 commits]────►   │
+│   SHA: 7f8a12c                       SHA: 3d4e910                      │
+│                                                                        │
+│   ► Stage (stage) ────[+1 commit]────► Pre-Prod ────[IN SYNC]────►    │
+│     SHA: 1a2b3c4                       SHA: 9b8a7c6                    │
+│                                                                        │
+│   ► Production (prod_ank)                                              │
+│     SHA: 9b8a7c6 [● LIVE HEALTH: 200 OK (38ms)]                       │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.1 Environment Promotion Drift Matrix (Ahead / Behind Delta)
+
+#### The Problem:
+Teams frequently ask: *"Are all the QA bug fixes currently in Pre-Prod?"* or *"What commits in Stage have not been released to Production yet?"*
+
+#### The Feature:
+* A real-time **Promotion Pipeline Ribbon** across the top of the Tracker.
+* Shows linear promotion flow with ahead/behind badges:
+  - `Preview → QA`: `+4 commits ahead` (Cyan)
+  - `QA → Stage`: `+2 commits ahead` (Yellow)
+  - `Pre-Prod → Prod`: `IN SYNC` (Green) or `3 COMMITS PENDING RELEASE` (Amber).
+* Clicking the badge opens a **Diff Modal** displaying the exact PR titles and authors waiting to be promoted.
+
+#### Implementation:
+Add endpoint `/api/git/drift` leveraging the GitHub Octokit API:
+```ts
+// GET /api/git/drift?base=prod_ank&head=preprod
+const compare = await octokit.rest.repos.compareCommits({
+  owner: 'vidaisolutions',
+  repo: 'vidai-backend',
+  base: 'prod_ank',
+  head: 'preprod'
+});
+return NextResponse.json({
+  ahead_by: compare.data.ahead_by,
+  behind_by: compare.data.behind_by,
+  commits: compare.data.commits.map(c => ({ sha: c.sha, message: c.commit.message, author: c.author?.login }))
+});
+```
+
+---
+
+### 3.2 Live Cluster Health Checks (`/api/cluster-health`)
+
+#### The Problem:
+The tracker currently displays the *last known deployment status*. If an ECS container runs out of memory (OOMKilled) 3 hours later, the tracker still displays "Success".
+
+#### The Feature:
+* An active telemetry worker probes each environment's health endpoint every 60 seconds:
+  - **Preview:** `https://99999.preview.vidaisolutions.com/api/health`
+  - **QA:** `https://qa-aps.vidaisolutions.com/api/health`
+  - **Stage:** `https://stage.vidaisolutions.com/api/health`
+  - **Pre-Prod India:** `https://pre-prod.vidaisolutions.com/api/health`
+  - **Pre-Prod USW:** `https://pre-prod-usw.vidaisolutions.com/api/health`
+  - **Production:** `https://production.vidaisolutions.com/api/health`
+* Display on the Environment Card:
+  - `● HEALTHY` (200 OK · 42ms latency) with glowing green indicator.
+  - `▲ DEGRADED` (500/502/504 or >2000ms latency) with amber pulse.
+  - `✖ OFFLINE` (Connection refused/timeout) with red incident banner.
+
+---
+
+### 3.3 Full DORA Metrics Suite on `/admin`
+
+Expand the existing metrics on `/admin` into the industry-standard four DORA metrics:
+
+| Metric | Definition | VidAI Target | Tracker Implementation |
+|---|---|:---:|---|
+| **Deployment Frequency** | How often code is successfully deployed | Daily | Calculated from `deploymentsToday` and weekly trends. |
+| **Lead Time for Changes** | Time from commit creation to production release | < 24 Hours | Difference between `git commit timestamp` and `production started_at`. |
+| **Change Failure Rate** | Percentage of deployments causing production failure | < 5% | Already live: `(failures / totalDeployments) * 100`. |
+| **Mean Time to Recovery (MTTR)**| Time from incident alert to subsequent successful deployment | < 30 Mins | Computed time between a `Failed` deployment and the next `Success` on that environment. |
+
+---
+
+### 3.4 Multi-Channel Alert Webhooks (Slack / Discord / Teams)
+
+* Configure outbound webhooks in the Deployment Tracker:
+  - When deployment status changes to `Failed` ➔ Send high-priority alert with direct links to the failure logs and deployment diff.
+  - When a deployment to `prod_ank` or `prod_neo` completes ➔ Send release announcement with the release version and deployer handle.
+
+---
+
+### 3.5 1-Click Rollback Runbook & Dispatcher
+
+* **Operator Convenience:** In the `/admin` dashboard or directly on Environment Cards, authenticated operators have a **Rollback** button.
+* **Safety Controls:**
+  - Requires Admin token authentication.
+  - Confirmation modal showing: `"Target: vidai-prod | Reverting to: commit a1b2c3d (v2.14.2)"`.
+  - Dispatches GitHub Actions workflow dispatch with `action: rollback` and target commit SHA.
+
+---
+
+## 4. Phased Implementation Roadmap
+
+```
+PHASE 1: Immediate Enhancements (1-2 Days)
+├── Implement PR Actor Attribution fix in GitHub Actions
+├── Add Hotfix Backporting Workflow in vidai-backend & vidai-react
+└── Document hotfix branching rules in Developer Handbook
+
+PHASE 2: Deployment Tracker Live Telemetry (3-4 Days)
+├── Implement Live Cluster Health Check API & visual pulses
+├── Add Commit Ahead/Behind Drift Indicators between stages
+└── Add Release Tagging webhook consumption
+
+PHASE 3: Advanced Operations (1 Week)
+├── Implement Slack/Webhook notifications on deploy status change
+├── Complete DORA MTTR and Lead Time calculation on /admin
+└── Integrate 1-Click Rollback workflow dispatch
+```
+
+---
+
+## 5. Security & Architectural Compliance
+
+1. **Non-Modifiable Constraints:** No modifications will be made to `evaseq-api` or the preview database (`vidai-db-pre-prod`).
+2. **Account Segregation:** Development and Staging remain strictly isolated on AWS Account `816069151152`; Production remains isolated on AWS Account `025277631094`.
+3. **Secret Security:** All webhook tokens and API keys are stored in AWS Secrets Manager or encrypted GitHub Actions repository secrets (`TRACKER_WEBHOOK_SECRET`).
