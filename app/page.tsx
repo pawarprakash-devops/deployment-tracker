@@ -28,8 +28,47 @@ interface Environment {
   name: string;
   color: string;
   isProd: boolean;
+  displayOrder?: number;
   description?: string;
 }
+
+const PROMOTION_ORDER: Record<string, number> = {
+  'Preview': 1,
+  'QA': 2,
+  'Stage': 3,
+  'Pre-Prod': 4,
+  'Pre-Prod (India)': 4,
+  'Pre-Prod USW': 5,
+  'Production (Ankura)': 6,
+  'Production (Neotia)': 7,
+  'Production (Neotia/Babyjoy)': 7,
+  'Production': 8,
+  'LMS': 9,
+  'Other': 10,
+};
+
+const STANDARD_BRANCHES = [
+  { branch: 'dev', env: 'Preview', label: 'dev (Preview)' },
+  { branch: 'qa', env: 'QA', label: 'qa (QA)' },
+  { branch: 'stage', env: 'Stage', label: 'stage (Stage)' },
+  { branch: 'preprod', env: 'Pre-Prod', label: 'preprod (Pre-Prod India)' },
+  { branch: 'preprod_usw', env: 'Pre-Prod USW', label: 'preprod_usw (Pre-Prod USW)' },
+  { branch: 'prod_ank', env: 'Production (Ankura)', label: 'prod_ank (Prod Ankura)' },
+  { branch: 'prod_neo', env: 'Production (Neotia/Babyjoy)', label: 'prod_neo (Prod Neotia)' },
+];
+
+const ENV_DEFAULT_BRANCH: Record<string, string> = {
+  'Preview': 'dev',
+  'QA': 'qa',
+  'Stage': 'stage',
+  'Pre-Prod': 'preprod',
+  'Pre-Prod (India)': 'preprod',
+  'Pre-Prod USW': 'preprod_usw',
+  'Production (Ankura)': 'prod_ank',
+  'Production (Neotia)': 'prod_neo',
+  'Production (Neotia/Babyjoy)': 'prod_neo',
+  'Production': 'prod_ank',
+};
 
 export default function Home() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -47,6 +86,7 @@ export default function Home() {
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareData, setCompareData] = useState<any>(null);
   const [compareLoading, setCompareLoading] = useState(false);
+  const [compareRepo, setCompareRepo] = useState<string>('vidaisolutions/vidai-react');
   
   // Modal states
   const [showDeployModal, setShowDeployModal] = useState(false);
@@ -157,12 +197,16 @@ export default function Home() {
       if (environmentsRes.ok) {
         const envData = await environmentsRes.json();
         if (Array.isArray(envData)) {
-          setEnvironments(envData.map(e => ({
-            name: e.name,
-            color: '#5B8DEF',
-            isProd: e.is_production || false,
-            description: ''
-          })));
+          setEnvironments(envData.map(e => {
+            const isProd = e.is_production || e.name.toLowerCase().startsWith('production');
+            return {
+              name: e.name,
+              color: isProd ? '#EF4444' : '#5B8DEF',
+              isProd,
+              displayOrder: e.display_order ?? PROMOTION_ORDER[e.name] ?? 99,
+              description: ''
+            };
+          }));
         }
       }
       setLastUpdated(new Date());
@@ -323,7 +367,7 @@ export default function Home() {
     });
   };
 
-  const openCompare = async () => {
+  const openCompare = async (targetRepo?: string) => {
     setShowCompareModal(true);
     setCompareLoading(true);
     setCompareData(null);
@@ -335,13 +379,18 @@ export default function Home() {
     // Determine older and newer deployment
     const [older, newer] = new Date(d1.started_at) < new Date(d2.started_at) ? [d1, d2] : [d2, d1];
 
-    // Get branches to compare
-    const olderBranch = older.frontend_branch || older.backend_branch || older.branch;
-    const newerBranch = newer.frontend_branch || newer.backend_branch || newer.branch;
-
     // Determine repo - FE or BE
     const isFE = !!(newer.frontend_branch || (!newer.backend_branch && newer.notes?.includes('frontend')));
-    const repo = isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-backend';
+    const repo = targetRepo || (isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-backend');
+    setCompareRepo(repo);
+
+    const isTargetFE = repo.includes('vidai-react');
+    let olderBranch = isTargetFE
+      ? (older.frontend_branch || older.branch || ENV_DEFAULT_BRANCH[older.environment])
+      : (older.backend_branch || older.branch || ENV_DEFAULT_BRANCH[older.environment]);
+    let newerBranch = isTargetFE
+      ? (newer.frontend_branch || newer.branch || ENV_DEFAULT_BRANCH[newer.environment])
+      : (newer.backend_branch || newer.branch || ENV_DEFAULT_BRANCH[newer.environment]);
 
     try {
       // Try comparing branches
@@ -350,7 +399,7 @@ export default function Home() {
         if (res.ok) {
           const data = await res.json();
           if (!data.error) {
-            setCompareData({ ...data, repo, older, newer });
+            setCompareData({ ...data, repo, older, newer, baseBranch: olderBranch, headBranch: newerBranch });
             setCompareLoading(false);
             return;
           }
@@ -362,7 +411,7 @@ export default function Home() {
         const res = await fetch(`/api/compare?repo=${encodeURIComponent(repo)}&head=${encodeURIComponent(newerBranch)}`);
         if (res.ok) {
           const data = await res.json();
-          setCompareData({ ...data, repo, older, newer, fallback: true });
+          setCompareData({ ...data, repo, older, newer, headBranch: newerBranch, fallback: true });
         }
       }
     } catch (error) {
@@ -376,10 +425,11 @@ export default function Home() {
     setEditingDeployId(null);
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    const defaultEnv = environments[0]?.name || 'Preview';
     setDeployForm({
-      environment: environments[0]?.name || '',
+      environment: defaultEnv,
       status: 'Success',
-      branch: '',
+      branch: ENV_DEFAULT_BRANCH[defaultEnv] || 'dev',
       version: '',
       datetime: now.toISOString().slice(0, 16),
       duration: '',
@@ -570,12 +620,9 @@ export default function Home() {
         {/* Environment Cards */}
         <div className="cards">
           {[...environments].sort((a, b) => {
-            const latestA = latestForEnv(a.name);
-            const latestB = latestForEnv(b.name);
-            if (!latestA && !latestB) return 0;
-            if (!latestA) return 1;
-            if (!latestB) return -1;
-            return new Date(latestB.started_at).getTime() - new Date(latestA.started_at).getTime();
+            const orderA = PROMOTION_ORDER[a.name] ?? a.displayOrder ?? 99;
+            const orderB = PROMOTION_ORDER[b.name] ?? b.displayOrder ?? 99;
+            return orderA - orderB;
           }).map((env) => {
             const latest = latestForEnv(env.name);
             const branches = latestBranchesForEnv(env.name);
@@ -670,7 +717,7 @@ export default function Home() {
           <div className="compare-bar">
             <span>{compareIds.length}/2 selected for comparison</span>
             {compareIds.length === 2 && (
-              <button className="btn primary small" onClick={openCompare}>
+              <button className="btn primary small" onClick={() => openCompare()}>
                 Compare
               </button>
             )}
@@ -820,8 +867,21 @@ export default function Home() {
             <div className="field-grid">
               <div className="field">
                 <label>Environment <span className="req-star">*</span></label>
-                <select value={deployForm.environment} onChange={(e) => setDeployForm({ ...deployForm, environment: e.target.value })}>
-                  {environments.map((env) => (<option key={env.name} value={env.name}>{env.name}</option>))}
+                <select
+                  value={deployForm.environment}
+                  onChange={(e) => {
+                    const newEnv = e.target.value;
+                    const suggestedBranch = ENV_DEFAULT_BRANCH[newEnv];
+                    setDeployForm({
+                      ...deployForm,
+                      environment: newEnv,
+                      branch: suggestedBranch || deployForm.branch
+                    });
+                  }}
+                >
+                  {[...environments].sort((a, b) => (PROMOTION_ORDER[a.name] ?? a.displayOrder ?? 99) - (PROMOTION_ORDER[b.name] ?? b.displayOrder ?? 99)).map((env) => (
+                    <option key={env.name} value={env.name}>{env.name}</option>
+                  ))}
                 </select>
               </div>
               <div className="field">
@@ -832,7 +892,38 @@ export default function Home() {
               </div>
               <div className="field">
                 <label>Branch <span className="req-star">*</span></label>
-                <input type="text" value={deployForm.branch} onChange={(e) => setDeployForm({ ...deployForm, branch: e.target.value })} placeholder="release/v2.4.1" />
+                <input
+                  type="text"
+                  list="standard-branches-list"
+                  value={deployForm.branch}
+                  onChange={(e) => setDeployForm({ ...deployForm, branch: e.target.value })}
+                  placeholder="e.g. dev, qa, stage, preprod, prod_ank"
+                />
+                <datalist id="standard-branches-list">
+                  {STANDARD_BRANCHES.map(b => (
+                    <option key={b.branch} value={b.branch}>{b.label}</option>
+                  ))}
+                </datalist>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
+                  {STANDARD_BRANCHES.map(b => (
+                    <button
+                      key={b.branch}
+                      type="button"
+                      onClick={() => setDeployForm({ ...deployForm, branch: b.branch })}
+                      style={{
+                        padding: '2px 7px',
+                        fontSize: '11px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        border: '1px solid var(--border)',
+                        background: deployForm.branch === b.branch ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
+                        color: deployForm.branch === b.branch ? '#fff' : 'var(--text)',
+                      }}
+                    >
+                      {b.branch}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="field">
                 <label>Version / Build Tag</label>
@@ -969,9 +1060,31 @@ export default function Home() {
 
             {/* Code Changes Section */}
             <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 14px', fontFamily: 'Space Grotesk, sans-serif' }}>
-                Code Changes
-              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0, fontFamily: 'Space Grotesk, sans-serif' }}>
+                  Code Changes {compareData?.baseBranch && compareData?.headBranch && (
+                    <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)', marginLeft: '8px' }}>
+                      ({compareData.baseBranch} → {compareData.headBranch})
+                    </span>
+                  )}
+                </h3>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className={`btn small ${compareRepo.includes('vidai-react') ? 'primary' : 'ghost'}`}
+                    onClick={() => openCompare('vidaisolutions/vidai-react')}
+                  >
+                    Frontend (vidai-react)
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn small ${compareRepo.includes('vidai-backend') ? 'primary' : 'ghost'}`}
+                    onClick={() => openCompare('vidaisolutions/vidai-backend')}
+                  >
+                    Backend (vidai-backend)
+                  </button>
+                </div>
+              </div>
 
               {compareLoading && (
                 <div style={{ textAlign: 'center', padding: '20px', color: 'var(--muted)' }}>

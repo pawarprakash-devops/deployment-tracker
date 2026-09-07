@@ -31,6 +31,10 @@ export interface Deployment {
   deployment_type?: 'standard' | 'rollback' | 'hotfix' | null;
   branch?: string | null;
   version?: string | null;
+  frontend_branch?: string | null;
+  backend_branch?: string | null;
+  frontend_version?: string | null;
+  backend_version?: string | null;
   requested_by?: string | null;
   approved_by?: string | null;
   tested_by?: string | null;
