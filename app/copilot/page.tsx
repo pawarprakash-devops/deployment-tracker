@@ -201,7 +201,7 @@ export default function CopilotPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/copilot');
+      const res = await fetch('/api/copilot', { cache: 'no-store' });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to fetch Copilot usage');
       setData(json);
