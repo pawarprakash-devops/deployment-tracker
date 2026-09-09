@@ -1425,35 +1425,48 @@ export default function Home() {
           transition: background .3s, color .3s;
         }
 
+        .wrap {
+          width: 100%;
+          max-width: none;
+          margin: 0;
+          padding: 24px clamp(16px, 2.5vw, 32px) 80px;
+          background: var(--bg);
+          color: var(--text);
+          min-height: 100vh;
+          transition: background .3s, color .3s;
+        }
+
         /* 1. VidAI React Official Website Theme */
         .wrap.vidai {
           --bg: #F5F6F9;
           --text: #232323;
           --muted: #505050;
-          --faint: #8E8E93;
+          --faint: #757575;
           --panel: #FFFFFF;
           --panel-2: #F0F2F5;
           --border: #E2E4E8;
           --border-bright: #CBD0D8;
           --accent: #E17E61; /* Official VidAI Orange from vidai-react */
-          --ok: #47B35F;     /* Official VidAI Green from vidai-react */
-          --warn: #F59E0B;
-          --bad: #DC2626;
+          --ok: #2E7D32;     /* Dark readable green */
+          --warn: #D97706;    /* Dark readable amber */
+          --bad: #DC2626;     /* Dark readable red */
           --prod: #E17E61;
-          --ok-bg: rgba(71, 179, 95, 0.12);
-          --warn-bg: rgba(245, 158, 11, 0.12);
-          --bad-bg: rgba(220, 38, 38, 0.12);
-          --neutral-bg: rgba(142, 142, 147, 0.12);
-          --neutral: #8E8E93;
+          --ok-bg: rgba(46, 125, 50, 0.1);
+          --warn-bg: rgba(217, 119, 6, 0.1);
+          --bad-bg: rgba(220, 38, 38, 0.1);
+          --neutral-bg: rgba(100, 116, 139, 0.1);
+          --neutral: #505050;
           --card-shadow: 0 4px 14px rgba(35, 35, 35, 0.06);
-        }
-
-        .wrap.vidai {
           background-color: #F5F6F9;
           background-image:
             radial-gradient(ellipse 70% 40% at 50% -10%, rgba(225, 126, 97, 0.08), transparent),
             radial-gradient(circle at 90% 10%, rgba(90, 138, 234, 0.05), transparent);
           font-family: 'Nunito', 'Montserrat', 'Inter', system-ui, -apple-system, sans-serif;
+          color: #232323;
+        }
+
+        .wrap.vidai * {
+          border-color: var(--border);
         }
 
         .wrap.vidai .terminal-cli-bar {
@@ -1463,12 +1476,176 @@ export default function Home() {
         }
         .wrap.vidai .terminal-cli-bar .cli-prefix { color: #E17E61; }
         .wrap.vidai .terminal-cli-bar .cli-host { color: #232323; font-weight: 700; }
+        .wrap.vidai .terminal-cli-bar .cli-sep { color: #8E8E93; }
+        .wrap.vidai .terminal-cli-bar .cli-path { color: #E17E61; font-weight: 600; }
+        .wrap.vidai .terminal-cli-bar .cli-git { color: #505050; }
+        .wrap.vidai .terminal-cli-bar .cli-cmd { color: #64748B; }
+
         .wrap.vidai .title-block h1 {
           font-family: 'Montserrat', sans-serif;
           color: #232323;
         }
+        .wrap.vidai .title-block .sub {
+          color: #505050;
+        }
+        .wrap.vidai .sys-badge {
+          background: rgba(46, 125, 50, 0.1);
+          color: #2E7D32;
+          border: 1px solid rgba(46, 125, 50, 0.3);
+        }
+        .wrap.vidai .copilot-pill {
+          background: rgba(147, 51, 234, 0.08);
+          color: #7E22CE;
+          border: 1px solid rgba(147, 51, 234, 0.25);
+        }
+        .wrap.vidai .probe-refresh-btn {
+          background: rgba(225, 126, 97, 0.1);
+          border: 1px solid rgba(225, 126, 97, 0.3);
+          color: #E17E61;
+        }
+        .wrap.vidai .probe-refresh-btn:hover:not(:disabled) {
+          background: rgba(225, 126, 97, 0.2);
+        }
+
+        .wrap.vidai .hud-telemetry {
+          background: #FFFFFF;
+          border: 1px solid #E2E4E8;
+          box-shadow: 0 4px 14px rgba(35, 35, 35, 0.05);
+        }
+        .wrap.vidai .hud-card {
+          background: #F8F9FA;
+          border: 1px solid #E2E4E8;
+        }
+        .wrap.vidai .hud-label {
+          color: #505050;
+        }
+        .wrap.vidai .hud-value {
+          color: #232323;
+        }
+        .wrap.vidai .hud-value.accent {
+          color: #E17E61;
+        }
+        .wrap.vidai .hud-value.ok {
+          color: #2E7D32;
+        }
+        .wrap.vidai .hud-value.warn {
+          color: #D97706;
+        }
+
+        .wrap.vidai .card {
+          background: #FFFFFF;
+          border: 1px solid #E2E4E8;
+          box-shadow: 0 4px 14px rgba(35, 35, 35, 0.06);
+          border-radius: 10px;
+        }
+        .wrap.vidai .card:hover {
+          border-color: #E17E61;
+          box-shadow: 0 8px 24px rgba(225, 126, 97, 0.12);
+        }
+        .wrap.vidai .env-title {
+          color: #232323;
+        }
+        .wrap.vidai .cluster-sub {
+          color: #505050;
+        }
+        .wrap.vidai .prod-badge {
+          background: rgba(225, 126, 97, 0.12);
+          color: #E17E61;
+          border: 1px solid rgba(225, 126, 97, 0.3);
+        }
+        .wrap.vidai .deploy-time-text {
+          color: #505050;
+        }
+        .wrap.vidai .version-pill {
+          background: rgba(225, 126, 97, 0.1);
+          color: #C25638;
+          border: 1px solid rgba(225, 126, 97, 0.25);
+          font-weight: 700;
+        }
+        .wrap.vidai .card-branches {
+          background: #F8F9FA;
+          border: 1px solid #E2E4E8;
+        }
+        .wrap.vidai .b-text {
+          color: #232323;
+        }
+        .wrap.vidai .b-tag.fe {
+          background: rgba(2, 132, 199, 0.1);
+          color: #0284C7;
+          border: 1px solid rgba(2, 132, 199, 0.25);
+        }
+        .wrap.vidai .b-tag.be {
+          background: rgba(225, 126, 97, 0.12);
+          color: #D06C4E;
+          border: 1px solid rgba(225, 126, 97, 0.25);
+        }
+        .wrap.vidai .b-tag.git {
+          background: rgba(100, 116, 139, 0.1);
+          color: #475569;
+          border: 1px solid rgba(100, 116, 139, 0.2);
+        }
+        .wrap.vidai .card-footer {
+          border-top: 1px solid #E2E4E8;
+          color: #505050;
+        }
+        .wrap.vidai .footer-deployer {
+          color: #505050;
+        }
+        .wrap.vidai .footer-sync {
+          color: #757575;
+        }
+
+        .wrap.vidai .health-pill.healthy {
+          background: rgba(46, 125, 50, 0.1);
+          border: 1px solid rgba(46, 125, 50, 0.3);
+          color: #2E7D32;
+        }
+        .wrap.vidai .health-pill.degraded {
+          background: rgba(217, 119, 6, 0.1);
+          border: 1px solid rgba(217, 119, 6, 0.3);
+          color: #B45309;
+        }
+        .wrap.vidai .health-pill.offline {
+          background: rgba(220, 38, 38, 0.1);
+          border: 1px solid rgba(220, 38, 38, 0.3);
+          color: #DC2626;
+        }
+
+        .wrap.vidai .badge.success {
+          background: rgba(46, 125, 50, 0.1);
+          color: #2E7D32;
+          border: 1px solid rgba(46, 125, 50, 0.3);
+        }
+        .wrap.vidai .badge.failed {
+          background: rgba(220, 38, 38, 0.1);
+          color: #DC2626;
+          border: 1px solid rgba(220, 38, 38, 0.3);
+        }
+        .wrap.vidai .badge.progress {
+          background: rgba(217, 119, 6, 0.1);
+          color: #B45309;
+          border: 1px solid rgba(217, 119, 6, 0.3);
+        }
+        .wrap.vidai .badge.rollback,
+        .wrap.vidai .badge.cancelled {
+          background: rgba(100, 116, 139, 0.1);
+          color: #475569;
+          border: 1px solid rgba(100, 116, 139, 0.25);
+        }
+
         .wrap.vidai .btn {
           border-radius: 10px;
+          background: #F0F2F5;
+          border: 1px solid #E2E4E8;
+          color: #232323;
+        }
+        .wrap.vidai .btn:hover {
+          border-color: #E17E61;
+          color: #E17E61;
+        }
+        .wrap.vidai .btn.ghost {
+          background: transparent;
+          color: #232323;
         }
         .wrap.vidai .btn.primary {
           background: #E17E61;
@@ -1480,18 +1657,110 @@ export default function Home() {
           background: #D06C4E;
           border-color: #D06C4E;
         }
-        .wrap.vidai .prod-badge {
-          background: rgba(225, 126, 97, 0.12);
+
+        .wrap.vidai .theme-selector-pill {
+          background: #FFFFFF;
+          border: 1px solid #E2E4E8;
+          color: #232323;
+        }
+        .wrap.vidai .theme-select-input {
+          color: #232323;
+        }
+        .wrap.vidai .theme-select-input option {
+          background: #FFFFFF;
+          color: #232323;
+        }
+
+        .wrap.vidai .timeline {
+          background: #FFFFFF;
+          border: 1px solid #E2E4E8;
+        }
+        .wrap.vidai .section-title {
+          color: #232323;
+        }
+        .wrap.vidai .bar-label {
+          color: #505050;
+        }
+        .wrap.vidai .bar-count {
+          color: #232323;
+        }
+
+        .wrap.vidai .table-wrap {
+          background: #FFFFFF;
+          border: 1px solid #E2E4E8;
+          box-shadow: 0 4px 14px rgba(35, 35, 35, 0.05);
+        }
+        .wrap.vidai table {
+          color: #232323;
+        }
+        .wrap.vidai thead th {
+          background: #F8F9FA;
+          color: #505050;
+          border-bottom: 1px solid #E2E4E8;
+        }
+        .wrap.vidai tbody td {
+          color: #232323;
+          border-bottom: 1px solid #E2E4E8;
+        }
+        .wrap.vidai tbody tr:hover {
+          background: #F5F6F8;
+        }
+        .wrap.vidai td.env-cell {
+          color: #232323;
+        }
+        .wrap.vidai td .mono {
           color: #E17E61;
+        }
+        .wrap.vidai td.who {
+          color: #505050;
+        }
+        .wrap.vidai td.notes {
+          color: #505050;
+        }
+        .wrap.vidai .ticket-link {
+          background: rgba(225, 126, 97, 0.1);
           border: 1px solid rgba(225, 126, 97, 0.3);
+          color: #D06C4E;
         }
-        .wrap.vidai .card {
-          border-radius: 10px;
-          border-color: #E2E4E8;
+        .wrap.vidai select,
+        .wrap.vidai input[type=text],
+        .wrap.vidai input[type=search],
+        .wrap.vidai input[type=date],
+        .wrap.vidai textarea {
+          background: #FFFFFF;
+          border: 1px solid #E2E4E8;
+          color: #232323;
         }
-        .wrap.vidai .card:hover {
+        .wrap.vidai select:focus,
+        .wrap.vidai input:focus,
+        .wrap.vidai textarea:focus {
           border-color: #E17E61;
-          box-shadow: 0 8px 24px rgba(225, 126, 97, 0.12);
+          box-shadow: 0 0 0 2px rgba(225, 126, 97, 0.2);
+        }
+        .wrap.vidai .filter-row .count {
+          color: #505050;
+        }
+        .wrap.vidai .compare-bar {
+          background: #FFFFFF;
+          border: 1px solid #E17E61;
+          color: #E17E61;
+        }
+        .wrap.vidai .compare-label {
+          color: #505050;
+          border-bottom: 1px solid #E2E4E8;
+        }
+        .wrap.vidai .compare-val {
+          color: #232323;
+          border-bottom: 1px solid #E2E4E8;
+        }
+        .wrap.vidai .modal {
+          background: #FFFFFF;
+          border: 1px solid #CBD0D8;
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+          color: #232323;
+        }
+        .wrap.vidai .modal h2 {
+          color: #232323;
         }
 
         /* 2. Dark Theme (DevOps / Modern Console) */
@@ -1515,13 +1784,11 @@ export default function Home() {
           --neutral-bg: rgba(148, 163, 184, 0.12);
           --neutral: #94A3B8;
           --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-        }
-
-        .wrap.dark {
           background-color: #0B0F17;
           background-image:
             radial-gradient(ellipse 80% 50% at 50% -15%, rgba(56, 189, 248, 0.05), transparent),
             radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.04), transparent);
+          color: #F1F5F9;
         }
 
         /* 3. Midnight Indigo Theme */
@@ -1545,13 +1812,11 @@ export default function Home() {
           --neutral-bg: rgba(148, 163, 184, 0.12);
           --neutral: #94A3B8;
           --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-        }
-
-        .wrap.midnight {
           background-color: #090D16;
           background-image:
             radial-gradient(ellipse 80% 50% at 50% -15%, rgba(99, 102, 241, 0.08), transparent),
             radial-gradient(circle at 100% 0%, rgba(139, 92, 246, 0.06), transparent);
+          color: #E2E8F0;
         }
         .wrap.midnight .btn.primary {
           background: #6366F1;
@@ -1567,8 +1832,8 @@ export default function Home() {
         .wrap.light {
           --bg: #F8FAFC;
           --text: #0F172A;
-          --muted: #64748B;
-          --faint: #94A3B8;
+          --muted: #475569;
+          --faint: #64748B;
           --panel: #FFFFFF;
           --panel-2: #F1F5F9;
           --border: #E2E8F0;
@@ -1584,6 +1849,22 @@ export default function Home() {
           --neutral-bg: rgba(100, 116, 139, 0.1);
           --neutral: #64748B;
           --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          background-color: #F8FAFC;
+          color: #0F172A;
+        }
+        .wrap.light .terminal-cli-bar {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+        }
+        .wrap.light .terminal-cli-bar .cli-host { color: #0F172A; font-weight: 700; }
+        .wrap.light select,
+        .wrap.light input[type=text],
+        .wrap.light input[type=search],
+        .wrap.light input[type=date],
+        .wrap.light textarea {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          color: #0F172A;
         }
 
         header.top {
