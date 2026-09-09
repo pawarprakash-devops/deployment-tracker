@@ -81,6 +81,8 @@ const ENV_DEFAULT_BRANCH: Record<string, string> = {
   'Production': 'prod_ank',
 };
 
+export type ThemeMode = 'vidai' | 'dark' | 'midnight' | 'light';
+
 const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; type: string }> = {
   'Preview': { region: 'ap-south-1', clusterShort: 'preview-99999', type: 'Fargate' },
   'QA': { region: 'ap-south-1', clusterShort: 'qa-aps-ecs', type: 'ECS' },
@@ -104,7 +106,7 @@ export default function Home() {
   const [loginPassword, setLoginPassword] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<ThemeMode>('vidai');
   const [clusterHealth, setClusterHealth] = useState<Record<string, ClusterHealthResult>>({});
   const [isProbing, setIsProbing] = useState(false);
   const [lastProbed, setLastProbed] = useState<Date | null>(null);
@@ -154,12 +156,13 @@ export default function Home() {
 
   // Load theme from localStorage
   useEffect(() => {
-    const savedTheme = localStorage.getItem('tracker-theme') as 'dark' | 'light' | null;
-    if (savedTheme) setTheme(savedTheme);
+    const savedTheme = localStorage.getItem('tracker-theme') as ThemeMode | null;
+    if (savedTheme && ['vidai', 'dark', 'midnight', 'light'].includes(savedTheme)) {
+      setTheme(savedTheme);
+    }
   }, []);
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
+  const handleThemeChange = (newTheme: ThemeMode) => {
     setTheme(newTheme);
     localStorage.setItem('tracker-theme', newTheme);
   };
@@ -679,9 +682,25 @@ export default function Home() {
             </div>
           </div>
           <div className="actions">
-            <button className="btn ghost small" onClick={toggleTheme} title="Toggle theme">
-              {theme === 'dark' ? '☀️' : '🌙'}
-            </button>
+            <div className="theme-selector-pill" title="Switch Dashboard Theme">
+              <span 
+                className="theme-dot-indicator" 
+                style={{
+                  background: theme === 'vidai' ? '#E17E61' : theme === 'midnight' ? '#818CF8' : theme === 'light' ? '#0284C7' : '#38BDF8'
+                }} 
+              />
+              <select
+                value={theme}
+                onChange={(e) => handleThemeChange(e.target.value as ThemeMode)}
+                className="theme-select-input"
+                aria-label="Theme selector"
+              >
+                <option value="vidai">🟠 VidAI Portal (React)</option>
+                <option value="dark">🌑 DevOps Dark</option>
+                <option value="midnight">🌌 Midnight Indigo</option>
+                <option value="light">☀️ Minimal Light</option>
+              </select>
+            </div>
             {isAdmin ? (
               <>
                 <button className="btn ghost small" onClick={() => setShowEnvModal(true)}>⚙ Targets</button>
@@ -1406,7 +1425,76 @@ export default function Home() {
           transition: background .3s, color .3s;
         }
 
-        /* Dark Theme (DevOps / Modern Console) */
+        /* 1. VidAI React Official Website Theme */
+        .wrap.vidai {
+          --bg: #F5F6F9;
+          --text: #232323;
+          --muted: #505050;
+          --faint: #8E8E93;
+          --panel: #FFFFFF;
+          --panel-2: #F0F2F5;
+          --border: #E2E4E8;
+          --border-bright: #CBD0D8;
+          --accent: #E17E61; /* Official VidAI Orange from vidai-react */
+          --ok: #47B35F;     /* Official VidAI Green from vidai-react */
+          --warn: #F59E0B;
+          --bad: #DC2626;
+          --prod: #E17E61;
+          --ok-bg: rgba(71, 179, 95, 0.12);
+          --warn-bg: rgba(245, 158, 11, 0.12);
+          --bad-bg: rgba(220, 38, 38, 0.12);
+          --neutral-bg: rgba(142, 142, 147, 0.12);
+          --neutral: #8E8E93;
+          --card-shadow: 0 4px 14px rgba(35, 35, 35, 0.06);
+        }
+
+        .wrap.vidai {
+          background-color: #F5F6F9;
+          background-image:
+            radial-gradient(ellipse 70% 40% at 50% -10%, rgba(225, 126, 97, 0.08), transparent),
+            radial-gradient(circle at 90% 10%, rgba(90, 138, 234, 0.05), transparent);
+          font-family: 'Nunito', 'Montserrat', 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        .wrap.vidai .terminal-cli-bar {
+          background: #FFFFFF;
+          border: 1px solid #E2E4E8;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+        }
+        .wrap.vidai .terminal-cli-bar .cli-prefix { color: #E17E61; }
+        .wrap.vidai .terminal-cli-bar .cli-host { color: #232323; font-weight: 700; }
+        .wrap.vidai .title-block h1 {
+          font-family: 'Montserrat', sans-serif;
+          color: #232323;
+        }
+        .wrap.vidai .btn {
+          border-radius: 10px;
+        }
+        .wrap.vidai .btn.primary {
+          background: #E17E61;
+          border-color: #E17E61;
+          color: #FFFFFF;
+          font-weight: 700;
+        }
+        .wrap.vidai .btn.primary:hover {
+          background: #D06C4E;
+          border-color: #D06C4E;
+        }
+        .wrap.vidai .prod-badge {
+          background: rgba(225, 126, 97, 0.12);
+          color: #E17E61;
+          border: 1px solid rgba(225, 126, 97, 0.3);
+        }
+        .wrap.vidai .card {
+          border-radius: 10px;
+          border-color: #E2E4E8;
+        }
+        .wrap.vidai .card:hover {
+          border-color: #E17E61;
+          box-shadow: 0 8px 24px rgba(225, 126, 97, 0.12);
+        }
+
+        /* 2. Dark Theme (DevOps / Modern Console) */
         .wrap.dark {
           --bg: #0B0F17;
           --text: #F1F5F9;
@@ -1426,9 +1514,56 @@ export default function Home() {
           --bad-bg: rgba(244, 63, 94, 0.12);
           --neutral-bg: rgba(148, 163, 184, 0.12);
           --neutral: #94A3B8;
+          --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
         }
 
-        /* Light Theme */
+        .wrap.dark {
+          background-color: #0B0F17;
+          background-image:
+            radial-gradient(ellipse 80% 50% at 50% -15%, rgba(56, 189, 248, 0.05), transparent),
+            radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.04), transparent);
+        }
+
+        /* 3. Midnight Indigo Theme */
+        .wrap.midnight {
+          --bg: #090D16;
+          --text: #E2E8F0;
+          --muted: #94A3B8;
+          --faint: #64748B;
+          --panel: #0F1629;
+          --panel-2: #18223C;
+          --border: rgba(99, 102, 241, 0.18);
+          --border-bright: rgba(99, 102, 241, 0.32);
+          --accent: #818CF8;
+          --ok: #34D399;
+          --warn: #FBBF24;
+          --bad: #F87171;
+          --prod: #F472B6;
+          --ok-bg: rgba(52, 211, 153, 0.12);
+          --warn-bg: rgba(251, 191, 36, 0.12);
+          --bad-bg: rgba(248, 113, 113, 0.12);
+          --neutral-bg: rgba(148, 163, 184, 0.12);
+          --neutral: #94A3B8;
+          --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+        }
+
+        .wrap.midnight {
+          background-color: #090D16;
+          background-image:
+            radial-gradient(ellipse 80% 50% at 50% -15%, rgba(99, 102, 241, 0.08), transparent),
+            radial-gradient(circle at 100% 0%, rgba(139, 92, 246, 0.06), transparent);
+        }
+        .wrap.midnight .btn.primary {
+          background: #6366F1;
+          border-color: #6366F1;
+          color: #FFFFFF;
+        }
+        .wrap.midnight .btn.primary:hover {
+          background: #4F46E5;
+          border-color: #4F46E5;
+        }
+
+        /* 4. Minimal Light Theme */
         .wrap.light {
           --bg: #F8FAFC;
           --text: #0F172A;
@@ -1448,24 +1583,7 @@ export default function Home() {
           --bad-bg: rgba(220, 38, 38, 0.1);
           --neutral-bg: rgba(100, 116, 139, 0.1);
           --neutral: #64748B;
-        }
-
-        .wrap {
-          width: 100%;
-          max-width: none;
-          margin: 0;
-          padding: 24px clamp(16px, 2.5vw, 32px) 80px;
-          background: var(--bg);
-          color: var(--text);
-          min-height: 100vh;
-          transition: background .3s, color .3s;
-        }
-
-        .wrap.dark {
-          background-color: #0B0F17;
-          background-image:
-            radial-gradient(ellipse 80% 50% at 50% -15%, rgba(56, 189, 248, 0.05), transparent),
-            radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.04), transparent);
+          --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         }
 
         header.top {
@@ -1596,6 +1714,46 @@ export default function Home() {
           flex-wrap: wrap;
           align-items: center;
         }
+
+        .theme-selector-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          background: var(--panel-2);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 5px 10px;
+          transition: all 0.15s ease;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .theme-selector-pill:hover {
+          border-color: var(--accent);
+        }
+        .theme-dot-indicator {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          flex-shrink: 0;
+          box-shadow: 0 0 6px currentColor;
+        }
+        .theme-select-input {
+          background: transparent;
+          border: none;
+          color: var(--text);
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          outline: none;
+          padding: 0;
+          margin: 0;
+        }
+        .theme-select-input option {
+          background: var(--panel);
+          color: var(--text);
+          padding: 6px;
+        }
+
         button { font-family: inherit; cursor: pointer; }
         .btn {
           background: var(--panel-2);
@@ -1639,18 +1797,18 @@ export default function Home() {
           gap: 12px;
           margin-bottom: 24px;
           padding: 12px;
-          background: #0F172A;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--panel);
+          border: 1px solid var(--border);
           border-radius: 10px;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+          box-shadow: var(--card-shadow, 0 4px 14px rgba(0, 0, 0, 0.25));
         }
         .hud-card {
           display: flex;
           flex-direction: column;
           gap: 4px;
           padding: 10px 14px;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.04);
+          background: var(--panel-2);
+          border: 1px solid var(--border);
           border-radius: 6px;
         }
         .hud-label {
@@ -1688,8 +1846,8 @@ export default function Home() {
           margin-bottom: 32px;
         }
         .card {
-          background: #0F172A;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--panel);
+          border: 1px solid var(--border);
           border-radius: 12px;
           padding: 16px;
           position: relative;
@@ -1698,11 +1856,11 @@ export default function Home() {
           flex-direction: column;
           gap: 12px;
           transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+          box-shadow: var(--card-shadow, 0 4px 12px rgba(0, 0, 0, 0.25));
         }
         .card:hover {
-          border-color: rgba(56, 189, 248, 0.35);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+          border-color: var(--accent);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
           transform: translateY(-2px);
         }
         .card.is-prod {
@@ -1879,8 +2037,8 @@ export default function Home() {
         .badge.none .b-dot { background: var(--faint); }
 
         .card-branches {
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: var(--panel-2);
+          border: 1px solid var(--border);
           border-radius: 8px;
           padding: 8px 10px;
           display: flex;
@@ -1933,8 +2091,8 @@ export default function Home() {
           gap: 8px;
           font-size: 11px;
           color: var(--muted);
-          padding-top: 4px;
-          border-top: 1px solid rgba(255, 255, 255, 0.04);
+          padding-top: 6px;
+          border-top: 1px solid var(--border);
           font-family: 'JetBrains Mono', monospace;
         }
         .footer-deployer {
