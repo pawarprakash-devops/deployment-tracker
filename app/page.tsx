@@ -625,8 +625,8 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#07090E', color: 'var(--accent)', fontFamily: 'JetBrains Mono, monospace', gap: '16px' }}>
-        <div style={{ width: '40px', height: '40px', border: '3px solid rgba(0,240,255,0.2)', borderTopColor: '#00F0FF', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0B0F17', color: 'var(--accent)', fontFamily: 'JetBrains Mono, monospace', gap: '16px' }}>
+        <div style={{ width: '40px', height: '40px', border: '3px solid rgba(56,189,248,0.2)', borderTopColor: '#38BDF8', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         <div>PROBING CLUSTERS & TELEMETRY...</div>
       </div>
     );
@@ -748,111 +748,105 @@ export default function Home() {
             const health = getEnvHealth(env.name);
             const lastTimes = getLastDeployTimes(env.name);
             const clusterInfo = ENV_CLUSTER_MAP[env.name];
+            const probe = clusterHealth[env.name];
+
             return (
-              <div key={env.name} className={`card ${env.isProd ? 'is-prod' : ''} ${health.status === 'critical' ? 'health-critical' : health.status === 'warning' ? 'health-warning' : ''}`}>
-                <div className="card-terminal-bar">
-                  <div className="card-dots">
-                    <span className="c-dot red" />
-                    <span className="c-dot yellow" />
-                    <span className="c-dot green" />
+              <div
+                key={env.name}
+                className={`card ${env.isProd ? 'is-prod' : ''} ${health.status === 'critical' ? 'health-critical' : health.status === 'warning' ? 'health-warning' : ''}`}
+              >
+                <div className="stripe" style={{ background: env.isProd ? '#F97316' : '#38BDF8' }} />
+
+                {/* Card Header: Environment Name, Cluster Subtitle, Prod Badge & Health Pill */}
+                <div className="card-head">
+                  <div className="card-title-col">
+                    <div className="card-title-row">
+                      <span className="env-title">{env.name}</span>
+                      {env.isProd && <span className="prod-badge">PROD</span>}
+                    </div>
+                    {clusterInfo && (
+                      <span className="cluster-sub">
+                        {clusterInfo.region} · {clusterInfo.clusterShort}
+                      </span>
+                    )}
                   </div>
-                  {clusterInfo && (
-                    <span className="cluster-meta">
-                      {clusterInfo.region} · {clusterInfo.clusterShort}
-                    </span>
+
+                  {probe && (
+                    <div
+                      className={`health-pill ${probe.status.toLowerCase()}`}
+                      title={`${probe.message}${probe.latencyMs > 0 ? ` · ${probe.latencyMs}ms` : ''}\nEndpoint: ${probe.url}`}
+                    >
+                      <span className={`health-dot ${probe.status.toLowerCase()}`} />
+                      <span className="health-label">{probe.status}</span>
+                      {probe.latencyMs > 0 && (
+                        <span className="health-ms">{probe.latencyMs}ms</span>
+                      )}
+                    </div>
                   )}
                 </div>
-                <div className="stripe" style={{ background: env.color }} />
-                <div className="env-header">
-                  <div className="env-name">
-                    {env.name}
-                    {env.isProd && <span className="prod-tag">LIVE PROD</span>}
-                  </div>
-                  {/* Live Cluster Health Badge */}
-                  {(() => {
-                    const probe = clusterHealth[env.name];
-                    if (!probe) return null;
-                    if (probe.status === 'HEALTHY') {
-                      return (
-                        <div className="cluster-health-pill healthy" title={`${probe.message} · Latency: ${probe.latencyMs}ms\nTarget: ${probe.url}`}>
-                          <span className="probe-dot healthy" />
-                          <span className="probe-text">HEALTHY</span>
-                          <span className="probe-latency">{probe.latencyMs}ms</span>
-                        </div>
-                      );
-                    }
-                    if (probe.status === 'DEGRADED') {
-                      return (
-                        <div className="cluster-health-pill degraded" title={`${probe.message} · Latency: ${probe.latencyMs}ms\nTarget: ${probe.url}`}>
-                          <span className="probe-dot degraded" />
-                          <span className="probe-text">DEGRADED</span>
-                          <span className="probe-latency">{probe.latencyMs}ms</span>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="cluster-health-pill offline" title={`${probe.message}\nTarget: ${probe.url}`}>
-                        <span className="probe-dot offline" />
-                        <span className="probe-text">OFFLINE</span>
-                      </div>
-                    );
-                  })()}
-                </div>
-                {/* Health Alert */}
+
+                {/* Health Alert banner if critical or warning */}
                 {health.label && (
-                  <div className="health-alert" style={{ color: health.color }}>
-                    {health.status === 'critical' ? '⚠' : health.status === 'warning' ? '⚡' : '⏰'} {health.label}
+                  <div className="card-alert" style={{ borderColor: health.color, color: health.color }}>
+                    <span>{health.status === 'critical' ? '⚠' : health.status === 'warning' ? '⚡' : '⏰'} {health.label}</span>
                   </div>
                 )}
+
                 {latest ? (
                   <>
-                    <div className="status-row">
-                      <span className={`badge ${getStatusClass(latest.status)}`}>
-                        <span className="b-dot" />
-                        {latest.status.toUpperCase()}
-                      </span>
-                      <span className="deploy-time">{timeAgo(latest.started_at)}</span>
+                    {/* Status & Version Strip */}
+                    <div className="card-status-strip">
+                      <div className="status-group">
+                        <span className={`badge ${getStatusClass(latest.status)}`}>
+                          <span className="b-dot" />
+                          {latest.status.toUpperCase()}
+                        </span>
+                        <span className="deploy-time-text">{timeAgo(latest.started_at)}</span>
+                      </div>
+                      {latest.version && (
+                        <span className="version-pill">🏷 {latest.version}</span>
+                      )}
                     </div>
 
-                    <div className="branch-terminal-box">
+                    {/* Active Branches */}
+                    <div className="card-branches">
                       {(branches.fe || branches.be) ? (
                         <>
-                          <div className="branch-line">
-                            <span className="branch-chip fe">FE</span>
-                            <span className="branch-code">{branches.fe || '—'}</span>
+                          <div className="branch-item" title={`Frontend: ${branches.fe || '—'}`}>
+                            <span className="b-tag fe">FE</span>
+                            <span className="b-text">{branches.fe || '—'}</span>
                           </div>
-                          <div className="branch-line">
-                            <span className="branch-chip be">BE</span>
-                            <span className="branch-code">{branches.be || '—'}</span>
+                          <div className="branch-item" title={`Backend: ${branches.be || '—'}`}>
+                            <span className="b-tag be">BE</span>
+                            <span className="b-text">{branches.be || '—'}</span>
                           </div>
                         </>
                       ) : (
-                        <div className="branch-line">
-                          <span className="branch-chip all">GIT</span>
-                          <span className="branch-code">{latest.branch || '—'}</span>
+                        <div className="branch-item" title={`Git Branch: ${latest.branch || '—'}`}>
+                          <span className="b-tag git">GIT</span>
+                          <span className="b-text">{latest.branch || '—'}</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="card-footer-meta">
-                      <span className="meta-by">
+                    {/* Footer */}
+                    <div className="card-footer">
+                      <span className="footer-deployer" title={`Deployed by @${latest.deployed_by || latest.requested_by || 'system'}`}>
                         👤 @{latest.deployed_by || latest.requested_by || 'system'}
                       </span>
-                      {latest.version && (
-                        <span className="meta-tag">🏷 {latest.version}</span>
+                      {(lastTimes.feAgo || lastTimes.beAgo) && (
+                        <span className="footer-sync" title="Last successful deployment per component">
+                          {lastTimes.feAgo ? `FE: ${lastTimes.feAgo}` : ''}
+                          {lastTimes.feAgo && lastTimes.beAgo ? ' · ' : ''}
+                          {lastTimes.beAgo ? `BE: ${lastTimes.beAgo}` : ''}
+                        </span>
                       )}
                     </div>
-
-                    {/* Last deploy times */}
-                    {(lastTimes.feAgo || lastTimes.beAgo) && (
-                      <div className="freq-stats">
-                        {lastTimes.feAgo && <span>FE: {lastTimes.feAgo}</span>}
-                        {lastTimes.beAgo && <span>BE: {lastTimes.beAgo}</span>}
-                      </div>
-                    )}
                   </>
                 ) : (
-                  <span className="badge none"><span className="b-dot" />NO DEPLOYS YET</span>
+                  <div className="card-empty">
+                    <span className="badge none"><span className="b-dot" />NO DEPLOYS YET</span>
+                  </div>
                 )}
               </div>
             );
@@ -1412,26 +1406,26 @@ export default function Home() {
           transition: background .3s, color .3s;
         }
 
-        /* Dark Theme (DevOps / Cyber Cockpit) */
+        /* Dark Theme (DevOps / Modern Console) */
         .wrap.dark {
-          --bg: #07090E;
-          --text: #E6EDF3;
-          --muted: #8B949E;
-          --faint: #484F58;
-          --panel: #0D1117;
-          --panel-2: #161B22;
-          --border: #21262D;
-          --border-bright: #30363D;
-          --accent: #00F0FF;
-          --ok: #00FF9D;
+          --bg: #0B0F17;
+          --text: #F1F5F9;
+          --muted: #94A3B8;
+          --faint: #64748B;
+          --panel: #0F172A;
+          --panel-2: #1E293B;
+          --border: rgba(255, 255, 255, 0.08);
+          --border-bright: rgba(255, 255, 255, 0.16);
+          --accent: #38BDF8;
+          --ok: #10B981;
           --warn: #F59E0B;
-          --bad: #FF3366;
-          --prod: #FF4500;
-          --ok-bg: rgba(0, 255, 157, 0.12);
+          --bad: #F43F5E;
+          --prod: #F97316;
+          --ok-bg: rgba(16, 185, 129, 0.12);
           --warn-bg: rgba(245, 158, 11, 0.12);
-          --bad-bg: rgba(255, 51, 102, 0.14);
-          --neutral-bg: rgba(139, 148, 158, 0.12);
-          --neutral: #8B949E;
+          --bad-bg: rgba(244, 63, 94, 0.12);
+          --neutral-bg: rgba(148, 163, 184, 0.12);
+          --neutral: #94A3B8;
         }
 
         /* Light Theme */
@@ -1468,13 +1462,10 @@ export default function Home() {
         }
 
         .wrap.dark {
-          background-color: #07090E;
+          background-color: #0B0F17;
           background-image:
-            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 240, 255, 0.08), transparent),
-            radial-gradient(circle at 100% 0%, rgba(255, 69, 0, 0.05), transparent),
-            linear-gradient(rgba(33, 38, 45, 0.28) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(33, 38, 45, 0.28) 1px, transparent 1px);
-          background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+            radial-gradient(ellipse 80% 50% at 50% -15%, rgba(56, 189, 248, 0.05), transparent),
+            radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.04), transparent);
         }
 
         header.top {
@@ -1492,8 +1483,8 @@ export default function Home() {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          background: rgba(0, 0, 0, 0.6);
-          border: 1px solid rgba(0, 240, 255, 0.25);
+          background: rgba(15, 23, 42, 0.7);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           padding: 4px 10px;
           border-radius: 6px;
           font-family: 'JetBrains Mono', monospace;
@@ -1540,7 +1531,7 @@ export default function Home() {
           color: var(--accent);
         }
         @keyframes livePulse {
-          0%, 100% { opacity: 1; filter: drop-shadow(0 0 6px var(--ok)); }
+          0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px var(--ok)); }
           50% { opacity: 0.3; }
         }
         @keyframes liveRefresh {
@@ -1552,7 +1543,7 @@ export default function Home() {
         .sys-badge {
           background: var(--ok-bg);
           color: var(--ok);
-          border: 1px solid rgba(0, 255, 157, 0.3);
+          border: 1px solid rgba(16, 185, 129, 0.25);
           padding: 2px 7px;
           border-radius: 4px;
           font-size: 10px;
@@ -1579,8 +1570,8 @@ export default function Home() {
         }
 
         .probe-refresh-btn {
-          background: rgba(0, 240, 255, 0.08);
-          border: 1px solid rgba(0, 240, 255, 0.3);
+          background: rgba(56, 189, 248, 0.08);
+          border: 1px solid rgba(56, 189, 248, 0.25);
           color: var(--accent);
           font-family: 'JetBrains Mono', monospace;
           font-size: 10px;
@@ -1591,8 +1582,8 @@ export default function Home() {
           transition: all 0.15s ease;
         }
         .probe-refresh-btn:hover:not(:disabled) {
-          background: rgba(0, 240, 255, 0.2);
-          box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+          background: rgba(56, 189, 248, 0.18);
+          border-color: rgba(56, 189, 248, 0.4);
         }
         .probe-refresh-btn:disabled {
           opacity: 0.5;
@@ -1623,25 +1614,22 @@ export default function Home() {
         .btn:hover {
           border-color: var(--accent);
           color: var(--accent);
-          box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
         }
         .btn.primary {
-          background: var(--accent);
-          border-color: var(--accent);
-          color: #07090E;
-          font-weight: 700;
-          box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
+          background: #0284C7;
+          border-color: #0284C7;
+          color: #FFFFFF;
+          font-weight: 600;
         }
         .btn.primary:hover {
-          opacity: 0.92;
-          box-shadow: 0 0 16px rgba(0, 240, 255, 0.45);
+          background: #0369A1;
+          border-color: #0369A1;
         }
         .btn.ghost { background: transparent; }
         .btn.small { padding: 6px 10px; font-size: 11px; }
         .btn.danger:hover {
           border-color: var(--bad);
           color: var(--bad);
-          box-shadow: 0 0 10px rgba(255, 51, 102, 0.3);
         }
 
         /* HUD Telemetry Ribbon */
@@ -1651,18 +1639,17 @@ export default function Home() {
           gap: 12px;
           margin-bottom: 24px;
           padding: 12px;
-          background: rgba(13, 17, 23, 0.85);
-          border: 1px solid rgba(0, 240, 255, 0.18);
+          background: #0F172A;
+          border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 10px;
-          backdrop-filter: blur(12px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
         }
         .hud-card {
           display: flex;
           flex-direction: column;
           gap: 4px;
           padding: 10px 14px;
-          background: rgba(22, 27, 34, 0.7);
+          background: rgba(255, 255, 255, 0.02);
           border: 1px solid rgba(255, 255, 255, 0.04);
           border-radius: 6px;
         }
@@ -1690,45 +1677,44 @@ export default function Home() {
           height: 7px;
           border-radius: 50%;
           background: var(--ok);
-          box-shadow: 0 0 8px var(--ok);
+          box-shadow: 0 0 6px var(--ok);
         }
 
         /* Environment Cards Grid */
         .cards {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-          gap: 14px;
+          grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+          gap: 16px;
           margin-bottom: 32px;
         }
         .card {
-          background: var(--panel);
-          border: 1px solid var(--border);
-          border-radius: 10px;
-          padding: 14px;
+          background: #0F172A;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 12px;
+          padding: 16px;
           position: relative;
           overflow: hidden;
-          min-height: 140px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
-          transition: all 0.2s ease;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+          gap: 12px;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
         }
         .card:hover {
-          border-color: rgba(0, 240, 255, 0.4);
-          box-shadow: 0 6px 20px rgba(0, 240, 255, 0.08);
-          transform: translateY(-1px);
+          border-color: rgba(56, 189, 248, 0.35);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+          transform: translateY(-2px);
         }
         .card.is-prod {
-          border-color: rgba(255, 69, 0, 0.4);
+          border-color: rgba(249, 115, 22, 0.3);
         }
         .card.is-prod:hover {
-          border-color: rgba(255, 69, 0, 0.8);
-          box-shadow: 0 6px 22px rgba(255, 69, 0, 0.15);
+          border-color: rgba(249, 115, 22, 0.6);
+          box-shadow: 0 8px 24px rgba(249, 115, 22, 0.12);
         }
         .card.health-critical {
           border-color: var(--bad);
-          box-shadow: 0 0 16px rgba(255, 51, 102, 0.25);
+          box-shadow: 0 0 16px rgba(244, 63, 94, 0.2);
         }
         .card.health-warning {
           border-color: var(--warn);
@@ -1741,129 +1727,129 @@ export default function Home() {
           height: 3px;
         }
 
-        .card-terminal-bar {
+        .card-head {
           display: flex;
           justify-content: space-between;
-          align-items: center;
-          padding-bottom: 6px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-          font-family: 'JetBrains Mono', monospace;
+          align-items: flex-start;
+          gap: 8px;
         }
-        .card-dots {
+        .card-title-col {
           display: flex;
-          gap: 4px;
+          flex-direction: column;
+          gap: 3px;
+          min-width: 0;
         }
-        .c-dot {
-          width: 7px;
-          height: 7px;
-          border-radius: 50%;
-          display: inline-block;
-        }
-        .c-dot.red { background: #FF5F56; }
-        .c-dot.yellow { background: #FFBD2E; }
-        .c-dot.green { background: #27C93F; }
-        .cluster-meta {
-          font-size: 10px;
-          color: var(--faint);
-          letter-spacing: 0.02em;
-        }
-
-        .env-header {
+        .card-title-row {
           display: flex;
-          justify-content: space-between;
           align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
         }
-        .card .env-name {
+        .env-title {
           font-family: 'Space Grotesk', sans-serif;
           font-weight: 700;
           font-size: 15px;
-          display: flex;
-          align-items: center;
-          gap: 6px;
+          color: var(--text);
+          letter-spacing: -0.01em;
         }
-        .card .env-name .prod-tag {
+        .prod-badge {
           font-size: 9px;
-          background: var(--prod);
-          color: #fff;
-          padding: 2px 6px;
-          border-radius: 3px;
           font-weight: 700;
-          letter-spacing: .06em;
+          padding: 1px 6px;
+          border-radius: 4px;
+          background: rgba(249, 115, 22, 0.15);
+          color: #FB923C;
+          border: 1px solid rgba(249, 115, 22, 0.35);
           font-family: 'JetBrains Mono', monospace;
+          letter-spacing: 0.05em;
+        }
+        .cluster-sub {
+          font-size: 11px;
+          color: var(--muted);
+          font-family: 'JetBrains Mono', monospace;
+          letter-spacing: 0.01em;
         }
 
-        .cluster-health-pill {
+        .health-pill {
           display: inline-flex;
           align-items: center;
           gap: 5px;
-          padding: 2px 8px;
-          border-radius: 12px;
+          padding: 3px 8px;
+          border-radius: 6px;
           font-family: 'JetBrains Mono', monospace;
           font-size: 10px;
           font-weight: 700;
-          letter-spacing: 0.04em;
-          border: 1px solid transparent;
-          transition: all 0.2s ease;
+          letter-spacing: 0.03em;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
-        .cluster-health-pill.healthy {
+        .health-pill.healthy {
           background: rgba(16, 185, 129, 0.12);
-          border-color: rgba(16, 185, 129, 0.35);
-          color: #10B981;
-          box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+          border: 1px solid rgba(16, 185, 129, 0.25);
+          color: #34D399;
         }
-        .cluster-health-pill.degraded {
-          background: rgba(245, 158, 11, 0.14);
-          border-color: rgba(245, 158, 11, 0.4);
-          color: #F59E0B;
-          box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
-          animation: degradedPulse 2s infinite;
+        .health-pill.degraded {
+          background: rgba(245, 158, 11, 0.12);
+          border: 1px solid rgba(245, 158, 11, 0.3);
+          color: #FBBF24;
         }
-        .cluster-health-pill.offline {
-          background: rgba(239, 68, 68, 0.15);
-          border-color: rgba(239, 68, 68, 0.4);
-          color: #EF4444;
-          box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+        .health-pill.offline {
+          background: rgba(244, 63, 94, 0.12);
+          border: 1px solid rgba(244, 63, 94, 0.25);
+          color: #FB7185;
         }
-        .probe-dot {
+        .health-dot {
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          display: inline-block;
+          flex-shrink: 0;
         }
-        .probe-dot.healthy {
-          background: #10B981;
-          box-shadow: 0 0 6px #10B981;
-        }
-        .probe-dot.degraded {
-          background: #F59E0B;
-          box-shadow: 0 0 6px #F59E0B;
-        }
-        .probe-dot.offline {
-          background: #EF4444;
-          box-shadow: 0 0 6px #EF4444;
-        }
-        .probe-latency {
+        .health-dot.healthy { background: #34D399; }
+        .health-dot.degraded { background: #FBBF24; }
+        .health-dot.offline { background: #FB7185; }
+        .health-label { font-size: 10px; }
+        .health-ms {
           font-size: 9px;
-          opacity: 0.75;
+          opacity: 0.8;
           font-weight: 500;
         }
-        @keyframes degradedPulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(0.98); }
+
+        .card-alert {
+          font-size: 11px;
+          font-weight: 600;
+          padding: 4px 8px;
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid;
+          font-family: 'JetBrains Mono', monospace;
         }
 
-        .health-alert { font-size: 11px; font-weight: 600; padding: 2px 0; }
-
-        .status-row {
+        .card-status-strip {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-top: 2px;
+          gap: 8px;
+          flex-wrap: wrap;
         }
-        .deploy-time {
+        .status-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .deploy-time-text {
           font-size: 11px;
-          color: var(--faint);
+          color: var(--muted);
           font-family: 'JetBrains Mono', monospace;
+        }
+        .version-pill {
+          font-size: 10px;
+          font-family: 'JetBrains Mono', monospace;
+          color: var(--accent);
+          background: rgba(56, 189, 248, 0.08);
+          border: 1px solid rgba(56, 189, 248, 0.2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          font-weight: 600;
         }
 
         .badge {
@@ -1879,98 +1865,95 @@ export default function Home() {
           width: fit-content;
         }
         .b-dot { width: 6px; height: 6px; border-radius: 50%; }
-        .badge.success { background: var(--ok-bg); color: var(--ok); border: 1px solid rgba(0, 255, 157, 0.25); }
-        .badge.success .b-dot { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
-        .badge.progress { background: var(--warn-bg); color: var(--warn); border: 1px solid rgba(245, 158, 11, 0.25); }
-        .badge.progress .b-dot { background: var(--warn); animation: pulse 1.4s infinite; }
-        .badge.failed { background: var(--bad-bg); color: var(--bad); border: 1px solid rgba(255, 51, 102, 0.25); }
-        .badge.failed .b-dot { background: var(--bad); }
-        .badge.rollback { background: var(--neutral-bg); color: var(--neutral); border: 1px solid rgba(139, 148, 158, 0.25); }
-        .badge.rollback .b-dot { background: var(--neutral); }
-        .badge.cancelled { background: rgba(138,147,168,0.14); color: var(--faint); }
-        .badge.cancelled .b-dot { background: var(--faint); }
-        .badge.none { background: rgba(128,128,128,0.08); color: var(--faint); font-family: 'JetBrains Mono', monospace; }
+        .badge.success { background: rgba(16, 185, 129, 0.12); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.25); }
+        .badge.success .b-dot { background: #34D399; }
+        .badge.progress { background: rgba(245, 158, 11, 0.12); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.25); }
+        .badge.progress .b-dot { background: #FBBF24; animation: pulse 1.4s infinite; }
+        .badge.failed { background: rgba(244, 63, 94, 0.12); color: #FB7185; border: 1px solid rgba(244, 63, 94, 0.25); }
+        .badge.failed .b-dot { background: #FB7185; }
+        .badge.rollback { background: rgba(148, 163, 184, 0.12); color: #94A3B8; border: 1px solid rgba(148, 163, 184, 0.25); }
+        .badge.rollback .b-dot { background: #94A3B8; }
+        .badge.cancelled { background: rgba(148, 163, 184, 0.12); color: #94A3B8; }
+        .badge.cancelled .b-dot { background: #94A3B8; }
+        .badge.none { background: rgba(255, 255, 255, 0.04); color: var(--faint); font-family: 'JetBrains Mono', monospace; }
         .badge.none .b-dot { background: var(--faint); }
 
-        .branch-terminal-box {
-          background: rgba(0, 0, 0, 0.45);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 6px;
-          padding: 6px 8px;
+        .card-branches {
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 8px;
+          padding: 8px 10px;
           display: flex;
           flex-direction: column;
-          gap: 4px;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
+          gap: 5px;
         }
-        .branch-line {
+        .branch-item {
           display: flex;
           align-items: center;
-          gap: 6px;
-          overflow: hidden;
+          gap: 7px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          min-width: 0;
         }
-        .branch-chip {
+        .b-tag {
           font-size: 9px;
           font-weight: 700;
           padding: 1px 5px;
           border-radius: 3px;
+          flex-shrink: 0;
+          letter-spacing: 0.02em;
         }
-        .branch-chip.fe {
-          background: rgba(0, 240, 255, 0.15);
-          color: var(--accent);
-          border: 1px solid rgba(0, 240, 255, 0.3);
+        .b-tag.fe {
+          background: rgba(56, 189, 248, 0.14);
+          color: #38BDF8;
+          border: 1px solid rgba(56, 189, 248, 0.25);
         }
-        .branch-chip.be {
-          background: rgba(0, 255, 157, 0.15);
-          color: var(--ok);
-          border: 1px solid rgba(0, 255, 157, 0.3);
+        .b-tag.be {
+          background: rgba(129, 140, 248, 0.14);
+          color: #818CF8;
+          border: 1px solid rgba(129, 140, 248, 0.25);
         }
-        .branch-chip.all {
-          background: rgba(245, 158, 11, 0.15);
-          color: var(--warn);
-          border: 1px solid rgba(245, 158, 11, 0.3);
+        .b-tag.git {
+          background: rgba(148, 163, 184, 0.14);
+          color: #94A3B8;
+          border: 1px solid rgba(148, 163, 184, 0.25);
         }
-        .branch-code {
+        .b-text {
           color: var(--text);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          font-weight: 500;
         }
 
-        .card-footer-meta {
+        .card-footer {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          gap: 8px;
           font-size: 11px;
           color: var(--muted);
-          margin-top: 2px;
+          padding-top: 4px;
+          border-top: 1px solid rgba(255, 255, 255, 0.04);
           font-family: 'JetBrains Mono', monospace;
         }
-        .meta-by {
+        .footer-deployer {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          color: var(--muted);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          max-width: 140px;
+          max-width: 150px;
         }
-        .meta-tag {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 10px;
-          color: var(--accent);
-          background: rgba(0, 240, 255, 0.08);
-          border: 1px solid rgba(0, 240, 255, 0.2);
-          padding: 1px 6px;
-          border-radius: 3px;
-        }
-
-        .freq-stats {
-          display: flex;
-          justify-content: space-between;
-          margin-top: 4px;
-          padding-top: 6px;
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
+        .footer-sync {
           font-size: 10px;
           color: var(--faint);
-          font-family: 'JetBrains Mono', monospace;
+          white-space: nowrap;
+        }
+        .card-empty {
+          padding: 12px 0;
         }
 
         /* Timeline */
@@ -2032,10 +2015,10 @@ export default function Home() {
           font-size: 12px;
           font-family: 'JetBrains Mono', monospace;
           color: var(--accent);
-          box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
         .compare-check { cursor: pointer; accent-color: var(--accent); }
-        tr.compare-selected { background: rgba(0, 240, 255, 0.06) !important; }
+        tr.compare-selected { background: rgba(56, 189, 248, 0.06) !important; }
         .compare-grid { display: grid; grid-template-columns: 140px 1fr 1fr; gap: 0; }
         .compare-row { display: contents; }
         .compare-label {
@@ -2056,7 +2039,7 @@ export default function Home() {
           word-break: break-all;
         }
         .compare-val.diff {
-          background: rgba(0, 240, 255, 0.1);
+          background: rgba(56, 189, 248, 0.1);
           color: var(--accent);
           font-weight: 600;
         }
@@ -2089,7 +2072,7 @@ export default function Home() {
         select:focus, input:focus, textarea:focus {
           outline: none;
           border-color: var(--accent);
-          box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
+          box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
         }
         .wrap.dark input[type=date], .wrap.dark input[type=datetime-local] { color-scheme: dark; }
         .wrap.light input[type=date], .wrap.light input[type=datetime-local] { color-scheme: light; }
@@ -2139,7 +2122,7 @@ export default function Home() {
           vertical-align: middle;
         }
         tbody tr:last-child td { border-bottom: none; }
-        tbody tr:hover { background: rgba(0, 240, 255, 0.02); }
+        tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
         td.env-cell { font-weight: 700; font-family: 'Space Grotesk', sans-serif; }
         td .mono { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--accent); }
         td.who { color: var(--muted); font-size: 12px; font-family: 'JetBrains Mono', monospace; }
@@ -2157,14 +2140,14 @@ export default function Home() {
           align-items: center;
           gap: 4px;
           padding: 2px 6px;
-          background: rgba(0, 240, 255, 0.08);
-          border: 1px solid rgba(0, 240, 255, 0.2);
+          background: rgba(56, 189, 248, 0.08);
+          border: 1px solid rgba(56, 189, 248, 0.2);
           border-radius: 4px;
           transition: .15s;
         }
         .ticket-link:hover {
-          background: rgba(0, 240, 255, 0.18);
-          box-shadow: 0 0 8px rgba(0, 240, 255, 0.25);
+          background: rgba(56, 189, 248, 0.16);
+          border-color: rgba(56, 189, 248, 0.35);
           text-decoration: none;
         }
         .note-text { margin-top: 4px; font-size: 11.5px; color: var(--faint); }
@@ -2185,12 +2168,12 @@ export default function Home() {
         .overlay.open { display: flex; }
         .modal {
           background: var(--panel);
-          border: 1px solid rgba(0, 240, 255, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.12);
           border-radius: 12px;
           width: 100%;
           max-width: 580px;
           padding: 26px;
-          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 240, 255, 0.1);
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
         }
         .modal h2 {
           font-family: 'Space Grotesk', sans-serif;
