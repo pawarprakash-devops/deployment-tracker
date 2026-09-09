@@ -32,6 +32,17 @@ interface Environment {
   description?: string;
 }
 
+interface ClusterHealthResult {
+  environment: string;
+  targetName: string;
+  url: string;
+  status: 'HEALTHY' | 'DEGRADED' | 'OFFLINE';
+  statusCode: number | null;
+  latencyMs: number;
+  message: string;
+  checkedAt: string;
+}
+
 const PROMOTION_ORDER: Record<string, number> = {
   'Preview': 1,
   'QA': 2,
@@ -94,6 +105,9 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [clusterHealth, setClusterHealth] = useState<Record<string, ClusterHealthResult>>({});
+  const [isProbing, setIsProbing] = useState(false);
+  const [lastProbed, setLastProbed] = useState<Date | null>(null);
   
   // Comparison
   const [compareIds, setCompareIds] = useState<string[]>([]);
@@ -150,15 +164,6 @@ export default function Home() {
     localStorage.setItem('tracker-theme', newTheme);
   };
 
-  useEffect(() => {
-    loadData();
-    checkAuth();
-    const interval = setInterval(() => {
-      loadData();
-    }, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
   const checkAuth = async () => {
     try {
       const res = await fetch('/api/auth/session');
@@ -197,6 +202,24 @@ export default function Home() {
     }
   };
 
+  const probeClusterHealth = useCallback(async () => {
+    setIsProbing(true);
+    try {
+      const res = await fetch('/api/cluster-health');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.by_environment) {
+          setClusterHealth(data.by_environment);
+          setLastProbed(new Date());
+        }
+      }
+    } catch (error) {
+      console.error('Error probing cluster health:', error);
+    } finally {
+      setIsProbing(false);
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -231,6 +254,17 @@ export default function Home() {
       setTimeout(() => setIsRefreshing(false), 300);
     }
   }, []);
+
+  useEffect(() => {
+    loadData();
+    probeClusterHealth();
+    checkAuth();
+    const interval = setInterval(() => {
+      loadData();
+      probeClusterHealth();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [loadData, probeClusterHealth]);
 
   const getStatusClass = (status: string) => {
     switch (status) {
@@ -618,11 +652,26 @@ export default function Home() {
             </div>
             <h1>DEPLOYMENT COMMAND CENTER</h1>
             <div className="sub">
-              <span className={`live-dot ${isRefreshing ? 'refreshing' : ''}`}>●</span>
+              <span className={`live-dot ${isRefreshing || isProbing ? 'refreshing' : ''}`}>●</span>
               <span className="sys-badge">SYSTEMS NORMAL</span>
               <span>POLL: 60s</span>
               <span>·</span>
-              <span>LAST PROBE: {lastUpdated.toLocaleTimeString()}</span>
+              <span>LAST DATA: {lastUpdated.toLocaleTimeString()}</span>
+              {lastProbed && (
+                <>
+                  <span>·</span>
+                  <span title="Last Cluster HTTP Probe">CLUSTERS: {lastProbed.toLocaleTimeString()}</span>
+                </>
+              )}
+              <span>·</span>
+              <button 
+                className="probe-refresh-btn" 
+                onClick={() => { loadData(); probeClusterHealth(); }}
+                disabled={isRefreshing || isProbing}
+                title="Force probe all cluster endpoints immediately"
+              >
+                {isProbing ? '⚡ PROBING...' : '🔄 PROBE NOW'}
+              </button>
               <span>·</span>
               <a href="/copilot" className="copilot-pill">
                 ⚡ GITHUB COPILOT METRICS ➔
@@ -719,6 +768,35 @@ export default function Home() {
                     {env.name}
                     {env.isProd && <span className="prod-tag">LIVE PROD</span>}
                   </div>
+                  {/* Live Cluster Health Badge */}
+                  {(() => {
+                    const probe = clusterHealth[env.name];
+                    if (!probe) return null;
+                    if (probe.status === 'HEALTHY') {
+                      return (
+                        <div className="cluster-health-pill healthy" title={`${probe.message} · Latency: ${probe.latencyMs}ms\nTarget: ${probe.url}`}>
+                          <span className="probe-dot healthy" />
+                          <span className="probe-text">HEALTHY</span>
+                          <span className="probe-latency">{probe.latencyMs}ms</span>
+                        </div>
+                      );
+                    }
+                    if (probe.status === 'DEGRADED') {
+                      return (
+                        <div className="cluster-health-pill degraded" title={`${probe.message} · Latency: ${probe.latencyMs}ms\nTarget: ${probe.url}`}>
+                          <span className="probe-dot degraded" />
+                          <span className="probe-text">DEGRADED</span>
+                          <span className="probe-latency">{probe.latencyMs}ms</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="cluster-health-pill offline" title={`${probe.message}\nTarget: ${probe.url}`}>
+                        <span className="probe-dot offline" />
+                        <span className="probe-text">OFFLINE</span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 {/* Health Alert */}
                 {health.label && (
@@ -1500,6 +1578,27 @@ export default function Home() {
           color: #e9d5ff;
         }
 
+        .probe-refresh-btn {
+          background: rgba(0, 240, 255, 0.08);
+          border: 1px solid rgba(0, 240, 255, 0.3);
+          color: var(--accent);
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .probe-refresh-btn:hover:not(:disabled) {
+          background: rgba(0, 240, 255, 0.2);
+          box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+        }
+        .probe-refresh-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
         .actions {
           display: flex;
           gap: 8px;
@@ -1691,6 +1790,66 @@ export default function Home() {
           font-weight: 700;
           letter-spacing: .06em;
           font-family: 'JetBrains Mono', monospace;
+        }
+
+        .cluster-health-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          border: 1px solid transparent;
+          transition: all 0.2s ease;
+        }
+        .cluster-health-pill.healthy {
+          background: rgba(16, 185, 129, 0.12);
+          border-color: rgba(16, 185, 129, 0.35);
+          color: #10B981;
+          box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+        }
+        .cluster-health-pill.degraded {
+          background: rgba(245, 158, 11, 0.14);
+          border-color: rgba(245, 158, 11, 0.4);
+          color: #F59E0B;
+          box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
+          animation: degradedPulse 2s infinite;
+        }
+        .cluster-health-pill.offline {
+          background: rgba(239, 68, 68, 0.15);
+          border-color: rgba(239, 68, 68, 0.4);
+          color: #EF4444;
+          box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+        }
+        .probe-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          display: inline-block;
+        }
+        .probe-dot.healthy {
+          background: #10B981;
+          box-shadow: 0 0 6px #10B981;
+        }
+        .probe-dot.degraded {
+          background: #F59E0B;
+          box-shadow: 0 0 6px #F59E0B;
+        }
+        .probe-dot.offline {
+          background: #EF4444;
+          box-shadow: 0 0 6px #EF4444;
+        }
+        .probe-latency {
+          font-size: 9px;
+          opacity: 0.75;
+          font-weight: 500;
+        }
+        @keyframes degradedPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(0.98); }
         }
 
         .health-alert { font-size: 11px; font-weight: 600; padding: 2px 0; }
