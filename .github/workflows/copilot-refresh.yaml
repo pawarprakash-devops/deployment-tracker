@@ -20,6 +20,7 @@ permissions:
 
 env:
   GITHUB_ORG: vidaisolutions
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   check-and-refresh:
@@ -88,9 +89,11 @@ jobs:
 
           # Wait for the workflow to start
           sleep 10
-          RUN_ID=$(gh run list --workflow=deploy.yaml --limit=1 --json databaseId --jq '.[0].databaseId')
+          RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=deploy.yaml --limit=1 --json databaseId --jq '.[0].databaseId' || echo "")
           echo "Deploy run ID: $RUN_ID"
-          echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/$RUN_ID"
+          if [ -n "$RUN_ID" ]; then
+            echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/$RUN_ID"
+          fi
 
       - name: Skip — no new data
         if: steps.check.outputs.new_data == 'false' && inputs.force != 'true'
