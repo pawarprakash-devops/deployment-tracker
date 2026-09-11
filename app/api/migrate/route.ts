@@ -61,7 +61,7 @@ export async function POST() {
 
 export async function GET() {
   try {
-    // Ensure 'Stage EUW2' exists in environments table
+    // 1. Ensure 'Stage EUW2' exists in environments table
     const envCheck = await pool.query("SELECT id FROM environments WHERE name = 'Stage EUW2'");
     if (envCheck.rows.length === 0) {
       await pool.query(
@@ -69,19 +69,80 @@ export async function GET() {
       );
     }
 
-    // Update deployments that were erroneously saved as 'Other'
-    const result = await pool.query(`
-      UPDATE deployments 
-      SET environment = 'Stage EUW2' 
-      WHERE ticket_link LIKE '%34473617930%' 
-         OR ticket_link LIKE '%34473645935%'
-      RETURNING id, environment, branch, version, ticket_link;
+    // 2. Widen any VARCHAR columns in deployments to TEXT to prevent "value too long for type character varying(100)"
+    await pool.query(`
+      ALTER TABLE deployments 
+        ALTER COLUMN requested_by TYPE TEXT,
+        ALTER COLUMN approved_by TYPE TEXT,
+        ALTER COLUMN tested_by TYPE TEXT,
+        ALTER COLUMN deployed_by TYPE TEXT,
+        ALTER COLUMN branch TYPE TEXT,
+        ALTER COLUMN version TYPE TEXT,
+        ALTER COLUMN ticket_link TYPE TEXT,
+        ALTER COLUMN notes TYPE TEXT,
+        ALTER COLUMN environment TYPE TEXT;
     `);
+
+    // 3. Check if QA run 34578209268 exists, and insert it if missing
+    const runCheck = await pool.query(
+      "SELECT id FROM deployments WHERE ticket_link LIKE '%34578209268%'"
+    );
+
+    let insertedQA = null;
+    if (runCheck.rows.length === 0) {
+      const insertRes = await pool.query(`
+        INSERT INTO deployments (
+          environment, 
+          status,
+          deployment_type,
+          branch, 
+          version,
+          frontend_branch,
+          backend_branch,
+          frontend_version,
+          backend_version,
+          requested_by, 
+          approved_by,
+          tested_by,
+          deployed_by,
+          ticket_link,
+          notes,
+          started_at, 
+          completed_at, 
+          duration_seconds
+        ) VALUES (
+          'QA',
+          'Success',
+          'standard',
+          'qa',
+          'qa',
+          'qa',
+          'qa',
+          'qa',
+          'qa',
+          'Prajwal-2605, pawarprakash-devops, vaibhavginnalwar, Prashantl1901, prajwalbonde001, dev-prafulk, krishna-vidai, saranya13-tech, ChetanPawarVidaiSolutions, TejasSaxenaVD',
+          NULL,
+          NULL,
+          'GitHub Actions',
+          'https://github.com/vidaisolutions/vidai-devops/actions/runs/34578209268',
+          'Component: both_frontend_and_backend · Pipeline: Full Deploy v2 · PR #FE#2640, FE#2636, FE#2632, FE#2631, FE#2629, FE#2627, FE#2625, FE#2623, BE#2710, BE#2706, BE#2703, BE#2701, BE#2698, BE#2696, BE#2694',
+          '2026-09-11T08:14:38Z',
+          '2026-09-11T08:21:16Z',
+          398
+        ) RETURNING *;
+      `);
+      insertedQA = insertRes.rows[0];
+    }
+
+    // 4. Return column schemas and migration result
+    const cols = await pool.query(
+      "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_name = 'deployments' ORDER BY ordinal_position"
+    );
 
     return NextResponse.json({
       success: true,
-      updated_count: result.rowCount,
-      updated_deployments: result.rows,
+      insertedQA,
+      columns: cols.rows,
     });
   } catch (error) {
     return NextResponse.json(
