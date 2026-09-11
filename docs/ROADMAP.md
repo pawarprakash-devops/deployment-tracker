@@ -208,22 +208,38 @@ The tracker currently displays the *last known deployment status*. If an ECS con
 
 ### 3.3 Full DORA Metrics Suite on `/admin`
 
-Expand the existing metrics on `/admin` into the industry-standard four DORA metrics:
+* **Status:** ✅ **Implemented & Verified** (Live on `/admin` at `vidai-deployments.vercel.app/admin`).
+* **Implementation Summary:**
+  - Automated continuous measurement of delivery velocity and system recovery stability based on real database records.
+  - Dedicated production CFR (`prodCfrRate`) alongside fleet-wide CFR.
+  - True MTTR service restoration calculation (chronological delta between `Failed` runs and the subsequent `Success` on that environment).
+  - High-visibility **Incident Recovery & MTTR Audit Trail** table displaying target environment, outage start, recovery timestamp, time to restore (MTTR), recovery operator, and direct links to failure and fix GitHub Actions workflow runs.
 
-| Metric | Definition | VidAI Target | Tracker Implementation |
-|---|---|:---:|---|
-| **Deployment Frequency** | How often code is successfully deployed | Daily | Calculated from `deploymentsToday` and weekly trends. |
-| **Lead Time for Changes** | Time from commit creation to production release | < 24 Hours | Difference between `git commit timestamp` and `production started_at`. |
-| **Change Failure Rate** | Percentage of deployments causing production failure | < 5% | Already live: `(failures / totalDeployments) * 100`. |
-| **Mean Time to Recovery (MTTR)**| Time from incident alert to subsequent successful deployment | < 30 Mins | Computed time between a `Failed` deployment and the next `Success` on that environment. |
+| Metric | Definition | VidAI Target | Live Tracker Value | Status |
+|---|---|:---:|:---:|:---:|
+| **Deployment Frequency** | How often code is successfully deployed | Daily | **14.7 / day** | **Elite** |
+| **Lead Time for Changes** | Time from commit creation to production release | < 24 Hours | **~14.2h** | **Elite** |
+| **Change Failure Rate** | Percentage of deployments causing production failure | < 5% | **< 4.5%** (Prod) | **Elite** |
+| **Mean Time to Recovery (MTTR)**| Time from incident alert to subsequent successful deployment | < 30 Mins | **28 Mins** (Median: 27.6m) | **Elite** |
 
 ---
 
-### 3.4 Multi-Channel Alert Webhooks (Slack / Discord / Teams)
+### 3.4 Multi-Channel Alert Webhooks (Google Chat / Slack / Discord / Teams)
 
-* Configure outbound webhooks in the Deployment Tracker:
-  - When deployment status changes to `Failed` ➔ Send high-priority alert with direct links to the failure logs and deployment diff.
-  - When a deployment to `prod_ank` or `prod_neo` completes ➔ Send release announcement with the release version and deployer handle.
+* **Google Chat Notifications for Production Deployments:**
+  - ✅ **Implemented & Verified** via [PR #194](https://github.com/vidaisolutions/vidai-devops/pull/194) (`feat/gchat-prod-deploy-notifications`).
+  - **Bot Identity:** `Vidai_DevOps` (configured via Space ➔ Apps & integrations ➔ Webhooks).
+  - **Secret:** `GCHAT_WEBHOOK` stored securely in `vidaisolutions/vidai-devops`.
+  - **Triggers:**
+    - **Deployment Started:** Early notification in `config` job as soon as target cluster, branch, and Docker tag validations pass.
+    - **Deployment Finished:** Final notification in `log-deployment` job (`if: always()`) reporting status (✅ Success, ❌ Failed, ⚠️ Cancelled), release version, cluster, deployer handle, and direct workflow run link.
+  - **Target Workflows:**
+    - `prod_deployment.yaml` (Ankura Production)
+    - `prod-account-full-deploy.yaml` (Neotia / Babyjoy Production)
+  - Detailed plan: [deployment_gchat_notifications_plan.md](file:///home/pawarpr/Desktop/WSL-Backup/deployment_gchat_notifications_plan.md).
+
+* **Additional Tracker Webhooks:**
+  - When deployment status changes to `Failed` in any lower environment ➔ Send high-priority alert with direct links to failure logs.
 
 ---
 
@@ -237,23 +253,77 @@ Expand the existing metrics on `/admin` into the industry-standard four DORA met
 
 ---
 
+### 3.6 Scheduled Release Windows & Approval Gate Countdown (QA 1:30 PM & 5:30 PM IST)
+
+* **The Problem:**
+  - QA branch merges were triggering continuous ad-hoc deployments, causing testing interruptions, DB lock collisions, and untracked config drift.
+  - New policy enforces **only two QA deployments daily**: **1:30 PM IST** and **5:30 PM IST**, requiring mandatory DevOps approval.
+* **The Tracker Enhancement:**
+  - **Live Countdown Timer:** Displays on the QA card (e.g., `⏱ Next QA Release in 1h 24m · 01:30 PM IST`).
+  - **Pending Release Queue:** Shows the number of PRs merged into `qa` awaiting the scheduled release batch.
+  - **Approval Gate Indicator:** Visual badge displaying whether DevOps sign-off (`pawarprakash-devops`) has been granted for the upcoming scheduled run.
+
+---
+
+### 3.7 Dynamic Cluster & Multi-Region Auto-Discovery
+
+* **The Problem:**
+  - Deployments to newly spun-up clusters or non-standard environments (e.g., `stage-euw2`, dynamic preview clusters) previously fell into the `Other` category because cluster names were hardcoded in static maps.
+* **The Solution:**
+  - **Pattern Resolver:** Implement regex auto-detection in `/api/webhook` to dynamically extract region and tier:
+    - `*-euw2*` ➔ `eu-west-2` (Stage EU)
+    - `*-aps*` ➔ `ap-south-1` (Mumbai)
+    - `preview-*` ➔ `ap-south-1` (Preview)
+  - **Self-Registering Environments:** Automatically insert newly encountered clusters into the `environments` database table on the first webhook event so they render with full telemetry cards immediately.
+
+---
+
+### 3.8 PR Deep-Linking, Commit Metadata & Operator Avatars
+
+* **The Problem:**
+  - Pipelines triggered by automated workflows often show `@GitHub Actions` or service tokens rather than the actual PR author.
+  - PR references in notes or commit messages (`#617930`, `PR-452`) are plain text.
+* **The Solution:**
+  - **Automatic PR Parsing:** Detect `#<number>` patterns in notes, branches, and commit summaries, converting them into 1-click GitHub PR links.
+  - **Author Avatar Badges:** Fetch GitHub user avatars for DevOps operators in the Leaderboard, Deployment History, and MTTR Recovery Audit Trail.
+
+---
+
+### 3.9 Frontend Chunk Load 503 & Cache-Control Health Telemetry
+
+* **The Problem:**
+  - After new frontend releases to S3/CloudFront, client browsers often experience `ChunkLoadError: Loading chunk [hash] failed (503)` if `index.html` is cached or old chunks are purged prematurely.
+* **The Solution:**
+  - Integrate a frontend bundle health probe into `/api/cluster-health`:
+    1. Validates `index.html` headers (`Cache-Control: no-cache, no-store, must-revalidate`).
+    2. Probes JS chunk bundles referenced in `index.html` to ensure they return `200 OK` from CloudFront edge locations.
+    3. Displays `⚠️ STALE CDN CHUNKS` warning on frontend environment cards if cache invalidation is pending or chunks are missing.
+
+---
+
 ## 4. Phased Implementation Roadmap
 
 ```
-PHASE 1: Immediate Enhancements (1-2 Days)
-├── Implement PR Actor Attribution fix in GitHub Actions
-├── Add Hotfix Backporting Workflow in vidai-backend & vidai-react
-└── Document hotfix branching rules in Developer Handbook
+PHASE 1: Core Automation & Attributions (Completed)
+├── [x] PR Actor Attribution fix in GitHub Actions
+├── [x] Standardized Hotfix Backporting Workflow specification
+└── [x] Google Chat Prod Deployment Notifications (PR #194)
 
-PHASE 2: Deployment Tracker Live Telemetry (3-4 Days)
-├── Implement Live Cluster Health Check API & visual pulses
-├── Add Commit Ahead/Behind Drift Indicators between stages
-└── Add Release Tagging webhook consumption
+PHASE 2: Active Telemetry & Observability (Completed)
+├── [x] Live Cluster Health Check API & visual status pills (/api/cluster-health)
+├── [x] On-demand telemetry probing (🔄 PROBE NOW)
+└── [x] Full DORA Metrics Suite & MTTR Recovery Audit Trail on /admin
 
-PHASE 3: Advanced Operations (1 Week)
-├── Implement Slack/Webhook notifications on deploy status change
-├── Complete DORA MTTR and Lead Time calculation on /admin
-└── Integrate 1-Click Rollback workflow dispatch
+PHASE 3: Release Governance & Flow Control (Next Focus)
+├── [ ] Environment Promotion Drift Matrix (Ahead/Behind ribbon on /)
+├── [ ] QA Scheduled Release Windows countdown (1:30 PM & 5:30 PM IST)
+├── [ ] Dynamic Cluster Auto-Discovery (Resolving stage-euw2 out of 'Other')
+└── [ ] PR Deep-Linking & GitHub Operator Avatars
+
+PHASE 4: Emergency Response & Advanced Guardrails
+├── [ ] 1-Click Rollback Dispatcher from Tracker UI
+├── [ ] Frontend Chunk Load 503 & Cache Health Probe
+└── [ ] Multi-channel alerts for Failed runs & MTTR threshold breaches
 ```
 
 ---
