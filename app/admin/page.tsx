@@ -17,6 +17,34 @@ interface SlowestRecord {
   branch: string | null;
 }
 
+interface DoraMetric {
+  value: string;
+  rating: 'Elite' | 'High' | 'Medium' | 'Low';
+  target: string;
+  status: 'OPTIMAL' | 'ACCEPTABLE' | 'ATTENTION';
+  [key: string]: any;
+}
+
+interface RecoveryIncident {
+  environment: string;
+  failedAt: string;
+  recoveredAt: string;
+  failedRunLink: string | null;
+  recoveredRunLink: string | null;
+  failedAuthor: string | null;
+  recoveredAuthor: string | null;
+  durationMinutes: number;
+}
+
+interface DoraSuite {
+  deploymentFrequency: DoraMetric & { dailyAverage: number; todayCount: number; weekCount: number };
+  leadTimeForChanges: DoraMetric & { hours: number };
+  changeFailureRate: DoraMetric & { rate: number; prodRate: number; failedCount: number; totalCount: number };
+  meanTimeToRecovery: DoraMetric & { minutes: number; medianMinutes: number; averageMinutes: number; totalRecovered: number };
+  overallScore: { tier: 'Elite' | 'High' | 'Medium' | 'Low'; eliteCount: number; highCount: number; summary: string };
+  recentRecoveries: RecoveryIncident[];
+}
+
 interface Stats {
   totalDeployments: number;
   successRate: number;
@@ -29,6 +57,7 @@ interface Stats {
   recentFailures: FailureRecord[];
   slowestDeployments: SlowestRecord[];
   mostActiveUsers: Record<string, number>;
+  dora?: DoraSuite;
 }
 
 const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; type: string }> = {
@@ -458,7 +487,7 @@ export default function AdminDashboard() {
 
         <div className="hud-card">
           <div className="hud-stripe" style={{ background: '#F59E0B' }} />
-          <span className="hud-label">MEAN DURATION (MTTR)</span>
+          <span className="hud-label">AVG RUNTIME (PIPELINE)</span>
           <div className="hud-value warn">{formatSeconds(stats.avgDuration)}</div>
           <span className="hud-sub">Average runtime</span>
         </div>
@@ -477,6 +506,142 @@ export default function AdminDashboard() {
           <span className="hud-sub">Rolling 7-day activity</span>
         </div>
       </div>
+
+      {/* DORA Metrics Suite */}
+      {stats.dora && (
+        <section className="dora-section">
+          <div className="dora-header">
+            <div className="dora-header-left">
+              <div className="dora-title-group">
+                <span className="dora-glow-badge">DORA FRAMEWORK v2026</span>
+                <h2 className="dora-title">DEVOPS RESEARCH &amp; ASSESSMENT (DORA) SUITE</h2>
+              </div>
+              <p className="dora-subtitle">
+                Automated continuous measurement of delivery velocity and system recovery stability computed from production &amp; lower environments.
+              </p>
+            </div>
+            <div className="dora-header-right">
+              <div className={`dora-overall-badge ${stats.dora.overallScore.tier.toLowerCase()}`}>
+                <span className="tier-light" />
+                <div className="tier-content">
+                  <span className="tier-label">OVERALL MATURITY</span>
+                  <span className="tier-val">{stats.dora.overallScore.tier.toUpperCase()} PERFORMER</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="dora-grid">
+            {/* 1. Deployment Frequency */}
+            <div className="dora-card">
+              <div className="dora-card-top">
+                <span className="dora-metric-code">DF // 01</span>
+                <span className={`dora-tier-pill ${stats.dora.deploymentFrequency.rating.toLowerCase()}`}>
+                  {stats.dora.deploymentFrequency.rating.toUpperCase()}
+                </span>
+              </div>
+              <h4 className="dora-card-name">DEPLOYMENT FREQUENCY</h4>
+              <div className="dora-metric-val cyan">{stats.dora.deploymentFrequency.value}</div>
+              <div className="dora-benchmark">
+                <span className="bench-label">VIDAI TARGET</span>
+                <span className="bench-target">{stats.dora.deploymentFrequency.target}</span>
+              </div>
+              <div className="dora-metric-meta">
+                <span>Today: <strong>{stats.dora.deploymentFrequency.todayCount}</strong></span>
+                <span className="meta-sep">•</span>
+                <span>7-Day: <strong>{stats.dora.deploymentFrequency.weekCount} runs</strong></span>
+              </div>
+              <div className="dora-progress">
+                <div
+                  className="dora-progress-bar cyan"
+                  style={{ width: `${Math.min(100, Math.max(15, (stats.dora.deploymentFrequency.dailyAverage / 5) * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 2. Lead Time for Changes */}
+            <div className="dora-card">
+              <div className="dora-card-top">
+                <span className="dora-metric-code">LTTC // 02</span>
+                <span className={`dora-tier-pill ${stats.dora.leadTimeForChanges.rating.toLowerCase()}`}>
+                  {stats.dora.leadTimeForChanges.rating.toUpperCase()}
+                </span>
+              </div>
+              <h4 className="dora-card-name">LEAD TIME FOR CHANGES</h4>
+              <div className="dora-metric-val purple">{stats.dora.leadTimeForChanges.value}</div>
+              <div className="dora-benchmark">
+                <span className="bench-label">VIDAI TARGET</span>
+                <span className="bench-target">{stats.dora.leadTimeForChanges.target}</span>
+              </div>
+              <div className="dora-metric-meta">
+                <span>Commit/Stage → Prod: <strong>~{stats.dora.leadTimeForChanges.hours}h</strong></span>
+              </div>
+              <div className="dora-progress">
+                <div
+                  className="dora-progress-bar purple"
+                  style={{ width: `${Math.max(15, Math.min(100, (1 - (stats.dora.leadTimeForChanges.hours / 48)) * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 3. Change Failure Rate */}
+            <div className="dora-card">
+              <div className="dora-card-top">
+                <span className="dora-metric-code">CFR // 03</span>
+                <span className={`dora-tier-pill ${stats.dora.changeFailureRate.rating.toLowerCase()}`}>
+                  {stats.dora.changeFailureRate.rating.toUpperCase()}
+                </span>
+              </div>
+              <h4 className="dora-card-name">CHANGE FAILURE RATE</h4>
+              <div className={`dora-metric-val ${stats.dora.changeFailureRate.rate <= 5 ? 'green' : 'amber'}`}>
+                {stats.dora.changeFailureRate.value}
+              </div>
+              <div className="dora-benchmark">
+                <span className="bench-label">VIDAI TARGET</span>
+                <span className="bench-target">{stats.dora.changeFailureRate.target}</span>
+              </div>
+              <div className="dora-metric-meta">
+                <span>Prod CFR: <strong>{stats.dora.changeFailureRate.prodRate}%</strong></span>
+                <span className="meta-sep">•</span>
+                <span>Fleet: <strong>{stats.dora.changeFailureRate.failedCount}/{stats.dora.changeFailureRate.totalCount}</strong></span>
+              </div>
+              <div className="dora-progress">
+                <div
+                  className="dora-progress-bar green"
+                  style={{ width: `${Math.max(10, Math.min(100, 100 - stats.dora.changeFailureRate.rate * 4))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 4. Mean Time to Recovery */}
+            <div className="dora-card">
+              <div className="dora-card-top">
+                <span className="dora-metric-code">MTTR // 04</span>
+                <span className={`dora-tier-pill ${stats.dora.meanTimeToRecovery.rating.toLowerCase()}`}>
+                  {stats.dora.meanTimeToRecovery.rating.toUpperCase()}
+                </span>
+              </div>
+              <h4 className="dora-card-name">MEAN TIME TO RECOVERY</h4>
+              <div className="dora-metric-val emerald">{stats.dora.meanTimeToRecovery.value}</div>
+              <div className="dora-benchmark">
+                <span className="bench-label">VIDAI TARGET</span>
+                <span className="bench-target">{stats.dora.meanTimeToRecovery.target}</span>
+              </div>
+              <div className="dora-metric-meta">
+                <span>Median: <strong>{stats.dora.meanTimeToRecovery.medianMinutes}m</strong></span>
+                <span className="meta-sep">•</span>
+                <span>Recovered: <strong>{stats.dora.meanTimeToRecovery.totalRecovered} runs</strong></span>
+              </div>
+              <div className="dora-progress">
+                <div
+                  className="dora-progress-bar emerald"
+                  style={{ width: `${Math.max(15, Math.min(100, (1 - (stats.dora.meanTimeToRecovery.minutes / 120)) * 100))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Middle Row: Environment Distribution & Status Breakdown */}
       <div className="panels-grid two-col">
@@ -689,6 +854,86 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* MTTR Recovery Audit Log */}
+      {stats.dora && stats.dora.recentRecoveries && stats.dora.recentRecoveries.length > 0 && (
+        <div className="panel-card recovery-panel">
+          <div className="panel-terminal-bar">
+            <div className="dots">
+              <span className="dot red" />
+              <span className="dot yellow" />
+              <span className="dot green" />
+            </div>
+            <span className="panel-tag">dora::recovery-audit-log</span>
+          </div>
+
+          <div className="recovery-panel-header">
+            <div>
+              <h3 className="panel-title">INCIDENT RECOVERY &amp; MTTR AUDIT TRAIL</h3>
+              <p className="panel-desc">
+                Chronological ledger tracking incidents where a pipeline failure was resolved by a subsequent successful release on that environment.
+              </p>
+            </div>
+            <div className="recovery-badge-count">
+              <span className="rec-pulse-dot" />
+              <span>{stats.dora.meanTimeToRecovery.totalRecovered} RECOVERIES LOGGED</span>
+            </div>
+          </div>
+
+          <div className="recovery-table-wrapper">
+            <table className="recovery-table">
+              <thead>
+                <tr>
+                  <th>TARGET ENVIRONMENT</th>
+                  <th>INCIDENT START</th>
+                  <th>RECOVERED AT</th>
+                  <th>TIME TO RESTORE (MTTR)</th>
+                  <th>RECOVERY OPERATOR</th>
+                  <th style={{ textAlign: 'right' }}>RUN AUDIT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.dora.recentRecoveries.map((inc, i) => (
+                  <tr key={i}>
+                    <td>
+                      <span className="rec-env">{inc.environment}</span>
+                    </td>
+                    <td>
+                      <span className="rec-date">{new Date(inc.failedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </td>
+                    <td>
+                      <span className="rec-date">{new Date(inc.recoveredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </td>
+                    <td>
+                      <span className={`rec-mttr ${inc.durationMinutes <= 30 ? 'fast' : inc.durationMinutes <= 60 ? 'mid' : 'slow'}`}>
+                        ⏱ {inc.durationMinutes < 60 ? `${inc.durationMinutes}m` : `${Math.floor(inc.durationMinutes / 60)}h ${inc.durationMinutes % 60}m`}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="rec-author">@{inc.recoveredAuthor || inc.failedAuthor || 'GitHub Actions'}</span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="rec-links">
+                        {inc.failedRunLink && (
+                          <a href={inc.failedRunLink} target="_blank" rel="noopener noreferrer" className="rec-link fail">
+                            Fail ↗
+                          </a>
+                        )}
+                        {inc.recoveredRunLink && (
+                          <a href={inc.recoveredRunLink} target="_blank" rel="noopener noreferrer" className="rec-link ok">
+                            Fix ↗
+                          </a>
+                        )}
+                        {!inc.failedRunLink && !inc.recoveredRunLink && <span className="rec-link-none">—</span>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <footer className="footer-note">
         VIDAI INFRASTRUCTURE COMMAND ENGINE // TELEMETRY PROBES AUDIT AP-SOUTH-1 &amp; US-WEST-2 CLUSTERS
@@ -1206,6 +1451,370 @@ export default function AdminDashboard() {
           font-size: 9.5px;
           color: #484F58;
           font-weight: 700;
+        }
+
+        /* DORA Metrics Section */
+        .dora-section {
+          background: rgba(13, 17, 23, 0.9);
+          border: 1px solid rgba(0, 240, 255, 0.25);
+          border-radius: 12px;
+          padding: 20px 24px;
+          margin-bottom: 28px;
+          box-shadow: 0 0 25px rgba(0, 240, 255, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .dora-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 16px;
+          margin-bottom: 20px;
+          padding-bottom: 16px;
+          border-bottom: 1px solid #21262D;
+        }
+        .dora-header-left {
+          max-width: 720px;
+        }
+        .dora-title-group {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 6px;
+        }
+        .dora-glow-badge {
+          background: rgba(0, 240, 255, 0.12);
+          color: #00F0FF;
+          border: 1px solid rgba(0, 240, 255, 0.35);
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 3px 8px;
+          border-radius: 4px;
+          letter-spacing: 0.06em;
+        }
+        .dora-title {
+          font-size: 15px;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          color: #F0F6FC;
+          font-family: 'JetBrains Mono', monospace;
+          margin: 0;
+        }
+        .dora-subtitle {
+          font-size: 12px;
+          color: #8B949E;
+          margin: 0;
+          line-height: 1.5;
+        }
+        .dora-overall-badge {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: #161B22;
+          border: 1px solid #30363D;
+          border-radius: 8px;
+          padding: 8px 14px;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .dora-overall-badge.elite {
+          border-color: rgba(0, 255, 157, 0.5);
+          background: rgba(0, 255, 157, 0.08);
+        }
+        .dora-overall-badge.high {
+          border-color: rgba(0, 240, 255, 0.5);
+          background: rgba(0, 240, 255, 0.08);
+        }
+        .tier-light {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #00FF9D;
+          box-shadow: 0 0 10px #00FF9D;
+        }
+        .dora-overall-badge.high .tier-light {
+          background: #00F0FF;
+          box-shadow: 0 0 10px #00F0FF;
+        }
+        .tier-content {
+          display: flex;
+          flex-direction: column;
+        }
+        .tier-label {
+          font-size: 9px;
+          font-weight: 700;
+          color: #8B949E;
+          letter-spacing: 0.05em;
+        }
+        .tier-val {
+          font-size: 13px;
+          font-weight: 800;
+          color: #00FF9D;
+          letter-spacing: 0.04em;
+        }
+        .dora-overall-badge.high .tier-val {
+          color: #00F0FF;
+        }
+        .dora-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 14px;
+        }
+        .dora-card {
+          background: rgba(22, 27, 34, 0.7);
+          border: 1px solid #21262D;
+          border-radius: 8px;
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          transition: all 0.2s;
+        }
+        .dora-card:hover {
+          border-color: rgba(0, 240, 255, 0.35);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+        .dora-card-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .dora-metric-code {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          font-weight: 700;
+          color: #484F58;
+          letter-spacing: 0.05em;
+        }
+        .dora-tier-pill {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 9.5px;
+          font-weight: 700;
+          padding: 2px 6px;
+          border-radius: 4px;
+          letter-spacing: 0.04em;
+        }
+        .dora-tier-pill.elite {
+          background: rgba(0, 255, 157, 0.15);
+          color: #00FF9D;
+          border: 1px solid rgba(0, 255, 157, 0.3);
+        }
+        .dora-tier-pill.high {
+          background: rgba(0, 240, 255, 0.15);
+          color: #00F0FF;
+          border: 1px solid rgba(0, 240, 255, 0.3);
+        }
+        .dora-tier-pill.medium {
+          background: rgba(245, 158, 11, 0.15);
+          color: #F59E0B;
+          border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .dora-tier-pill.low {
+          background: rgba(255, 51, 102, 0.15);
+          color: #FF3366;
+          border: 1px solid rgba(255, 51, 102, 0.3);
+        }
+        .dora-card-name {
+          font-size: 11px;
+          font-weight: 700;
+          color: #8B949E;
+          letter-spacing: 0.05em;
+          margin: 0;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .dora-metric-val {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 26px;
+          font-weight: 800;
+          margin: 2px 0;
+          line-height: 1.1;
+        }
+        .dora-metric-val.cyan { color: #00F0FF; }
+        .dora-metric-val.purple { color: #C084FC; }
+        .dora-metric-val.green { color: #00FF9D; }
+        .dora-metric-val.amber { color: #F59E0B; }
+        .dora-metric-val.emerald { color: #10B981; }
+        .dora-benchmark {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          background: rgba(0, 0, 0, 0.25);
+          padding: 4px 8px;
+          border-radius: 4px;
+          border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .bench-label {
+          color: #6E7681;
+          font-weight: 600;
+        }
+        .bench-target {
+          color: #E6EDF3;
+          font-weight: 700;
+        }
+        .dora-metric-meta {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 10.5px;
+          color: #8B949E;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .dora-metric-meta strong {
+          color: #F0F6FC;
+        }
+        .meta-sep {
+          color: #30363D;
+        }
+        .dora-progress {
+          height: 4px;
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: 2px;
+          overflow: hidden;
+          margin-top: 4px;
+        }
+        .dora-progress-bar {
+          height: 100%;
+          border-radius: 2px;
+          transition: width 0.3s ease;
+        }
+        .dora-progress-bar.cyan { background: #00F0FF; }
+        .dora-progress-bar.purple { background: #C084FC; }
+        .dora-progress-bar.green { background: #00FF9D; }
+        .dora-progress-bar.emerald { background: #10B981; }
+
+        /* MTTR Recovery Panel & Table */
+        .recovery-panel {
+          margin-top: 24px;
+        }
+        .recovery-panel-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+        .panel-desc {
+          font-size: 11px;
+          color: #8B949E;
+          margin: 4px 0 0 0;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .recovery-badge-count {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(0, 255, 157, 0.1);
+          color: #00FF9D;
+          border: 1px solid rgba(0, 255, 157, 0.25);
+          border-radius: 6px;
+          padding: 4px 10px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10.5px;
+          font-weight: 700;
+        }
+        .rec-pulse-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #00FF9D;
+          box-shadow: 0 0 6px #00FF9D;
+        }
+        .recovery-table-wrapper {
+          overflow-x: auto;
+          border: 1px solid #21262D;
+          border-radius: 6px;
+        }
+        .recovery-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+        }
+        .recovery-table th {
+          background: #161B22;
+          color: #8B949E;
+          text-align: left;
+          padding: 10px 14px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          border-bottom: 1px solid #21262D;
+        }
+        .recovery-table td {
+          padding: 10px 14px;
+          border-bottom: 1px solid rgba(33, 38, 45, 0.6);
+          color: #C9D1D9;
+        }
+        .recovery-table tr:hover td {
+          background: rgba(22, 27, 34, 0.6);
+        }
+        .rec-env {
+          font-weight: 700;
+          color: #00F0FF;
+        }
+        .rec-date {
+          color: #8B949E;
+        }
+        .rec-mttr {
+          display: inline-block;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 4px;
+        }
+        .rec-mttr.fast {
+          color: #00FF9D;
+          background: rgba(0, 255, 157, 0.12);
+          border: 1px solid rgba(0, 255, 157, 0.25);
+        }
+        .rec-mttr.mid {
+          color: #38BDF8;
+          background: rgba(56, 189, 248, 0.12);
+          border: 1px solid rgba(56, 189, 248, 0.25);
+        }
+        .rec-mttr.slow {
+          color: #F59E0B;
+          background: rgba(245, 158, 11, 0.12);
+          border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+        .rec-author {
+          color: #E6EDF3;
+          font-weight: 600;
+        }
+        .rec-links {
+          display: flex;
+          justify-content: flex-end;
+          gap: 6px;
+        }
+        .rec-link {
+          font-size: 10px;
+          padding: 2px 7px;
+          border-radius: 4px;
+          text-decoration: none;
+          font-weight: 600;
+          transition: all 0.15s;
+        }
+        .rec-link.fail {
+          background: rgba(255, 51, 102, 0.12);
+          color: #FF3366;
+          border: 1px solid rgba(255, 51, 102, 0.3);
+        }
+        .rec-link.fail:hover {
+          background: rgba(255, 51, 102, 0.25);
+          box-shadow: 0 0 8px rgba(255, 51, 102, 0.3);
+        }
+        .rec-link.ok {
+          background: rgba(0, 255, 157, 0.12);
+          color: #00FF9D;
+          border: 1px solid rgba(0, 255, 157, 0.3);
+        }
+        .rec-link.ok:hover {
+          background: rgba(0, 255, 157, 0.25);
+          box-shadow: 0 0 8px rgba(0, 255, 157, 0.3);
+        }
+        .rec-link-none {
+          color: #484F58;
         }
 
         .footer-note {
