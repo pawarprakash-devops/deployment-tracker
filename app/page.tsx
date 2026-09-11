@@ -118,11 +118,18 @@ function getClusterInfo(envName: string): { region: string; clusterShort: string
 const KNOWN_USERS: Record<string, { github: string; name: string; initials: string }> = {
   'pawarprakash-devops': { github: 'pawarprakash-devops', name: 'Prakash Pawar', initials: 'PP' },
   'Prakash Pawar': { github: 'pawarprakash-devops', name: 'Prakash Pawar', initials: 'PP' },
+  'Prajwal-2605': { github: 'Prajwal-2605', name: 'Prajwal Bonde', initials: 'PB' },
+  'prajwalbonde001': { github: 'prajwalbonde001', name: 'Prajwal Bonde', initials: 'PB' },
+  'vaibhavginnalwar': { github: 'vaibhavginnalwar', name: 'Vaibhav Ginnalwar', initials: 'VG' },
+  'Prashantl1901': { github: 'Prashantl1901', name: 'Prashant Lokhande', initials: 'PL' },
+  'dev-prafulk': { github: 'dev-prafulk', name: 'Praful K', initials: 'PK' },
+  'krishna-vidai': { github: 'krishna-vidai', name: 'Krishna', initials: 'KV' },
+  'saranya13-tech': { github: 'saranya13-tech', name: 'Saranya', initials: 'ST' },
+  'ChetanPawarVidaiSolutions': { github: 'ChetanPawarVidaiSolutions', name: 'Chetan Pawar', initials: 'CP' },
+  'TejasSaxenaVD': { github: 'TejasSaxenaVD', name: 'Tejas Saxena', initials: 'TS' },
   'Sonali Mathur': { github: 'sonalimathur', name: 'Sonali Mathur', initials: 'SM' },
   'sonalimathur': { github: 'sonalimathur', name: 'Sonali Mathur', initials: 'SM' },
   'kuldeeplodha': { github: 'kuldeeplodha', name: 'Kuldeep Lodha', initials: 'KL' },
-  'saranya13-tech': { github: 'saranya13-tech', name: 'Saranya Tech', initials: 'ST' },
-  'dev-prafulk': { github: 'dev-prafulk', name: 'Praful K', initials: 'PK' },
   'GitHub Actions': { github: 'github-actions[bot]', name: 'GitHub Actions', initials: 'GA' },
   'system': { github: '', name: 'System', initials: 'SY' }
 };
@@ -133,9 +140,16 @@ function getAuthorAvatar(userStr?: string | null) {
   const meta = KNOWN_USERS[clean] || KNOWN_USERS[userStr];
   const ghHandle = meta ? meta.github : (/^[a-zA-Z0-9-_]+$/.test(clean) ? clean : null);
   const displayName = meta ? meta.name : clean;
-  const initials = meta
-    ? meta.initials
-    : clean.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || clean.slice(0, 2).toUpperCase();
+
+  let initials = meta?.initials;
+  if (!initials) {
+    const parts = clean.split(/[-_\s.]+/).filter(Boolean);
+    if (parts.length >= 2) {
+      initials = (parts[0][0] + parts[1][0]).toUpperCase();
+    } else {
+      initials = clean.slice(0, 2).toUpperCase();
+    }
+  }
 
   const avatarUrl = ghHandle && !ghHandle.includes('[bot]') ? `https://github.com/${ghHandle}.png?size=48` : null;
 
@@ -147,13 +161,24 @@ function getAuthorAvatar(userStr?: string | null) {
   };
 }
 
-function UserAvatarBadge({ user, size = 18 }: { user?: string | null; size?: number }) {
+function SingleUserAvatarBadge({
+  user,
+  size = 18,
+  showText = true
+}: {
+  user?: string | null;
+  size?: number;
+  showText?: boolean;
+}) {
   const [imgError, setImgError] = useState(false);
   const meta = getAuthorAvatar(user);
   if (!meta) return <span style={{ color: 'var(--faint)' }}>—</span>;
 
   return (
-    <span className="user-avatar-badge" title={`@${meta.handle} (${meta.displayName})`}>
+    <span
+      className="user-avatar-badge"
+      title={`@${meta.handle}${meta.displayName !== meta.handle ? ` (${meta.displayName})` : ''}`}
+    >
       {meta.avatarUrl && !imgError ? (
         <img
           src={meta.avatarUrl}
@@ -170,8 +195,51 @@ function UserAvatarBadge({ user, size = 18 }: { user?: string | null; size?: num
           {meta.initials}
         </span>
       )}
-      <span className="user-avatar-text">{meta.displayName}</span>
+      {showText && <span className="user-avatar-text">{meta.displayName}</span>}
     </span>
+  );
+}
+
+function UserAvatarBadge({ user, size = 18 }: { user?: string | null; size?: number }) {
+  if (!user || user === '—') return <span style={{ color: 'var(--faint)' }}>—</span>;
+
+  const rawList = user.split(',').map(u => u.trim()).filter(Boolean);
+  if (rawList.length === 0) return <span style={{ color: 'var(--faint)' }}>—</span>;
+
+  if (rawList.length === 1) {
+    return <SingleUserAvatarBadge user={rawList[0]} size={size} showText={true} />;
+  }
+
+  const maxVisible = 3;
+  const visible = rawList.slice(0, maxVisible);
+  const remaining = rawList.length - maxVisible;
+  const allNames = rawList.map(u => {
+    const meta = getAuthorAvatar(u);
+    return meta ? `@${meta.handle} (${meta.displayName})` : `@${u}`;
+  }).join(', ');
+
+  return (
+    <div className="user-avatar-group" title={`Contributors (${rawList.length}):\n${allNames}`}>
+      <div className="avatar-stack">
+        {visible.map((u, i) => (
+          <div key={i} className="avatar-stack-item" style={{ zIndex: maxVisible - i }}>
+            <SingleUserAvatarBadge user={u} size={size} showText={false} />
+          </div>
+        ))}
+        {remaining > 0 && (
+          <span
+            className="avatar-stack-more"
+            style={{ width: size, height: size, fontSize: Math.max(8, Math.floor(size * 0.42)) }}
+            title={`${remaining} more: ${rawList.slice(maxVisible).join(', ')}`}
+          >
+            +{remaining}
+          </span>
+        )}
+      </div>
+      <span className="user-group-text">
+        {rawList.length} authors
+      </span>
+    </div>
   );
 }
 
@@ -258,23 +326,140 @@ function getQANextWindow(): {
   };
 }
 
+interface ExtractedPR {
+  num: string;
+  type: 'FE' | 'BE' | 'PR';
+  repo: string;
+  url: string;
+  label: string;
+}
+
+function extractAllPRs(notes?: string | null, link?: string | null): ExtractedPR[] {
+  const prs: ExtractedPR[] = [];
+  const seen = new Set<string>();
+
+  const textToScan = `${notes || ''} ${link || ''}`;
+  if (!textToScan.trim()) return [];
+
+  const regex = /(?:(FE|BE)\s*#\s*|PR\s*#?\s*|#\s*)(\d{3,7})/gi;
+  let match: RegExpExecArray | null;
+
+  const isFENote = /frontend/i.test(textToScan) && !/backend/i.test(textToScan);
+  const isBENote = /backend/i.test(textToScan) && !/frontend/i.test(textToScan);
+
+  while ((match = regex.exec(textToScan)) !== null) {
+    const prefix = match[1]?.toUpperCase();
+    const num = match[2];
+    const key = `${prefix || 'GEN'}-${num}`;
+
+    if (!seen.has(key)) {
+      seen.add(key);
+
+      let type: 'FE' | 'BE' | 'PR' = 'PR';
+      let repo = 'vidaisolutions/vidai-react';
+
+      if (prefix === 'FE') {
+        type = 'FE';
+        repo = 'vidaisolutions/vidai-react';
+      } else if (prefix === 'BE') {
+        type = 'BE';
+        repo = 'vidaisolutions/vidai-backend';
+      } else if (isBENote) {
+        type = 'BE';
+        repo = 'vidaisolutions/vidai-backend';
+      } else if (isFENote) {
+        type = 'FE';
+        repo = 'vidaisolutions/vidai-react';
+      }
+
+      prs.push({
+        num,
+        type,
+        repo,
+        url: `https://github.com/${repo}/pull/${num}`,
+        label: prefix ? `${prefix}#${num}` : `PR #${num}`
+      });
+    }
+  }
+
+  return prs;
+}
+
+function PRBadgeList({ prs }: { prs: ExtractedPR[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!prs || prs.length === 0) return null;
+
+  const maxInitial = 3;
+  const showAll = expanded || prs.length <= maxInitial;
+  const visible = showAll ? prs : prs.slice(0, maxInitial);
+  const remaining = prs.length - maxInitial;
+
+  return (
+    <div className="pr-links-container">
+      {visible.map((pr, idx) => {
+        const typeClass = pr.type === 'FE' ? 'pr-fe' : (pr.type === 'BE' ? 'pr-be' : 'pr-generic');
+        return (
+          <a
+            key={idx}
+            href={pr.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`pr-deep-link ${typeClass}`}
+            title={`Direct GitHub PR: ${pr.repo} #${pr.num}`}
+          >
+            🔀 {pr.label}
+          </a>
+        );
+      })}
+      {!showAll && remaining > 0 && (
+        <button
+          type="button"
+          className="pr-more-badge"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(true);
+          }}
+          title={`Click to show all ${prs.length} PRs`}
+        >
+          +{remaining} more
+        </button>
+      )}
+      {expanded && prs.length > maxInitial && (
+        <button
+          type="button"
+          className="pr-more-badge"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+          title="Show fewer PRs"
+        >
+          ▲ Less
+        </button>
+      )}
+    </div>
+  );
+}
+
 function renderNoteWithLinks(note: string) {
   if (!note) return null;
-  const parts = note.split(/(PR\s*#?\d+|#\d{3,7})/i);
+  const parts = note.split(/(FE#\d+|BE#\d+|PR\s*#?\d+|#\d{3,7})/gi);
   return parts.map((part, i) => {
-    const prMatch = part.match(/(?:PR\s*#?|#)(\d+)/i);
-    if (prMatch) {
-      const prNum = prMatch[1];
-      const isFE = /frontend/i.test(note);
+    const match = part.match(/(?:(FE|BE)\s*#\s*|PR\s*#?\s*|#\s*)(\d+)/i);
+    if (match) {
+      const prefix = match[1]?.toUpperCase();
+      const num = match[2];
+      const isFE = prefix === 'FE' || (/frontend/i.test(note) && !/backend/i.test(note));
       const repo = isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-backend';
+      const colorClass = prefix === 'FE' ? 'inline-pr-fe' : (prefix === 'BE' ? 'inline-pr-be' : 'inline-pr-link');
       return (
         <a
           key={i}
-          href={`https://github.com/${repo}/pull/${prNum}`}
+          href={`https://github.com/${repo}/pull/${num}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-pr-link"
-          title={`View Pull Request #${prNum} on GitHub`}
+          className={`inline-pr-link ${colorClass}`}
+          title={`View ${repo} Pull Request #${num} on GitHub`}
         >
           {part}
         </a>
@@ -641,25 +826,13 @@ export default function Home() {
       }
     }
 
-    let prUrl: string | null = null;
-    let prText: string | null = null;
-    if (notes) {
-      const prMatch = notes.match(/(?:PR\s*#?|#)(\d{3,7})/i);
-      if (prMatch) {
-        const prNum = prMatch[1];
-        const isFE = /frontend/i.test(notes);
-        const repo = isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-backend';
-        prUrl = `https://github.com/${repo}/pull/${prNum}`;
-        prText = `PR #${prNum}`;
-      }
-    }
+    const prs = extractAllPRs(notes, link);
 
     return {
       text,
       fullText,
       url,
-      prUrl,
-      prText
+      prs
     };
   };
 
@@ -1317,10 +1490,8 @@ export default function Home() {
                               🔗 {ticketInfo.text}
                             </a>
                           )}
-                          {ticketInfo?.prUrl && (
-                            <a href={ticketInfo.prUrl} target="_blank" rel="noopener noreferrer" className="pr-deep-link" title={`Direct GitHub PR: ${ticketInfo.prText}`}>
-                              🔀 {ticketInfo.prText}
-                            </a>
+                          {ticketInfo?.prs && ticketInfo.prs.length > 0 && (
+                            <PRBadgeList prs={ticketInfo.prs} />
                           )}
                         </div>
                         {d.notes && <div className="note-text">{renderNoteWithLinks(d.notes)}</div>}
@@ -3001,7 +3172,7 @@ export default function Home() {
           font-weight: 600;
         }
 
-        /* User Avatar Badges (Task E) */
+        /* User Avatar Badges & Stacks (Task E) */
         .user-avatar-badge {
           display: inline-flex;
           align-items: center;
@@ -3035,18 +3206,68 @@ export default function Home() {
           max-width: 140px;
         }
 
+        .user-avatar-group {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          cursor: default;
+        }
+        .avatar-stack {
+          display: inline-flex;
+          align-items: center;
+        }
+        .avatar-stack-item {
+          display: inline-flex;
+          margin-left: -7px;
+          position: relative;
+          transition: transform 0.15s ease;
+        }
+        .avatar-stack-item:first-child {
+          margin-left: 0;
+        }
+        .avatar-stack-item:hover {
+          transform: translateY(-2px) scale(1.18);
+          z-index: 25 !important;
+        }
+        .avatar-stack-more {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.14);
+          color: var(--text);
+          font-family: 'JetBrains Mono', monospace;
+          font-weight: 700;
+          border: 1.5px solid var(--panel);
+          margin-left: -7px;
+          flex-shrink: 0;
+          z-index: 0;
+        }
+        .user-group-text {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          color: var(--muted);
+          white-space: nowrap;
+        }
+
         /* Ticket & PR Links (Task E) */
         .ticket-link-cluster {
           display: flex;
+          flex-direction: column;
+          gap: 4px;
+          align-items: flex-start;
+        }
+        .pr-links-container {
+          display: flex;
           flex-wrap: wrap;
-          gap: 5px;
+          gap: 4px;
           align-items: center;
         }
         .pr-deep-link {
           color: #C084FC;
           text-decoration: none;
           font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 700;
           display: inline-flex;
           align-items: center;
@@ -3064,14 +3285,68 @@ export default function Home() {
           color: #F3E8FF;
           text-decoration: none;
         }
+        .pr-deep-link.pr-fe {
+          color: #38BDF8;
+          background: rgba(56, 189, 248, 0.1);
+          border: 1px solid rgba(56, 189, 248, 0.32);
+        }
+        .pr-deep-link.pr-fe:hover {
+          background: rgba(56, 189, 248, 0.22);
+          border-color: rgba(56, 189, 248, 0.6);
+          box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
+          color: #E0F2FE;
+        }
+        .pr-deep-link.pr-be {
+          color: #C084FC;
+          background: rgba(192, 132, 252, 0.1);
+          border: 1px solid rgba(192, 132, 252, 0.32);
+        }
+        .pr-deep-link.pr-be:hover {
+          background: rgba(192, 132, 252, 0.22);
+          border-color: rgba(192, 132, 252, 0.6);
+          box-shadow: 0 0 8px rgba(192, 132, 252, 0.35);
+          color: #F3E8FF;
+        }
+        .pr-more-badge {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--muted);
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          border-radius: 4px;
+          padding: 2px 6px;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .pr-more-badge:hover {
+          background: rgba(255, 255, 255, 0.18);
+          color: var(--text);
+          border-color: rgba(255, 255, 255, 0.3);
+        }
         .inline-pr-link {
           color: #C084FC;
           font-weight: 700;
           text-decoration: underline;
           text-underline-offset: 2px;
           margin: 0 2px;
+          transition: all 0.15s;
         }
         .inline-pr-link:hover {
+          color: #E9D5FF;
+          text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
+        }
+        .inline-pr-fe {
+          color: #38BDF8;
+        }
+        .inline-pr-fe:hover {
+          color: #7DD3FC;
+          text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+        }
+        .inline-pr-be {
+          color: #C084FC;
+        }
+        .inline-pr-be:hover {
           color: #E9D5FF;
           text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
         }
