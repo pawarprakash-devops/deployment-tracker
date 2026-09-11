@@ -35,6 +35,7 @@ const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; ty
   'Preview': { region: 'ap-south-1', clusterShort: 'preview-99999', type: 'Fargate' },
   'QA': { region: 'ap-south-1', clusterShort: 'qa-aps-ecs', type: 'ECS' },
   'Stage': { region: 'ap-south-1', clusterShort: 'stage-aps-ecs', type: 'ECS' },
+  'Stage EUW2': { region: 'eu-west-2', clusterShort: 'staging-euw2', type: 'ECS' },
   'Pre-Prod': { region: 'ap-south-1', clusterShort: 'pre-prod-ecs', type: 'ECS' },
   'Pre-Prod (India)': { region: 'ap-south-1', clusterShort: 'pre-prod-ecs', type: 'ECS' },
   'Pre-Prod USW': { region: 'us-west-2', clusterShort: 'pre-prod-usw', type: 'ECS' },

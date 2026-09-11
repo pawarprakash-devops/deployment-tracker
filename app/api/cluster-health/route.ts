@@ -43,6 +43,12 @@ const PROBE_TARGETS: ClusterTarget[] = [
     type: 'backend',
   },
   {
+    name: 'Stage EUW2 Backend API',
+    env: 'Stage EUW2',
+    url: 'https://staging-euw2-api.vidaisolutions.com/api/',
+    type: 'backend',
+  },
+  {
     name: 'Pre-Prod India Backend API',
     env: 'Pre-Prod',
     url: 'https://pre-api.vidaisolutions.com/api/',
