@@ -90,6 +90,7 @@ const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; ty
   'QA': { region: 'ap-south-1', clusterShort: 'qa-aps-ecs', type: 'ECS' },
   'Stage': { region: 'ap-south-1', clusterShort: 'stage-aps-ecs', type: 'ECS' },
   'Stage EUW2': { region: 'eu-west-2', clusterShort: 'staging-euw2', type: 'ECS' },
+  'Stage USE1': { region: 'us-east-1', clusterShort: 'staging-use1', type: 'ECS' },
   'Pre-Prod': { region: 'ap-south-1', clusterShort: 'pre-prod-ecs', type: 'ECS' },
   'Pre-Prod (India)': { region: 'ap-south-1', clusterShort: 'pre-prod-ecs', type: 'ECS' },
   'Pre-Prod USW': { region: 'us-west-2', clusterShort: 'pre-prod-usw', type: 'ECS' },
@@ -99,6 +100,189 @@ const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; ty
   'Production': { region: 'ap-south-1', clusterShort: 'vidai-prod', type: 'PROD' },
   'LMS': { region: 'ap-south-1', clusterShort: 'lms-aps-ecs', type: 'ECS' },
 };
+
+function getClusterInfo(envName: string): { region: string; clusterShort: string; type: string } {
+  if (ENV_CLUSTER_MAP[envName]) return ENV_CLUSTER_MAP[envName];
+  const lower = envName.toLowerCase();
+  let region = 'ap-south-1';
+  if (/euw2|eu-west-2|london/.test(lower)) region = 'eu-west-2';
+  else if (/usw2|us-west-2|oregon/.test(lower)) region = 'us-west-2';
+  else if (/use1|us-east-1|virginia/.test(lower)) region = 'us-east-1';
+  else if (/euc1|eu-central-1|frankfurt/.test(lower)) region = 'eu-central-1';
+
+  const type = /prod/i.test(lower) && !/pre-prod|preprod/i.test(lower) ? 'PROD' : 'ECS';
+  const clusterShort = envName.toLowerCase().replace(/\s+/g, '-');
+  return { region, clusterShort, type };
+}
+
+const KNOWN_USERS: Record<string, { github: string; name: string; initials: string }> = {
+  'pawarprakash-devops': { github: 'pawarprakash-devops', name: 'Prakash Pawar', initials: 'PP' },
+  'Prakash Pawar': { github: 'pawarprakash-devops', name: 'Prakash Pawar', initials: 'PP' },
+  'Sonali Mathur': { github: 'sonalimathur', name: 'Sonali Mathur', initials: 'SM' },
+  'sonalimathur': { github: 'sonalimathur', name: 'Sonali Mathur', initials: 'SM' },
+  'kuldeeplodha': { github: 'kuldeeplodha', name: 'Kuldeep Lodha', initials: 'KL' },
+  'saranya13-tech': { github: 'saranya13-tech', name: 'Saranya Tech', initials: 'ST' },
+  'dev-prafulk': { github: 'dev-prafulk', name: 'Praful K', initials: 'PK' },
+  'GitHub Actions': { github: 'github-actions[bot]', name: 'GitHub Actions', initials: 'GA' },
+  'system': { github: '', name: 'System', initials: 'SY' }
+};
+
+function getAuthorAvatar(userStr?: string | null) {
+  if (!userStr || userStr === '—') return null;
+  const clean = userStr.trim().replace(/^@/, '');
+  const meta = KNOWN_USERS[clean] || KNOWN_USERS[userStr];
+  const ghHandle = meta ? meta.github : (/^[a-zA-Z0-9-_]+$/.test(clean) ? clean : null);
+  const displayName = meta ? meta.name : clean;
+  const initials = meta
+    ? meta.initials
+    : clean.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || clean.slice(0, 2).toUpperCase();
+
+  const avatarUrl = ghHandle && !ghHandle.includes('[bot]') ? `https://github.com/${ghHandle}.png?size=48` : null;
+
+  return {
+    handle: clean,
+    displayName,
+    initials,
+    avatarUrl
+  };
+}
+
+function UserAvatarBadge({ user, size = 18 }: { user?: string | null; size?: number }) {
+  const [imgError, setImgError] = useState(false);
+  const meta = getAuthorAvatar(user);
+  if (!meta) return <span style={{ color: 'var(--faint)' }}>—</span>;
+
+  return (
+    <span className="user-avatar-badge" title={`@${meta.handle} (${meta.displayName})`}>
+      {meta.avatarUrl && !imgError ? (
+        <img
+          src={meta.avatarUrl}
+          alt={meta.handle}
+          className="user-avatar-img"
+          style={{ width: size, height: size }}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <span
+          className="user-avatar-initials"
+          style={{ width: size, height: size, fontSize: Math.max(8.5, Math.floor(size * 0.45)) }}
+        >
+          {meta.initials}
+        </span>
+      )}
+      <span className="user-avatar-text">{meta.displayName}</span>
+    </span>
+  );
+}
+
+function getQANextWindow(): {
+  countdownText: string;
+  badge: string;
+  isImminent: boolean;
+  isOpen: boolean;
+  windowLabel: string;
+  windowIndex: number;
+} {
+  const now = new Date();
+  const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const istTime = new Date(utcMs + (5.5 * 3600000));
+
+  const istHours = istTime.getHours();
+  const istMinutes = istTime.getMinutes();
+  const istSeconds = istTime.getSeconds();
+  const currentTotalSeconds = istHours * 3600 + istMinutes * 60 + istSeconds;
+
+  const W1 = 13 * 3600 + 30 * 60; // 13:30:00 IST (1:30 PM)
+  const W2 = 17 * 3600 + 30 * 60; // 17:30:00 IST (5:30 PM)
+  const WINDOW_DURATION = 15 * 60; // 15 mins
+
+  if (currentTotalSeconds >= W1 && currentTotalSeconds < W1 + WINDOW_DURATION) {
+    const rem = (W1 + WINDOW_DURATION) - currentTotalSeconds;
+    return {
+      countdownText: `${Math.floor(rem / 60)}m ${rem % 60}s LEFT`,
+      badge: 'WINDOW 1 ACTIVE',
+      isImminent: false,
+      isOpen: true,
+      windowLabel: '01:30 PM IST',
+      windowIndex: 0
+    };
+  }
+
+  if (currentTotalSeconds >= W2 && currentTotalSeconds < W2 + WINDOW_DURATION) {
+    const rem = (W2 + WINDOW_DURATION) - currentTotalSeconds;
+    return {
+      countdownText: `${Math.floor(rem / 60)}m ${rem % 60}s LEFT`,
+      badge: 'WINDOW 2 ACTIVE',
+      isImminent: false,
+      isOpen: true,
+      windowLabel: '05:30 PM IST',
+      windowIndex: 1
+    };
+  }
+
+  let targetSeconds: number;
+  let windowIndex: number;
+  let windowLabel: string;
+
+  if (currentTotalSeconds < W1) {
+    targetSeconds = W1;
+    windowIndex = 0;
+    windowLabel: '01:30 PM IST';
+    windowLabel = '01:30 PM IST';
+  } else if (currentTotalSeconds < W2) {
+    targetSeconds = W2;
+    windowIndex = 1;
+    windowLabel = '05:30 PM IST';
+  } else {
+    targetSeconds = 24 * 3600 + W1;
+    windowIndex = 0;
+    windowLabel = 'Tomorrow 01:30 PM IST';
+  }
+
+  const diffSec = targetSeconds - currentTotalSeconds;
+  const hours = Math.floor(diffSec / 3600);
+  const mins = Math.floor((diffSec % 3600) / 60);
+  const secs = diffSec % 60;
+
+  const isImminent = diffSec <= 1800; // within 30m
+  const countdownText = hours > 0 ? `${hours}h ${mins}m ${secs}s` : `${mins}m ${secs}s`;
+  const badge = isImminent ? 'CLOSING IN' : windowLabel;
+
+  return {
+    countdownText,
+    badge,
+    isImminent,
+    isOpen: false,
+    windowLabel,
+    windowIndex
+  };
+}
+
+function renderNoteWithLinks(note: string) {
+  if (!note) return null;
+  const parts = note.split(/(PR\s*#?\d+|#\d{3,7})/i);
+  return parts.map((part, i) => {
+    const prMatch = part.match(/(?:PR\s*#?|#)(\d+)/i);
+    if (prMatch) {
+      const prNum = prMatch[1];
+      const isFE = /frontend/i.test(note);
+      const repo = isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-backend';
+      return (
+        <a
+          key={i}
+          href={`https://github.com/${repo}/pull/${prNum}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-pr-link"
+          title={`View Pull Request #${prNum} on GitHub`}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
 
 export default function Home() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -113,6 +297,16 @@ export default function Home() {
   const [clusterHealth, setClusterHealth] = useState<Record<string, ClusterHealthResult>>({});
   const [isProbing, setIsProbing] = useState(false);
   const [lastProbed, setLastProbed] = useState<Date | null>(null);
+  
+  // QA Scheduled Release Cadence (1:30 PM & 5:30 PM IST)
+  const [qaNextWindow, setQaNextWindow] = useState(getQANextWindow());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setQaNextWindow(getQANextWindow());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
   
   // Comparison
   const [compareIds, setCompareIds] = useState<string[]>([]);
@@ -235,12 +429,22 @@ export default function Home() {
       ]);
       if (deploymentsRes.ok) {
         const data = await deploymentsRes.json();
-        setDeployments(Array.isArray(data) ? data : []);
+        const rawList = Array.isArray(data) ? data : [];
+        const normalized = rawList.map((d: any) => {
+          let env = d.environment;
+          if (env === 'Other' && d.notes) {
+            if (/stage-euw2|staging-euw2|euw2/i.test(d.notes)) env = 'Stage EUW2';
+            else if (/qa-aps|qa/i.test(d.notes) && !/prod/i.test(d.notes)) env = 'QA';
+            else if (/stage/i.test(d.notes)) env = 'Stage';
+          }
+          return { ...d, environment: env };
+        });
+        setDeployments(normalized);
       }
       if (environmentsRes.ok) {
         const envData = await environmentsRes.json();
         if (Array.isArray(envData)) {
-          setEnvironments(envData.map(e => {
+          const envList = envData.map(e => {
             const isProd = e.is_production || e.name.toLowerCase().startsWith('production');
             return {
               name: e.name,
@@ -249,7 +453,17 @@ export default function Home() {
               displayOrder: e.display_order ?? PROMOTION_ORDER[e.name] ?? 99,
               description: ''
             };
-          }));
+          });
+          if (!envList.some(e => e.name === 'Stage EUW2')) {
+            envList.push({
+              name: 'Stage EUW2',
+              color: '#5B8DEF',
+              isProd: false,
+              displayOrder: 3.1,
+              description: 'Stage London (eu-west-2)'
+            });
+          }
+          setEnvironments(envList);
         }
       }
       setLastUpdated(new Date());
@@ -390,26 +604,63 @@ export default function Home() {
     return days;
   };
 
-  // Ticket link formatter
-  const formatTicketLink = (link: string) => {
-    if (!link) return null;
+  // Ticket & PR link formatter
+  const formatTicketLink = (link?: string | null, notes?: string | null) => {
+    if (!link && !notes) return null;
     
-    const ghMatch = link.match(/github\.com\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)/);
-    if (ghMatch) {
-      return { text: `#${ghMatch[3].slice(-6)}`, fullText: `${ghMatch[1]}/${ghMatch[2]} Run #...${ghMatch[3].slice(-6)}`, url: link };
+    let text = '';
+    let fullText = '';
+    let url = link || '';
+
+    if (link) {
+      const ghMatch = link.match(/github\.com\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)/);
+      if (ghMatch) {
+        text = `#${ghMatch[3].slice(-6)}`;
+        fullText = `${ghMatch[1]}/${ghMatch[2]} Run #${ghMatch[3]}`;
+      } else {
+        const ghPrMatch = link.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+        if (ghPrMatch) {
+          text = `PR #${ghPrMatch[3]}`;
+          fullText = `${ghPrMatch[1]}/${ghPrMatch[2]} PR #${ghPrMatch[3]}`;
+        } else {
+          const jiraMatch = link.match(/((?:[A-Z]+-\d+))/);
+          if (jiraMatch) {
+            text = jiraMatch[1];
+            fullText = jiraMatch[1];
+          } else {
+            try {
+              const u = new URL(link);
+              text = u.pathname.split('/').pop() || u.hostname;
+              fullText = u.hostname + u.pathname;
+            } catch {
+              text = link.length > 25 ? link.slice(0, 25) + '...' : link;
+              fullText = link;
+            }
+          }
+        }
+      }
     }
-    
-    const jiraMatch = link.match(/((?:[A-Z]+-\d+))/);
-    if (jiraMatch) {
-      return { text: jiraMatch[1], fullText: jiraMatch[1], url: link };
+
+    let prUrl: string | null = null;
+    let prText: string | null = null;
+    if (notes) {
+      const prMatch = notes.match(/(?:PR\s*#?|#)(\d{3,7})/i);
+      if (prMatch) {
+        const prNum = prMatch[1];
+        const isFE = /frontend/i.test(notes);
+        const repo = isFE ? 'vidaisolutions/vidai-react' : 'vidaisolutions/vidai-backend';
+        prUrl = `https://github.com/${repo}/pull/${prNum}`;
+        prText = `PR #${prNum}`;
+      }
     }
-    
-    try {
-      const url = new URL(link);
-      return { text: url.pathname.split('/').pop() || url.hostname, fullText: url.hostname + url.pathname, url: link };
-    } catch {
-      return { text: link.length > 30 ? link.slice(0, 30) + '...' : link, fullText: link, url: link };
-    }
+
+    return {
+      text,
+      fullText,
+      url,
+      prUrl,
+      prText
+    };
   };
 
   // Compare deployments
@@ -769,7 +1020,7 @@ export default function Home() {
             const branches = latestBranchesForEnv(env.name);
             const health = getEnvHealth(env.name);
             const lastTimes = getLastDeployTimes(env.name);
-            const clusterInfo = ENV_CLUSTER_MAP[env.name];
+            const clusterInfo = getClusterInfo(env.name);
             const probe = clusterHealth[env.name];
 
             return (
@@ -814,6 +1065,37 @@ export default function Home() {
                   </div>
                 )}
 
+                {/* QA Scheduled Release Cadence & Gate (Task B) */}
+                {env.name === 'QA' && (
+                  <div className={`qa-release-cadence-box ${qaNextWindow.isOpen ? 'open' : qaNextWindow.isImminent ? 'imminent' : ''}`}>
+                    <div className="cadence-top">
+                      <div className="cadence-title-row">
+                        <span className={`cadence-pulse-dot ${qaNextWindow.isOpen ? 'green' : qaNextWindow.isImminent ? 'yellow' : 'cyan'}`} />
+                        <span className="cadence-badge-title">RELEASE CADENCE</span>
+                      </div>
+                      <span className={`cadence-pill ${qaNextWindow.isOpen ? 'open' : qaNextWindow.isImminent ? 'imminent' : ''}`}>
+                        {qaNextWindow.badge}
+                      </span>
+                    </div>
+
+                    <div className="cadence-time-row">
+                      <div className="cadence-timer-val">{qaNextWindow.countdownText}</div>
+                      <div className="cadence-rule-pill">GATE: MANDATORY APPROVAL</div>
+                    </div>
+
+                    <div className="cadence-footer-row">
+                      <div className="cadence-slots">
+                        <span className={`cadence-slot ${qaNextWindow.windowIndex === 0 ? 'active' : ''}`}>1:30 PM IST</span>
+                        <span className="slot-dot">•</span>
+                        <span className={`cadence-slot ${qaNextWindow.windowIndex === 1 ? 'active' : ''}`}>5:30 PM IST</span>
+                      </div>
+                      <span className="cadence-lead-tag" title="DevOps approval required from Prakash Pawar">
+                        @pawarprakash-devops
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {latest ? (
                   <>
                     {/* Status & Version Strip */}
@@ -854,7 +1136,7 @@ export default function Home() {
                     {/* Footer */}
                     <div className="card-footer">
                       <span className="footer-deployer" title={`Deployed by @${latest.deployed_by || latest.requested_by || 'system'}`}>
-                        👤 @{latest.deployed_by || latest.requested_by || 'system'}
+                        <UserAvatarBadge user={latest.requested_by || latest.deployed_by || 'system'} size={18} />
                       </span>
                       {(lastTimes.feAgo || lastTimes.beAgo) && (
                         <span className="footer-sync" title="Last successful deployment per component">
@@ -973,7 +1255,7 @@ export default function Home() {
                 </tr>
               ) : (
                 filteredDeployments.map((d) => {
-                  const ticketInfo = d.ticket_link ? formatTicketLink(d.ticket_link) : null;
+                  const ticketInfo = formatTicketLink(d.ticket_link, d.notes);
                   return (
                     <tr key={d.id} className={compareIds.includes(d.id) ? 'compare-selected' : ''}>
                       <td>
@@ -1019,18 +1301,29 @@ export default function Home() {
                           <div style={{ color: 'var(--faint)', fontSize: '11px' }}>{formatDuration(d.duration_seconds)}</div>
                         )}
                       </td>
-                      <td className="who">{d.requested_by || '—'}</td>
-                      <td className="who">{d.approved_by || '—'}</td>
-                      <td className="who">{d.tested_by || '—'}</td>
+                      <td className="who">
+                        <UserAvatarBadge user={d.requested_by} size={18} />
+                      </td>
+                      <td className="who">
+                        <UserAvatarBadge user={d.approved_by} size={18} />
+                      </td>
+                      <td className="who">
+                        <UserAvatarBadge user={d.tested_by} size={18} />
+                      </td>
                       <td className="notes">
-                        {ticketInfo ? (
-                          <a href={ticketInfo.url} target="_blank" rel="noopener noreferrer" className="ticket-link" title={ticketInfo.fullText}>
-                            🔗 {ticketInfo.text}
-                          </a>
-                        ) : d.ticket_link ? (
-                          <div className="mono">{d.ticket_link}</div>
-                        ) : null}
-                        {d.notes && <div className="note-text">{d.notes}</div>}
+                        <div className="ticket-link-cluster">
+                          {ticketInfo?.url && (
+                            <a href={ticketInfo.url} target="_blank" rel="noopener noreferrer" className="ticket-link" title={ticketInfo.fullText}>
+                              🔗 {ticketInfo.text}
+                            </a>
+                          )}
+                          {ticketInfo?.prUrl && (
+                            <a href={ticketInfo.prUrl} target="_blank" rel="noopener noreferrer" className="pr-deep-link" title={`Direct GitHub PR: ${ticketInfo.prText}`}>
+                              🔀 {ticketInfo.prText}
+                            </a>
+                          )}
+                        </div>
+                        {d.notes && <div className="note-text">{renderNoteWithLinks(d.notes)}</div>}
                       </td>
                       {isAdmin && (
                         <td>
@@ -2593,6 +2886,195 @@ export default function Home() {
           text-decoration: none;
         }
         .note-text { margin-top: 4px; font-size: 11.5px; color: var(--faint); }
+
+        /* QA Scheduled Release Cadence Box (Task B) */
+        .qa-release-cadence-box {
+          background: rgba(0, 240, 255, 0.04);
+          border: 1px solid rgba(0, 240, 255, 0.25);
+          border-radius: 8px;
+          padding: 10px 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          font-family: 'JetBrains Mono', monospace;
+          transition: all 0.2s ease;
+        }
+        .qa-release-cadence-box.imminent {
+          background: rgba(245, 158, 11, 0.08);
+          border-color: rgba(245, 158, 11, 0.4);
+          box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+        }
+        .qa-release-cadence-box.open {
+          background: rgba(0, 255, 157, 0.08);
+          border-color: rgba(0, 255, 157, 0.4);
+          box-shadow: 0 0 16px rgba(0, 255, 157, 0.2);
+        }
+        .cadence-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .cadence-title-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .cadence-pulse-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+        }
+        .cadence-pulse-dot.cyan { background: #00F0FF; box-shadow: 0 0 6px #00F0FF; }
+        .cadence-pulse-dot.yellow { background: #F59E0B; box-shadow: 0 0 8px #F59E0B; animation: pulse 1.2s infinite; }
+        .cadence-pulse-dot.green { background: #00FF9D; box-shadow: 0 0 10px #00FF9D; animation: pulse 1s infinite; }
+        .cadence-badge-title {
+          font-size: 9.5px;
+          font-weight: 700;
+          color: var(--muted);
+          letter-spacing: 0.05em;
+        }
+        .cadence-pill {
+          font-size: 9px;
+          font-weight: 700;
+          padding: 1px 6px;
+          border-radius: 3px;
+          background: rgba(0, 240, 255, 0.12);
+          color: #00F0FF;
+          border: 1px solid rgba(0, 240, 255, 0.3);
+        }
+        .cadence-pill.imminent {
+          background: rgba(245, 158, 11, 0.15);
+          color: #F59E0B;
+          border-color: rgba(245, 158, 11, 0.4);
+        }
+        .cadence-pill.open {
+          background: rgba(0, 255, 157, 0.15);
+          color: #00FF9D;
+          border-color: rgba(0, 255, 157, 0.4);
+        }
+        .cadence-time-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 6px;
+        }
+        .cadence-timer-val {
+          font-size: 15px;
+          font-weight: 800;
+          color: #00F0FF;
+          letter-spacing: -0.01em;
+        }
+        .qa-release-cadence-box.imminent .cadence-timer-val { color: #F59E0B; }
+        .qa-release-cadence-box.open .cadence-timer-val { color: #00FF9D; }
+        .cadence-rule-pill {
+          font-size: 8.5px;
+          font-weight: 700;
+          color: #FB7185;
+          background: rgba(244, 63, 94, 0.1);
+          border: 1px solid rgba(244, 63, 94, 0.25);
+          padding: 1px 5px;
+          border-radius: 3px;
+          letter-spacing: 0.02em;
+        }
+        .cadence-footer-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 10px;
+          padding-top: 4px;
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .cadence-slots {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          color: var(--faint);
+        }
+        .cadence-slot.active {
+          color: var(--text);
+          font-weight: 700;
+        }
+        .slot-dot { color: var(--border); font-size: 8px; }
+        .cadence-lead-tag {
+          color: var(--muted);
+          font-size: 9.5px;
+          font-weight: 600;
+        }
+
+        /* User Avatar Badges (Task E) */
+        .user-avatar-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11.5px;
+          color: var(--text);
+          vertical-align: middle;
+        }
+        .user-avatar-img {
+          border-radius: 50%;
+          object-fit: cover;
+          border: 1px solid rgba(0, 240, 255, 0.3);
+          box-shadow: 0 0 6px rgba(0, 240, 255, 0.15);
+        }
+        .user-avatar-initials {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(192, 132, 252, 0.2));
+          color: #00F0FF;
+          font-weight: 700;
+          border: 1px solid rgba(0, 240, 255, 0.3);
+          flex-shrink: 0;
+        }
+        .user-avatar-text {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 140px;
+        }
+
+        /* Ticket & PR Links (Task E) */
+        .ticket-link-cluster {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          align-items: center;
+        }
+        .pr-deep-link {
+          color: #C084FC;
+          text-decoration: none;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          font-weight: 700;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 2px 6px;
+          background: rgba(192, 132, 252, 0.1);
+          border: 1px solid rgba(192, 132, 252, 0.3);
+          border-radius: 4px;
+          transition: all 0.15s;
+        }
+        .pr-deep-link:hover {
+          background: rgba(192, 132, 252, 0.22);
+          border-color: rgba(192, 132, 252, 0.5);
+          box-shadow: 0 0 8px rgba(192, 132, 252, 0.3);
+          color: #F3E8FF;
+          text-decoration: none;
+        }
+        .inline-pr-link {
+          color: #C084FC;
+          font-weight: 700;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+          margin: 0 2px;
+        }
+        .inline-pr-link:hover {
+          color: #E9D5FF;
+          text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
+        }
 
         .overlay {
           display: none;

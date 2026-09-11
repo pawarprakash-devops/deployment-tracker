@@ -46,10 +46,76 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Auto-normalize environment & cluster name
+    function normalizeEnvironment(
+      rawEnv?: string,
+      noteText?: string,
+      branchName?: string,
+      feBranch?: string,
+      beBranch?: string
+    ): { name: string; isProduction: boolean } {
+      const combined = `${rawEnv || ''} ${noteText || ''} ${branchName || ''} ${feBranch || ''} ${beBranch || ''}`.toLowerCase();
+      
+      if (/staging-euw2|stage-euw2|euw2/.test(combined)) {
+        return { name: 'Stage EUW2', isProduction: false };
+      }
+      if (/staging-use1|stage-use1|use1/.test(combined)) {
+        return { name: 'Stage USE1', isProduction: false };
+      }
+      if (/preview-99999|preview/.test(combined) && !/stage|pre-prod|preprod/.test((rawEnv || '').toLowerCase())) {
+        return { name: 'Preview', isProduction: false };
+      }
+      if (/qa-aps|qa/.test(combined) && !/stage|pre-prod|preprod|prod/.test((rawEnv || '').toLowerCase())) {
+        return { name: 'QA', isProduction: false };
+      }
+      if (/pre-prod-usw|preprod-usw|preprod_usw/.test(combined)) {
+        return { name: 'Pre-Prod USW', isProduction: false };
+      }
+      if (/pre-prod|preprod/.test(combined)) {
+        return { name: 'Pre-Prod', isProduction: false };
+      }
+      if (/prod-ank|prod_ank|ankura/.test(combined)) {
+        return { name: 'Production (Ankura)', isProduction: true };
+      }
+      if (/prod-neo|prod_neo|neotia|babyjoy/.test(combined)) {
+        return { name: 'Production (Neotia/Babyjoy)', isProduction: true };
+      }
+      if (/prod-refera|refera/.test(combined)) {
+        return { name: 'Production (Refera)', isProduction: true };
+      }
+      if (/production|prod/.test(combined) && !/pre-prod|preprod/.test(combined)) {
+        return { name: 'Production', isProduction: true };
+      }
+      if (/stage|staging/.test(combined)) {
+        return { name: 'Stage', isProduction: false };
+      }
+      if (/lms/.test(combined)) {
+        return { name: 'LMS', isProduction: false };
+      }
+
+      if (rawEnv && rawEnv !== 'Other') {
+        const cleaned = rawEnv.replace(/[-_]ecs.*$/i, '').replace(/[-_]cluster$/i, '');
+        const isProd = /prod/i.test(rawEnv) && !/pre-prod|preprod/i.test(rawEnv);
+        return { name: cleaned, isProduction: isProd };
+      }
+
+      return { name: 'Other', isProduction: false };
+    }
+
+    const resolved = normalizeEnvironment(
+      environment,
+      notes,
+      branch,
+      frontend_branch,
+      backend_branch
+    );
+    const targetEnv = resolved.name;
+    const isProdEnv = resolved.isProduction;
+
     // Auto-create environment if it doesn't exist
     const envCheck = await pool.query(
       'SELECT id FROM environments WHERE name = $1',
-      [environment]
+      [targetEnv]
     );
 
     if (envCheck.rows.length === 0) {
@@ -60,10 +126,10 @@ export async function POST(request: NextRequest) {
       
       await pool.query(
         `INSERT INTO environments (name, is_production, display_order) 
-         VALUES ($1, false, $2)`,
-        [environment, nextOrder]
+         VALUES ($1, $2, $3)`,
+        [targetEnv, isProdEnv, nextOrder]
       );
-      console.log(`✅ Auto-created environment: ${environment}`);
+      console.log(`✅ Auto-created environment: ${targetEnv} (is_production: ${isProdEnv})`);
     }
 
     // Auto-calculate duration if completed_at is provided and duration_seconds is not
@@ -98,7 +164,7 @@ export async function POST(request: NextRequest) {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *`,
       [
-        environment,
+        targetEnv,
         status,
         deployment_type,
         branch,

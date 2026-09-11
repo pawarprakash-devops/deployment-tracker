@@ -65,6 +65,7 @@ const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; ty
   'QA': { region: 'ap-south-1', clusterShort: 'qa-aps-ecs', type: 'ECS' },
   'Stage': { region: 'ap-south-1', clusterShort: 'stage-aps-ecs', type: 'ECS' },
   'Stage EUW2': { region: 'eu-west-2', clusterShort: 'staging-euw2', type: 'ECS' },
+  'Stage USE1': { region: 'us-east-1', clusterShort: 'staging-use1', type: 'ECS' },
   'Pre-Prod': { region: 'ap-south-1', clusterShort: 'pre-prod-ecs', type: 'ECS' },
   'Pre-Prod (India)': { region: 'ap-south-1', clusterShort: 'pre-prod-ecs', type: 'ECS' },
   'Pre-Prod USW': { region: 'us-west-2', clusterShort: 'pre-prod-usw', type: 'ECS' },
@@ -74,6 +75,68 @@ const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; ty
   'Production': { region: 'ap-south-1', clusterShort: 'vidai-prod', type: 'PROD' },
   'LMS': { region: 'ap-south-1', clusterShort: 'lms-aps-ecs', type: 'ECS' },
 };
+
+function getClusterInfo(envName: string): { region: string; clusterShort: string; type: string } {
+  if (ENV_CLUSTER_MAP[envName]) return ENV_CLUSTER_MAP[envName];
+  const lower = envName.toLowerCase();
+  let region = 'ap-south-1';
+  if (/euw2|eu-west-2|london/.test(lower)) region = 'eu-west-2';
+  else if (/usw2|us-west-2|oregon/.test(lower)) region = 'us-west-2';
+  else if (/use1|us-east-1|virginia/.test(lower)) region = 'us-east-1';
+  else if (/euc1|eu-central-1|frankfurt/.test(lower)) region = 'eu-central-1';
+
+  const type = /prod/i.test(lower) && !/pre-prod|preprod/i.test(lower) ? 'PROD' : 'ECS';
+  const clusterShort = envName.toLowerCase().replace(/\s+/g, '-');
+  return { region, clusterShort, type };
+}
+
+const KNOWN_USERS: Record<string, { github: string; name: string; initials: string }> = {
+  'pawarprakash-devops': { github: 'pawarprakash-devops', name: 'Prakash Pawar', initials: 'PP' },
+  'Prakash Pawar': { github: 'pawarprakash-devops', name: 'Prakash Pawar', initials: 'PP' },
+  'Sonali Mathur': { github: 'sonalimathur', name: 'Sonali Mathur', initials: 'SM' },
+  'sonalimathur': { github: 'sonalimathur', name: 'Sonali Mathur', initials: 'SM' },
+  'kuldeeplodha': { github: 'kuldeeplodha', name: 'Kuldeep Lodha', initials: 'KL' },
+  'saranya13-tech': { github: 'saranya13-tech', name: 'Saranya Tech', initials: 'ST' },
+  'dev-prafulk': { github: 'dev-prafulk', name: 'Praful K', initials: 'PK' },
+  'GitHub Actions': { github: 'github-actions[bot]', name: 'GitHub Actions', initials: 'GA' },
+  'system': { github: '', name: 'System', initials: 'SY' }
+};
+
+function UserAvatar({ user, size = 20 }: { user?: string | null; size?: number }) {
+  const [hasError, setHasError] = useState(false);
+  if (!user || user === '—') return <span style={{ color: '#484F58' }}>—</span>;
+  const clean = user.trim().replace(/^@/, '');
+  const meta = KNOWN_USERS[clean] || KNOWN_USERS[user];
+  const ghHandle = meta ? meta.github : (/^[a-zA-Z0-9-_]+$/.test(clean) ? clean : null);
+  const displayName = meta ? meta.name : clean;
+  const initials = meta
+    ? meta.initials
+    : clean.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || clean.slice(0, 2).toUpperCase();
+
+  const avatarUrl = ghHandle && !ghHandle.includes('[bot]') ? `https://github.com/${ghHandle}.png?size=48` : null;
+
+  return (
+    <span className="user-avatar-wrap" title={`@${clean}`}>
+      {avatarUrl && !hasError ? (
+        <img
+          src={avatarUrl}
+          alt={clean}
+          className="user-avatar-img"
+          style={{ width: size, height: size }}
+          onError={() => setHasError(true)}
+        />
+      ) : (
+        <span
+          className="user-avatar-initials"
+          style={{ width: size, height: size, fontSize: Math.max(9, Math.floor(size * 0.45)) }}
+        >
+          {initials}
+        </span>
+      )}
+      <span className="user-avatar-name">@{meta?.name || clean}</span>
+    </span>
+  );
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -665,7 +728,7 @@ export default function AdminDashboard() {
                 const percentage = stats.totalDeployments > 0
                   ? ((count / stats.totalDeployments) * 100).toFixed(1)
                   : '0';
-                const clusterInfo = ENV_CLUSTER_MAP[env];
+                const clusterInfo = getClusterInfo(env);
                 return (
                   <div key={env} className="dist-row">
                     <div className="dist-head">
@@ -842,7 +905,7 @@ export default function AdminDashboard() {
                       <span className={`rank-tag ${isTop ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''}`}>
                         #{String(index + 1).padStart(2, '0')}
                       </span>
-                      <span className="operator-name">@{user}</span>
+                      <UserAvatar user={user} size={22} />
                     </div>
                     <div className="operator-right">
                       <span className="op-count">{count}</span>
@@ -910,7 +973,7 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td>
-                      <span className="rec-author">@{inc.recoveredAuthor || inc.failedAuthor || 'GitHub Actions'}</span>
+                      <UserAvatar user={inc.recoveredAuthor || inc.failedAuthor || 'GitHub Actions'} size={18} />
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="rec-links">
@@ -1451,6 +1514,35 @@ export default function AdminDashboard() {
           font-size: 9.5px;
           color: #484F58;
           font-weight: 700;
+        }
+
+        .user-avatar-wrap {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .user-avatar-img {
+          border-radius: 50%;
+          object-fit: cover;
+          border: 1px solid rgba(0, 240, 255, 0.3);
+          box-shadow: 0 0 6px rgba(0, 240, 255, 0.15);
+        }
+        .user-avatar-initials {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(192, 132, 252, 0.2));
+          color: #00F0FF;
+          font-weight: 700;
+          border: 1px solid rgba(0, 240, 255, 0.3);
+          flex-shrink: 0;
+        }
+        .user-avatar-name {
+          font-size: 12px;
+          color: #E6EDF3;
+          font-weight: 600;
         }
 
         /* DORA Metrics Section */
