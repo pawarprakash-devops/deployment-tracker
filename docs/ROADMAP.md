@@ -255,37 +255,38 @@ The tracker currently displays the *last known deployment status*. If an ECS con
 
 ### 3.6 Scheduled Release Windows & Approval Gate Countdown (QA 1:30 PM & 5:30 PM IST)
 
+* **Status:** ✅ **Implemented & Verified** (Live on `/` at `vidai-deployments.vercel.app`).
 * **The Problem:**
   - QA branch merges were triggering continuous ad-hoc deployments, causing testing interruptions, DB lock collisions, and untracked config drift.
   - New policy enforces **only two QA deployments daily**: **1:30 PM IST** and **5:30 PM IST**, requiring mandatory DevOps approval.
 * **The Tracker Enhancement:**
-  - **Live Countdown Timer:** Displays on the QA card (e.g., `⏱ Next QA Release in 1h 24m · 01:30 PM IST`).
-  - **Pending Release Queue:** Shows the number of PRs merged into `qa` awaiting the scheduled release batch.
-  - **Approval Gate Indicator:** Visual badge displaying whether DevOps sign-off (`pawarprakash-devops`) has been granted for the upcoming scheduled run.
+  - **Live Countdown Timer:** Displays on the QA card (e.g., `⏱ Next QA Release in 1h 24m · 01:30 PM IST` ticking live).
+  - **Window Status Badges:** Transitions dynamically through `COUNTDOWN` ➔ `CLOSING IN` (within 30m) ➔ `WINDOW ACTIVE` (during 15m deployment window).
+  - **Approval Gate Indicator:** Visual badge displaying `GATE: MANDATORY APPROVAL (@pawarprakash-devops)`.
 
 ---
 
 ### 3.7 Dynamic Cluster & Multi-Region Auto-Discovery
 
+* **Status:** ✅ **Implemented & Verified** (Live in `/api/webhook`, `app/page.tsx`, and `app/admin/page.tsx`).
 * **The Problem:**
   - Deployments to newly spun-up clusters or non-standard environments (e.g., `stage-euw2`, dynamic preview clusters) previously fell into the `Other` category because cluster names were hardcoded in static maps.
 * **The Solution:**
-  - **Pattern Resolver:** Implement regex auto-detection in `/api/webhook` to dynamically extract region and tier:
-    - `*-euw2*` ➔ `eu-west-2` (Stage EU)
-    - `*-aps*` ➔ `ap-south-1` (Mumbai)
-    - `preview-*` ➔ `ap-south-1` (Preview)
-  - **Self-Registering Environments:** Automatically insert newly encountered clusters into the `environments` database table on the first webhook event so they render with full telemetry cards immediately.
+  - **Pattern Resolver:** Regex auto-detection in `/api/webhook` dynamically extracts region and tier (`*-euw2*` ➔ `Stage EUW2`, `*-aps*` ➔ Mumbai, etc.).
+  - **Self-Registering Environments:** Automatically inserts newly encountered clusters into the `environments` database table on the first webhook event.
+  - **Frontend Dynamic Fallback:** `getClusterInfo(envName)` dynamically resolves region and cluster tags for any target environment.
 
 ---
 
 ### 3.8 PR Deep-Linking, Commit Metadata & Operator Avatars
 
+* **Status:** ✅ **Implemented & Verified** (Live across cards, history table, leaderboard, and MTTR audit trail).
 * **The Problem:**
   - Pipelines triggered by automated workflows often show `@GitHub Actions` or service tokens rather than the actual PR author.
-  - PR references in notes or commit messages (`#617930`, `PR-452`) are plain text.
+  - PR references in notes or commit messages (`#617930`, `PR-452`) were plain text.
 * **The Solution:**
-  - **Automatic PR Parsing:** Detect `#<number>` patterns in notes, branches, and commit summaries, converting them into 1-click GitHub PR links.
-  - **Author Avatar Badges:** Fetch GitHub user avatars for DevOps operators in the Leaderboard, Deployment History, and MTTR Recovery Audit Trail.
+  - **Automatic PR Parsing:** Detects `#<number>` and `PR #<number>` patterns in notes and branches, creating 1-click links directly to GitHub PRs.
+  - **Author Avatar Badges:** Displays circular user avatar thumbnails with initials fallbacks for team members (`Sonali Mathur`, `kuldeeplodha`, `pawarprakash-devops`, `saranya13-tech`, `dev-prafulk`).
 
 ---
 
@@ -314,11 +315,11 @@ PHASE 2: Active Telemetry & Observability (Completed)
 ├── [x] On-demand telemetry probing (🔄 PROBE NOW)
 └── [x] Full DORA Metrics Suite & MTTR Recovery Audit Trail on /admin
 
-PHASE 3: Release Governance & Flow Control (Next Focus)
+PHASE 3: Release Governance & Flow Control (Active)
 ├── [ ] Environment Promotion Drift Matrix (Ahead/Behind ribbon on /)
-├── [ ] QA Scheduled Release Windows countdown (1:30 PM & 5:30 PM IST)
-├── [ ] Dynamic Cluster Auto-Discovery (Resolving stage-euw2 out of 'Other')
-└── [ ] PR Deep-Linking & GitHub Operator Avatars
+├── [x] QA Scheduled Release Windows countdown (1:30 PM & 5:30 PM IST)
+├── [x] Dynamic Cluster Auto-Discovery (Resolving stage-euw2 out of 'Other')
+└── [x] PR Deep-Linking & GitHub Operator Avatars
 
 PHASE 4: Emergency Response & Advanced Guardrails
 ├── [ ] 1-Click Rollback Dispatcher from Tracker UI
