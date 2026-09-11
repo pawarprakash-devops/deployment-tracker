@@ -58,3 +58,36 @@ export async function POST() {
     );
   }
 }
+
+export async function GET() {
+  try {
+    // Ensure 'Stage EUW2' exists in environments table
+    const envCheck = await pool.query("SELECT id FROM environments WHERE name = 'Stage EUW2'");
+    if (envCheck.rows.length === 0) {
+      await pool.query(
+        "INSERT INTO environments (name, is_production, display_order) VALUES ('Stage EUW2', false, 4) ON CONFLICT DO NOTHING"
+      );
+    }
+
+    // Update deployments that were erroneously saved as 'Other'
+    const result = await pool.query(`
+      UPDATE deployments 
+      SET environment = 'Stage EUW2' 
+      WHERE ticket_link LIKE '%34473617930%' 
+         OR ticket_link LIKE '%34473645935%'
+      RETURNING id, environment, branch, version, ticket_link;
+    `);
+
+    return NextResponse.json({
+      success: true,
+      updated_count: result.rowCount,
+      updated_deployments: result.rows,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
