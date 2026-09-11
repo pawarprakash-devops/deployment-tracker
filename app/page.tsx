@@ -478,7 +478,7 @@ export default function Home() {
   const [loginPassword, setLoginPassword] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>('vidai');
+  const [theme, setTheme] = useState<ThemeMode>('dark');
   const [clusterHealth, setClusterHealth] = useState<Record<string, ClusterHealthResult>>({});
   const [isProbing, setIsProbing] = useState(false);
   const [lastProbed, setLastProbed] = useState<Date | null>(null);
@@ -1100,7 +1100,7 @@ export default function Home() {
                 disabled={isRefreshing || isProbing}
                 title="Force probe all cluster endpoints immediately"
               >
-                {isProbing ? '⚡ PROBING...' : '🔄 PROBE NOW'}
+                <span className={`probe-icon ${isProbing ? 'spinning' : ''}`}>🔄</span> {isProbing ? 'PROBING...' : 'PROBE NOW'}
               </button>
               <span>·</span>
               <a href="/copilot" className="copilot-pill">
@@ -1188,7 +1188,7 @@ export default function Home() {
             const orderA = PROMOTION_ORDER[a.name] ?? a.displayOrder ?? 99;
             const orderB = PROMOTION_ORDER[b.name] ?? b.displayOrder ?? 99;
             return orderA - orderB;
-          }).map((env) => {
+          }).map((env, envIdx) => {
             const latest = latestForEnv(env.name);
             const branches = latestBranchesForEnv(env.name);
             const health = getEnvHealth(env.name);
@@ -1199,7 +1199,8 @@ export default function Home() {
             return (
               <div
                 key={env.name}
-                className={`card ${env.isProd ? 'is-prod' : ''} ${health.status === 'critical' ? 'health-critical' : health.status === 'warning' ? 'health-warning' : ''}`}
+                className={`card anim-card-enter ${env.isProd ? 'is-prod' : ''} ${health.status === 'critical' ? 'health-critical' : health.status === 'warning' ? 'health-warning' : ''}`}
+                style={{ animationDelay: `${envIdx * 60}ms` }}
               >
                 <div className="stripe" style={{ background: env.isProd ? '#F97316' : '#38BDF8' }} />
 
@@ -2406,6 +2407,43 @@ export default function Home() {
           100% { transform: scale(1); }
         }
 
+        @keyframes cardFadeUp {
+          0% { opacity: 0; transform: translateY(18px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes healthRipple {
+          0% { box-shadow: 0 0 0 0 currentColor; }
+          50% { box-shadow: 0 0 0 5px transparent; }
+          100% { box-shadow: 0 0 0 0 transparent; }
+        }
+        @keyframes healthRippleCritical {
+          0% { box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.6); }
+          25% { box-shadow: 0 0 0 5px transparent; }
+          50% { box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.6); }
+          75% { box-shadow: 0 0 0 5px transparent; }
+          100% { box-shadow: 0 0 0 0 transparent; }
+        }
+        @keyframes badgePop {
+          0% { transform: scale(0.85); opacity: 0.6; }
+          50% { transform: scale(1.06); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes badgeShake {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-3px); }
+          40% { transform: translateX(3px); }
+          60% { transform: translateX(-2px); }
+          80% { transform: translateX(2px); }
+        }
+        @keyframes badgeShimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(200%); }
+        }
+        @keyframes probeRotate {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
         .sys-badge {
           background: var(--ok-bg);
           color: var(--ok);
@@ -2454,6 +2492,13 @@ export default function Home() {
         .probe-refresh-btn:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+        }
+        .probe-icon {
+          display: inline-block;
+          transition: transform 0.3s;
+        }
+        .probe-icon.spinning {
+          animation: probeRotate 1s linear infinite;
         }
 
         .actions {
@@ -2611,6 +2656,9 @@ export default function Home() {
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
           transform: translateY(-2px);
         }
+        .anim-card-enter {
+          animation: cardFadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
         .card.is-prod {
           border-color: rgba(249, 115, 22, 0.3);
         }
@@ -2710,9 +2758,9 @@ export default function Home() {
           border-radius: 50%;
           flex-shrink: 0;
         }
-        .health-dot.healthy { background: #34D399; }
-        .health-dot.degraded { background: #FBBF24; }
-        .health-dot.offline { background: #FB7185; }
+        .health-dot.healthy { background: #34D399; animation: healthRipple 3s ease-in-out infinite; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4); }
+        .health-dot.degraded { background: #FBBF24; animation: healthRipple 1.5s ease-in-out infinite; box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
+        .health-dot.offline { background: #FB7185; animation: healthRippleCritical 1s ease-in-out infinite; box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.4); }
         .health-label { font-size: 10px; }
         .health-ms {
           font-size: 9px;
@@ -2771,11 +2819,12 @@ export default function Home() {
           width: fit-content;
         }
         .b-dot { width: 6px; height: 6px; border-radius: 50%; }
-        .badge.success { background: rgba(16, 185, 129, 0.12); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.25); }
+        .badge.success { background: rgba(16, 185, 129, 0.12); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.25); animation: badgePop 0.4s ease-out; }
         .badge.success .b-dot { background: #34D399; }
-        .badge.progress { background: rgba(245, 158, 11, 0.12); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.25); }
+        .badge.progress { background: rgba(245, 158, 11, 0.12); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.25); position: relative; overflow: hidden; }
+        .badge.progress::after { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.2), transparent); animation: badgeShimmer 2.2s ease-in-out infinite; pointer-events: none; }
         .badge.progress .b-dot { background: #FBBF24; animation: pulse 1.4s infinite; }
-        .badge.failed { background: rgba(244, 63, 94, 0.12); color: #FB7185; border: 1px solid rgba(244, 63, 94, 0.25); }
+        .badge.failed { background: rgba(244, 63, 94, 0.12); color: #FB7185; border: 1px solid rgba(244, 63, 94, 0.25); animation: badgeShake 0.5s ease-out; }
         .badge.failed .b-dot { background: #FB7185; }
         .badge.rollback { background: rgba(148, 163, 184, 0.12); color: #94A3B8; border: 1px solid rgba(148, 163, 184, 0.25); }
         .badge.rollback .b-dot { background: #94A3B8; }
@@ -3027,8 +3076,11 @@ export default function Home() {
           border-bottom: 1px solid var(--border);
           vertical-align: middle;
         }
+        tbody tr {
+          transition: background 0.18s ease;
+        }
         tbody tr:last-child td { border-bottom: none; }
-        tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+        tbody tr:hover { background: rgba(56, 189, 248, 0.04); }
         td.env-cell { font-weight: 700; font-family: 'Space Grotesk', sans-serif; }
         td .mono { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--accent); }
         td.who { color: var(--muted); font-size: 12px; font-family: 'JetBrains Mono', monospace; }
@@ -3404,6 +3456,18 @@ export default function Home() {
           line-height: 1.6;
           text-align: center;
           font-family: 'JetBrains Mono', monospace;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .anim-card-enter,
+          .health-dot,
+          .badge,
+          .badge.progress::after,
+          .probe-icon.spinning,
+          .live-dot {
+            animation: none !important;
+            transition: none !important;
+          }
         }
 
         :global(::-webkit-scrollbar) { height: 6px; width: 6px; }
