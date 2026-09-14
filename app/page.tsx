@@ -664,11 +664,27 @@ export default function Home() {
     loadData();
     probeClusterHealth();
     checkAuth();
+
+    // Only poll when tab is actively visible to conserve serverless CPU
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       loadData();
       probeClusterHealth();
-    }, 60000);
-    return () => clearInterval(interval);
+    }, 90000);
+
+    // Refresh immediately when tab becomes active again
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        loadData();
+        probeClusterHealth();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [loadData, probeClusterHealth]);
 
   const getStatusClass = (status: string) => {

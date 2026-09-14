@@ -24,8 +24,22 @@ export default function HealthDashboard() {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 60000); // Refresh every 60 seconds
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchHealth();
+    }, 90000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchHealth();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const fetchHealth = async () => {

@@ -347,6 +347,10 @@ export async function GET() {
       budget_per_user: BUDGET_PER_USER,
       credits_per_dollar: CREDITS_PER_DOLLAR,
       users,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600',
+      },
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

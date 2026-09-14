@@ -220,10 +220,11 @@ export default function CopilotPage() {
     fetchData();
   }, [fetchData]);
 
-  // Auto-refresh timer
+  // Auto-refresh timer (pauses when tab is hidden)
   useEffect(() => {
     if (!autoRefresh) return;
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       setCountdown((prev) => {
         if (prev <= 1) {
           fetchData();
@@ -245,11 +246,25 @@ export default function CopilotPage() {
     }
   }, []);
 
-  // Poll activity every 5 minutes
+  // Poll activity every 5 minutes only if tab is visible
   useEffect(() => {
     fetchActivity();
-    const timer = setInterval(fetchActivity, 300000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchActivity();
+    }, 300000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchActivity();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchActivity]);
 
   const handleRefresh = () => {

@@ -1,11 +1,11 @@
 name: "Copilot Metrics: Auto-Refresh on New Data"
 
+# on:
+#   schedule:
+#     # Disabled to prevent hitting Vercel Fluid Active CPU and deployment limits.
+#     # Copilot API routes fetch dynamic data at request time, making redeployments unnecessary.
+#     - cron: '15 * * * *'
 on:
-  schedule:
-    # Run hourly at :15 past the hour — catches daily report updates
-    # within ~1 hour. GitHub daily reports are typically available
-    # by 04:00-05:00 UTC.
-    - cron: '15 * * * *'
   workflow_dispatch:
     inputs:
       force:

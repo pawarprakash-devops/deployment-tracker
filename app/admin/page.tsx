@@ -154,11 +154,23 @@ export default function AdminDashboard() {
   useEffect(() => {
     checkAuth();
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (isAdmin) {
         loadStats(true);
       }
-    }, 60000);
-    return () => clearInterval(interval);
+    }, 90000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden && isAdmin) {
+        loadStats(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [isAdmin]);
 
   const checkAuth = async () => {

@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     }
     return new NextResponse(json, {
       status: 200,
-      headers: { ETag: tag, 'Cache-Control': 'no-cache', 'Content-Type': 'application/json' },
+      headers: { ETag: tag, 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120', 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Error fetching environment health:', error);
