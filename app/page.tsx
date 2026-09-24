@@ -56,6 +56,7 @@ const PROMOTION_ORDER: Record<string, number> = {
   'Production (Neotia/Babyjoy)': 7,
   'Production': 8,
   'LMS': 9,
+  'Demo-Preview': 10,
   'Other': 10,
 };
 
@@ -118,7 +119,7 @@ function getClusterInfo(envName: string): { region: string; clusterShort: string
 const KNOWN_USERS: Record<string, { github: string; name: string; initials: string }> = {
   'pawarprakash-devops': { github: 'pawarprakash-devops', name: 'Prakash Pawar', initials: 'PP' },
   'Prakash Pawar': { github: 'pawarprakash-devops', name: 'Prakash Pawar', initials: 'PP' },
-  'Prajwal-2605': { github: 'Prajwal-2605', name: 'Prajwal Bonde', initials: 'PB' },
+  'Prajwal-2605': { github: 'Prajwal-2605', name: 'Prajwal Pendhari', initials: 'PP' },
   'prajwalbonde001': { github: 'prajwalbonde001', name: 'Prajwal Bonde', initials: 'PB' },
   'vaibhavginnalwar': { github: 'vaibhavginnalwar', name: 'Vaibhav Ginnalwar', initials: 'VG' },
   'Prashantl1901': { github: 'Prashantl1901', name: 'Prashant Lokhande', initials: 'PL' },
@@ -617,7 +618,10 @@ export default function Home() {
         const rawList = Array.isArray(data) ? data : [];
         const normalized = rawList.map((d: any) => {
           let env = d.environment;
-          if (env === 'Other' && d.notes) {
+          if (env === 'Other') {
+            env = 'Demo-Preview';
+          }
+          if (env === 'Demo-Preview' && d.notes) {
             if (/stage-euw2|staging-euw2|euw2/i.test(d.notes)) env = 'Stage EUW2';
             else if (/qa-aps|qa/i.test(d.notes) && !/prod/i.test(d.notes)) env = 'QA';
             else if (/stage/i.test(d.notes)) env = 'Stage';

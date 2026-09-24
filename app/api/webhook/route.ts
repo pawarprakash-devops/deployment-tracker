@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
         return { name: cleaned, isProduction: isProd };
       }
 
-      return { name: 'Other', isProduction: false };
+      return { name: 'Demo-Preview', isProduction: false };
     }
 
     const resolved = normalizeEnvironment(
