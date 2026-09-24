@@ -634,12 +634,13 @@ export default function Home() {
         const envData = await environmentsRes.json();
         if (Array.isArray(envData)) {
           const envList = envData.map(e => {
+            const displayName = e.name === 'Other' ? 'Demo-Preview' : e.name;
             const isProd = e.is_production || e.name.toLowerCase().startsWith('production');
             return {
-              name: e.name,
+              name: displayName,
               color: isProd ? '#EF4444' : '#5B8DEF',
               isProd,
-              displayOrder: e.display_order ?? PROMOTION_ORDER[e.name] ?? 99,
+              displayOrder: e.display_order ?? PROMOTION_ORDER[displayName] ?? PROMOTION_ORDER[e.name] ?? 99,
               description: ''
             };
           });
