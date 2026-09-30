@@ -22,7 +22,7 @@ export async function GET(request: Request) {
           created_at
         FROM deployments
         WHERE status = 'Success'
-        ORDER BY environment, started_at DESC
+        ORDER BY environment, started_at DESC, created_at DESC
       )
       SELECT 
         e.id,

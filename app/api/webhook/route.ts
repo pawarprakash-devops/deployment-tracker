@@ -39,12 +39,13 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!environment || !status || !started_at) {
+    if (!environment || !status) {
       return NextResponse.json(
-        { error: 'Missing required fields: environment, status, started_at' },
+        { error: 'Missing required fields: environment, status' },
         { status: 400 }
       );
     }
+    const deployStartedAt = started_at || new Date().toISOString();
 
     // Auto-normalize environment & cluster name
     function normalizeEnvironment(
@@ -135,62 +136,111 @@ export async function POST(request: NextRequest) {
     // Auto-calculate duration if completed_at is provided and duration_seconds is not
     let calculatedDuration = duration_seconds;
     if (completed_at && !duration_seconds) {
-      const startTime = new Date(started_at).getTime();
+      const startTime = new Date(deployStartedAt).getTime();
       const endTime = new Date(completed_at).getTime();
       calculatedDuration = Math.round((endTime - startTime) / 1000);
     }
 
-    // Insert deployment
-    const result = await pool.query(
-      `INSERT INTO deployments (
-        environment, 
-        status,
-        deployment_type,
-        branch, 
-        version,
-        frontend_branch,
-        backend_branch,
-        frontend_version,
-        backend_version,
-        requested_by, 
-        approved_by,
-        tested_by,
-        deployed_by,
-        ticket_link,
-        notes,
-        started_at, 
-        completed_at, 
-        duration_seconds
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-      RETURNING *`,
-      [
-        targetEnv,
-        status,
-        deployment_type,
-        branch,
-        version,
-        frontend_branch,
-        backend_branch,
-        frontend_version,
-        backend_version,
-        requested_by,
-        approved_by,
-        tested_by,
-        deployed_by,
-        ticket_link,
-        notes,
-        started_at,
-        completed_at,
-        calculatedDuration,
-      ]
-    );
+    // Check if an existing deployment record exists for this workflow run (e.g. rerun of failed jobs)
+    let result;
+    if (ticket_link) {
+      const existing = await pool.query(
+        'SELECT id FROM deployments WHERE ticket_link = $1 ORDER BY created_at DESC LIMIT 1',
+        [ticket_link]
+      );
+      if (existing.rows.length > 0) {
+        result = await pool.query(
+          `UPDATE deployments SET
+            status = $1,
+            completed_at = $2,
+            duration_seconds = $3,
+            notes = $4,
+            frontend_branch = COALESCE($5, frontend_branch),
+            backend_branch = COALESCE($6, backend_branch),
+            frontend_version = COALESCE($7, frontend_version),
+            backend_version = COALESCE($8, backend_version),
+            branch = COALESCE($9, branch),
+            version = COALESCE($10, version),
+            environment = $11,
+            updated_at = NOW()
+          WHERE id = $12
+          RETURNING *`,
+          [
+            status,
+            completed_at,
+            calculatedDuration,
+            notes,
+            frontend_branch,
+            backend_branch,
+            frontend_version,
+            backend_version,
+            branch,
+            version,
+            targetEnv,
+            existing.rows[0].id
+          ]
+        );
+        console.log('🔄 Re-run detected — updated deployment in-place:', {
+          id: existing.rows[0].id,
+          environment: targetEnv,
+          status,
+          ticket_link
+        });
+      }
+    }
 
-    console.log('✅ Deployment logged:', {
-      id: result.rows[0].id,
-      environment,
-      status,
-      requested_by,
-    });
+    if (!result) {
+      // Insert new deployment
+      result = await pool.query(
+        `INSERT INTO deployments (
+          environment, 
+          status,
+          deployment_type,
+          branch, 
+          version,
+          frontend_branch,
+          backend_branch,
+          frontend_version,
+          backend_version,
+          requested_by, 
+          approved_by,
+          tested_by,
+          deployed_by,
+          ticket_link,
+          notes,
+          started_at, 
+          completed_at, 
+          duration_seconds
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        RETURNING *`,
+        [
+          targetEnv,
+          status,
+          deployment_type,
+          branch,
+          version,
+          frontend_branch,
+          backend_branch,
+          frontend_version,
+          backend_version,
+          requested_by,
+          approved_by,
+          tested_by,
+          deployed_by,
+          ticket_link,
+          notes,
+          deployStartedAt,
+          completed_at,
+          calculatedDuration,
+        ]
+      );
+      console.log('✅ Deployment logged:', {
+        id: result.rows[0].id,
+        environment: targetEnv,
+        status,
+        requested_by,
+      });
+    }
 
     return NextResponse.json({
       success: true,

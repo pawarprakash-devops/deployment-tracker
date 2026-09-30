@@ -17,7 +17,7 @@ export async function GET(request: Request) {
       `SELECT * FROM deployments 
        WHERE deployed_by NOT LIKE '%Deployment Tracker%' 
        OR deployed_by IS NULL
-       ORDER BY started_at DESC 
+       ORDER BY started_at DESC, created_at DESC 
        LIMIT $1 OFFSET $2`,
       [Math.min(limit, 1000), offset]
     );

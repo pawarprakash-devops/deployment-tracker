@@ -20,6 +20,8 @@ interface Deployment {
   notes?: string;
   started_at: string;
   completed_at?: string;
+  created_at?: string;
+  updated_at?: string;
   duration_seconds?: number;
   duration?: string;
 }
@@ -718,16 +720,25 @@ export default function Home() {
     return `${m}m ${s}s`;
   };
 
+  const sortDeploymentsByLatest = (deps: Deployment[]) => {
+    return [...deps].sort((a, b) => {
+      const timeDiff = new Date(b.started_at).getTime() - new Date(a.started_at).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      const bCreated = new Date(b.created_at || b.completed_at || 0).getTime();
+      const aCreated = new Date(a.created_at || a.completed_at || 0).getTime();
+      return bCreated - aCreated;
+    });
+  };
+
   const latestForEnv = (envName: string) => {
-    return deployments
-      .filter(d => d.environment === envName)
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+    const envDeployments = deployments.filter(d => d.environment === envName);
+    return sortDeploymentsByLatest(envDeployments)[0];
   };
 
   const latestBranchesForEnv = (envName: string) => {
-    const envDeployments = deployments
-      .filter(d => d.environment === envName && d.status === 'Success')
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+    const envDeployments = sortDeploymentsByLatest(
+      deployments.filter(d => d.environment === envName && d.status === 'Success')
+    );
     let latestFE: string | null = null;
     let latestBE: string | null = null;
     for (const d of envDeployments) {
@@ -740,9 +751,9 @@ export default function Home() {
 
   // Environment health status
   const getEnvHealth = (envName: string) => {
-    const envDeps = deployments
-      .filter(d => d.environment === envName)
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+    const envDeps = sortDeploymentsByLatest(
+      deployments.filter(d => d.environment === envName)
+    );
     
     if (envDeps.length === 0) return { status: 'empty', label: 'No deploys', color: 'var(--faint)' };
     
@@ -766,9 +777,9 @@ export default function Home() {
 
   // Last deploy times for FE and BE
   const getLastDeployTimes = (envName: string) => {
-    const envDeps = deployments
-      .filter(d => d.environment === envName && d.status === 'Success')
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+    const envDeps = sortDeploymentsByLatest(
+      deployments.filter(d => d.environment === envName && d.status === 'Success')
+    );
     
     let lastFE: string | null = null;
     let lastBE: string | null = null;

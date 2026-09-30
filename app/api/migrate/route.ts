@@ -46,6 +46,20 @@ export async function POST() {
       ON deployments(frontend_branch, backend_branch)
     `);
 
+    // Clean up superseded failed deployments that were later rerun and succeeded
+    const dedupeResult = await pool.query(`
+      DELETE FROM deployments d1
+      WHERE d1.status = 'Failed'
+        AND d1.ticket_link IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM deployments d2
+          WHERE d2.ticket_link = d1.ticket_link
+            AND d2.status = 'Success'
+            AND d2.created_at > d1.created_at
+        )
+    `);
+    console.log(`🧹 Cleaned up ${dedupeResult.rowCount} superseded failed deployments.`);
+
     return NextResponse.json({ 
       success: true, 
       message: 'Migration completed successfully' 
