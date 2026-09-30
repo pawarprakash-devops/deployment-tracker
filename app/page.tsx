@@ -86,7 +86,7 @@ const ENV_DEFAULT_BRANCH: Record<string, string> = {
   'Production': 'prod_ank',
 };
 
-export type ThemeMode = 'vidai' | 'dark' | 'midnight' | 'light';
+export type ThemeMode = 'emr';
 
 const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; type: string }> = {
   'Preview': { region: 'ap-south-1', clusterShort: 'preview-99999', type: 'Fargate' },
@@ -481,7 +481,7 @@ export default function Home() {
   const [loginPassword, setLoginPassword] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>('dark');
+
   const [clusterHealth, setClusterHealth] = useState<Record<string, ClusterHealthResult>>({});
   const [isProbing, setIsProbing] = useState(false);
   const [lastProbed, setLastProbed] = useState<Date | null>(null);
@@ -539,18 +539,8 @@ export default function Home() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load theme from localStorage
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('tracker-theme') as ThemeMode | null;
-    if (savedTheme && ['vidai', 'dark', 'midnight', 'light'].includes(savedTheme)) {
-      setTheme(savedTheme);
-    }
-  }, []);
-
-  const handleThemeChange = (newTheme: ThemeMode) => {
-    setTheme(newTheme);
-    localStorage.setItem('tracker-theme', newTheme);
-  };
+  // Theme is fixed to VidAI EMR style
+  // (no user-selectable theme — single brand identity)
 
   const checkAuth = async () => {
     try {
@@ -1100,29 +1090,20 @@ export default function Home() {
 
   return (
     <>
-      <div className={`wrap ${theme}`} data-theme={theme}>
-        {/* Terminal Header */}
+      <div className="wrap">
+        {/* Page Header */}
         <header className="top">
           <div className="title-block">
-            <div className="terminal-cli-bar">
-              <span className="cli-prefix">$</span>
-              <span className="cli-host">vidai@devops-core</span>
-              <span className="cli-sep">:</span>
-              <span className="cli-path">~/telemetry</span>
-              <span className="cli-git"> (git:main)</span>
-              <span className="cli-cmd"> # deployment-tracker --live</span>
-            </div>
-            <h1>DEPLOYMENT COMMAND CENTER</h1>
+            <h1>Deployment Tracker</h1>
             <div className="sub">
               <span className={`live-dot ${isRefreshing || isProbing ? 'refreshing' : ''}`}>●</span>
-              <span className="sys-badge">SYSTEMS NORMAL</span>
-              <span>POLL: 60s</span>
+              <span className="sys-badge">Live</span>
               <span>·</span>
-              <span>LAST DATA: {lastUpdated.toLocaleTimeString()}</span>
+              <span>Updated: {lastUpdated.toLocaleTimeString()}</span>
               {lastProbed && (
                 <>
                   <span>·</span>
-                  <span title="Last Cluster HTTP Probe">CLUSTERS: {lastProbed.toLocaleTimeString()}</span>
+                  <span title="Last Cluster HTTP Probe">Clusters: {lastProbed.toLocaleTimeString()}</span>
                 </>
               )}
               <span>·</span>
@@ -1130,36 +1111,17 @@ export default function Home() {
                 className="probe-refresh-btn" 
                 onClick={() => { loadData(); probeClusterHealth(); }}
                 disabled={isRefreshing || isProbing}
-                title="Force probe all cluster endpoints immediately"
+                title="Refresh deployments and probe cluster endpoints"
               >
-                <span className={`probe-icon ${isProbing ? 'spinning' : ''}`}>🔄</span> {isProbing ? 'PROBING...' : 'PROBE NOW'}
+                <span className={`probe-icon ${isProbing ? 'spinning' : ''}`}>↺</span> {isProbing ? 'Refreshing...' : 'Refresh'}
               </button>
               <span>·</span>
               <a href="/copilot" className="copilot-pill">
-                ⚡ GITHUB COPILOT METRICS ➔
+                Copilot Metrics →
               </a>
             </div>
           </div>
           <div className="actions">
-            <div className="theme-selector-pill" title="Switch Dashboard Theme">
-              <span 
-                className="theme-dot-indicator" 
-                style={{
-                  background: theme === 'vidai' ? '#E17E61' : theme === 'midnight' ? '#818CF8' : theme === 'light' ? '#0284C7' : '#38BDF8'
-                }} 
-              />
-              <select
-                value={theme}
-                onChange={(e) => handleThemeChange(e.target.value as ThemeMode)}
-                className="theme-select-input"
-                aria-label="Theme selector"
-              >
-                <option value="vidai">🟠 VidAI Portal (React)</option>
-                <option value="dark">🌑 DevOps Dark</option>
-                <option value="midnight">🌌 Midnight Indigo</option>
-                <option value="light">☀️ Minimal Light</option>
-              </select>
-            </div>
             {isAdmin ? (
               <>
                 <button className="btn ghost small" onClick={() => setShowEnvModal(true)}>⚙ Targets</button>
@@ -1915,6 +1877,223 @@ export default function Home() {
       )}
 
       <style jsx>{`
+
+/* VidAI EMR Theme — single brand identity */
+.wrap {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 24px clamp(16px, 2.5vw, 32px) 80px;
+  background: #f0f0f0;
+  color: #2b3445;
+  min-height: 100vh;
+  font-family: 'Montserrat', 'Inter', system-ui, sans-serif;
+}
+
+header.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e2e4e8;
+}
+
+.title-block h1 {
+  font-family: 'Montserrat', sans-serif;
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 700;
+  color: #2b3445;
+  margin: 0 0 6px;
+  letter-spacing: -0.3px;
+  border-bottom: 3px solid #e17e61;
+  display: inline-block;
+  padding-bottom: 4px;
+}
+
+.title-block .sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #505050;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.sys-badge {
+  background: rgba(46, 125, 50, 0.1);
+  color: #2e7d32;
+  border: 1px solid rgba(46, 125, 50, 0.25);
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.live-dot {
+  color: #2e7d32;
+  font-size: 10px;
+}
+.live-dot.refreshing {
+  animation: pulse 1s infinite;
+  color: #d97706;
+}
+
+.probe-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff;
+  border: 1px solid #d8d8da;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #2b3445;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.probe-refresh-btn:hover:not(:disabled) {
+  border-color: #e17e61;
+  color: #e17e61;
+  background: #fff;
+}
+.probe-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.probe-icon.spinning {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.copilot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(225, 126, 97, 0.08);
+  color: #e17e61;
+  border: 1px solid rgba(225, 126, 97, 0.25);
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.copilot-pill:hover {
+  background: rgba(225, 126, 97, 0.15);
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e4e8;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  padding: 18px;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  border-color: #d8d8da;
+}
+
+.card.prod-env {
+  border-left: 3px solid #e17e61;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: 'Montserrat', sans-serif;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  border: 1px solid transparent;
+}
+.btn.primary {
+  background: #e17e61;
+  color: #fff;
+  border-color: #e17e61;
+}
+.btn.primary:hover {
+  background: #c96d52;
+  border-color: #c96d52;
+}
+.btn.ghost {
+  background: #fff;
+  color: #2b3445;
+  border-color: #d8d8da;
+}
+.btn.ghost:hover {
+  border-color: #e17e61;
+  color: #e17e61;
+}
+.btn.ghost.danger {
+  color: #dc2626;
+}
+.btn.ghost.danger:hover {
+  border-color: #dc2626;
+}
+.btn.small {
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+
+select, input[type=text], input[type=search], input[type=date], input[type=datetime-local], textarea {
+  background: #fff;
+  border: 1px solid #e2e4e8;
+  border-radius: 8px;
+  color: #2b3445;
+  padding: 6px 10px;
+  font-family: 'Montserrat', 'Inter', sans-serif;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+select:focus, input[type=text]:focus, input[type=search]:focus, input[type=date]:focus, input[type=datetime-local]:focus, textarea:focus {
+  border-color: #e17e61;
+}
+input[type=date], input[type=datetime-local] { color-scheme: light; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.status-badge.success { background: rgba(46,125,50,0.1); color: #2e7d32; }
+.status-badge.failed { background: rgba(220,38,38,0.1); color: #dc2626; }
+.status-badge.in-progress { background: rgba(217,119,6,0.1); color: #d97706; }
+.status-badge.queued, .status-badge.neutral { background: rgba(80,80,80,0.08); color: #505050; }
+
+.section-header {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #2b3445;
+  margin-bottom: 14px;
+}
+
+.table-row {
+  border-bottom: 1px solid #e2e4e8;
+  background: #fff;
+}
+.table-row:nth-child(even) {
+  background: #fafafa;
+}
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
         :global(*) { box-sizing: border-box; }
@@ -1936,437 +2115,6 @@ export default function Home() {
           transition: background .3s, color .3s;
         }
 
-        /* 1. VidAI React Official Website Theme */
-        .wrap.vidai {
-          --bg: #F5F6F9;
-          --text: #232323;
-          --muted: #505050;
-          --faint: #757575;
-          --panel: #FFFFFF;
-          --panel-2: #F0F2F5;
-          --border: #E2E4E8;
-          --border-bright: #CBD0D8;
-          --accent: #E17E61; /* Official VidAI Orange from vidai-react */
-          --ok: #2E7D32;     /* Dark readable green */
-          --warn: #D97706;    /* Dark readable amber */
-          --bad: #DC2626;     /* Dark readable red */
-          --prod: #E17E61;
-          --ok-bg: rgba(46, 125, 50, 0.1);
-          --warn-bg: rgba(217, 119, 6, 0.1);
-          --bad-bg: rgba(220, 38, 38, 0.1);
-          --neutral-bg: rgba(100, 116, 139, 0.1);
-          --neutral: #505050;
-          --card-shadow: 0 4px 14px rgba(35, 35, 35, 0.06);
-          background-color: #F5F6F9;
-          background-image:
-            radial-gradient(ellipse 70% 40% at 50% -10%, rgba(225, 126, 97, 0.08), transparent),
-            radial-gradient(circle at 90% 10%, rgba(90, 138, 234, 0.05), transparent);
-          font-family: 'Nunito', 'Montserrat', 'Inter', system-ui, -apple-system, sans-serif;
-          color: #232323;
-        }
-
-        .wrap.vidai * {
-          border-color: var(--border);
-        }
-
-        .wrap.vidai .terminal-cli-bar {
-          background: #FFFFFF;
-          border: 1px solid #E2E4E8;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-        }
-        .wrap.vidai .terminal-cli-bar .cli-prefix { color: #E17E61; }
-        .wrap.vidai .terminal-cli-bar .cli-host { color: #232323; font-weight: 700; }
-        .wrap.vidai .terminal-cli-bar .cli-sep { color: #8E8E93; }
-        .wrap.vidai .terminal-cli-bar .cli-path { color: #E17E61; font-weight: 600; }
-        .wrap.vidai .terminal-cli-bar .cli-git { color: #505050; }
-        .wrap.vidai .terminal-cli-bar .cli-cmd { color: #64748B; }
-
-        .wrap.vidai .title-block h1 {
-          font-family: 'Montserrat', sans-serif;
-          color: #232323;
-        }
-        .wrap.vidai .title-block .sub {
-          color: #505050;
-        }
-        .wrap.vidai .sys-badge {
-          background: rgba(46, 125, 50, 0.1);
-          color: #2E7D32;
-          border: 1px solid rgba(46, 125, 50, 0.3);
-        }
-        .wrap.vidai .copilot-pill {
-          background: rgba(147, 51, 234, 0.08);
-          color: #7E22CE;
-          border: 1px solid rgba(147, 51, 234, 0.25);
-        }
-        .wrap.vidai .probe-refresh-btn {
-          background: rgba(225, 126, 97, 0.1);
-          border: 1px solid rgba(225, 126, 97, 0.3);
-          color: #E17E61;
-        }
-        .wrap.vidai .probe-refresh-btn:hover:not(:disabled) {
-          background: rgba(225, 126, 97, 0.2);
-        }
-
-        .wrap.vidai .hud-telemetry {
-          background: #FFFFFF;
-          border: 1px solid #E2E4E8;
-          box-shadow: 0 4px 14px rgba(35, 35, 35, 0.05);
-        }
-        .wrap.vidai .hud-card {
-          background: #F8F9FA;
-          border: 1px solid #E2E4E8;
-        }
-        .wrap.vidai .hud-label {
-          color: #505050;
-        }
-        .wrap.vidai .hud-value {
-          color: #232323;
-        }
-        .wrap.vidai .hud-value.accent {
-          color: #E17E61;
-        }
-        .wrap.vidai .hud-value.ok {
-          color: #2E7D32;
-        }
-        .wrap.vidai .hud-value.warn {
-          color: #D97706;
-        }
-
-        .wrap.vidai .card {
-          background: #FFFFFF;
-          border: 1px solid #E2E4E8;
-          box-shadow: 0 4px 14px rgba(35, 35, 35, 0.06);
-          border-radius: 10px;
-        }
-        .wrap.vidai .card:hover {
-          border-color: #E17E61;
-          box-shadow: 0 8px 24px rgba(225, 126, 97, 0.12);
-        }
-        .wrap.vidai .env-title {
-          color: #232323;
-        }
-        .wrap.vidai .cluster-sub {
-          color: #505050;
-        }
-        .wrap.vidai .prod-badge {
-          background: rgba(225, 126, 97, 0.12);
-          color: #E17E61;
-          border: 1px solid rgba(225, 126, 97, 0.3);
-        }
-        .wrap.vidai .deploy-time-text {
-          color: #505050;
-        }
-        .wrap.vidai .version-pill {
-          background: rgba(225, 126, 97, 0.1);
-          color: #C25638;
-          border: 1px solid rgba(225, 126, 97, 0.25);
-          font-weight: 700;
-        }
-        .wrap.vidai .card-branches {
-          background: #F8F9FA;
-          border: 1px solid #E2E4E8;
-        }
-        .wrap.vidai .b-text {
-          color: #232323;
-        }
-        .wrap.vidai .b-tag.fe {
-          background: rgba(2, 132, 199, 0.1);
-          color: #0284C7;
-          border: 1px solid rgba(2, 132, 199, 0.25);
-        }
-        .wrap.vidai .b-tag.be {
-          background: rgba(225, 126, 97, 0.12);
-          color: #D06C4E;
-          border: 1px solid rgba(225, 126, 97, 0.25);
-        }
-        .wrap.vidai .b-tag.git {
-          background: rgba(100, 116, 139, 0.1);
-          color: #475569;
-          border: 1px solid rgba(100, 116, 139, 0.2);
-        }
-        .wrap.vidai .card-footer {
-          border-top: 1px solid #E2E4E8;
-          color: #505050;
-        }
-        .wrap.vidai .footer-deployer {
-          color: #505050;
-        }
-        .wrap.vidai .footer-sync {
-          color: #757575;
-        }
-
-        .wrap.vidai .health-pill.healthy {
-          background: rgba(46, 125, 50, 0.1);
-          border: 1px solid rgba(46, 125, 50, 0.3);
-          color: #2E7D32;
-        }
-        .wrap.vidai .health-pill.degraded {
-          background: rgba(217, 119, 6, 0.1);
-          border: 1px solid rgba(217, 119, 6, 0.3);
-          color: #B45309;
-        }
-        .wrap.vidai .health-pill.offline {
-          background: rgba(220, 38, 38, 0.1);
-          border: 1px solid rgba(220, 38, 38, 0.3);
-          color: #DC2626;
-        }
-
-        .wrap.vidai .badge.success {
-          background: rgba(46, 125, 50, 0.1);
-          color: #2E7D32;
-          border: 1px solid rgba(46, 125, 50, 0.3);
-        }
-        .wrap.vidai .badge.failed {
-          background: rgba(220, 38, 38, 0.1);
-          color: #DC2626;
-          border: 1px solid rgba(220, 38, 38, 0.3);
-        }
-        .wrap.vidai .badge.progress {
-          background: rgba(217, 119, 6, 0.1);
-          color: #B45309;
-          border: 1px solid rgba(217, 119, 6, 0.3);
-        }
-        .wrap.vidai .badge.rollback,
-        .wrap.vidai .badge.cancelled {
-          background: rgba(100, 116, 139, 0.1);
-          color: #475569;
-          border: 1px solid rgba(100, 116, 139, 0.25);
-        }
-
-        .wrap.vidai .btn {
-          border-radius: 10px;
-          background: #F0F2F5;
-          border: 1px solid #E2E4E8;
-          color: #232323;
-        }
-        .wrap.vidai .btn:hover {
-          border-color: #E17E61;
-          color: #E17E61;
-        }
-        .wrap.vidai .btn.ghost {
-          background: transparent;
-          color: #232323;
-        }
-        .wrap.vidai .btn.primary {
-          background: #E17E61;
-          border-color: #E17E61;
-          color: #FFFFFF;
-          font-weight: 700;
-        }
-        .wrap.vidai .btn.primary:hover {
-          background: #D06C4E;
-          border-color: #D06C4E;
-        }
-
-        .wrap.vidai .theme-selector-pill {
-          background: #FFFFFF;
-          border: 1px solid #E2E4E8;
-          color: #232323;
-        }
-        .wrap.vidai .theme-select-input {
-          color: #232323;
-        }
-        .wrap.vidai .theme-select-input option {
-          background: #FFFFFF;
-          color: #232323;
-        }
-
-        .wrap.vidai .timeline {
-          background: #FFFFFF;
-          border: 1px solid #E2E4E8;
-        }
-        .wrap.vidai .section-title {
-          color: #232323;
-        }
-        .wrap.vidai .bar-label {
-          color: #505050;
-        }
-        .wrap.vidai .bar-count {
-          color: #232323;
-        }
-
-        .wrap.vidai .table-wrap {
-          background: #FFFFFF;
-          border: 1px solid #E2E4E8;
-          box-shadow: 0 4px 14px rgba(35, 35, 35, 0.05);
-        }
-        .wrap.vidai table {
-          color: #232323;
-        }
-        .wrap.vidai thead th {
-          background: #F8F9FA;
-          color: #505050;
-          border-bottom: 1px solid #E2E4E8;
-        }
-        .wrap.vidai tbody td {
-          color: #232323;
-          border-bottom: 1px solid #E2E4E8;
-        }
-        .wrap.vidai tbody tr:hover {
-          background: #F5F6F8;
-        }
-        .wrap.vidai td.env-cell {
-          color: #232323;
-        }
-        .wrap.vidai td .mono {
-          color: #E17E61;
-        }
-        .wrap.vidai td.who {
-          color: #505050;
-        }
-        .wrap.vidai td.notes {
-          color: #505050;
-        }
-        .wrap.vidai .ticket-link {
-          background: rgba(225, 126, 97, 0.1);
-          border: 1px solid rgba(225, 126, 97, 0.3);
-          color: #D06C4E;
-        }
-        .wrap.vidai select,
-        .wrap.vidai input[type=text],
-        .wrap.vidai input[type=search],
-        .wrap.vidai input[type=date],
-        .wrap.vidai textarea {
-          background: #FFFFFF;
-          border: 1px solid #E2E4E8;
-          color: #232323;
-        }
-        .wrap.vidai select:focus,
-        .wrap.vidai input:focus,
-        .wrap.vidai textarea:focus {
-          border-color: #E17E61;
-          box-shadow: 0 0 0 2px rgba(225, 126, 97, 0.2);
-        }
-        .wrap.vidai .filter-row .count {
-          color: #505050;
-        }
-        .wrap.vidai .compare-bar {
-          background: #FFFFFF;
-          border: 1px solid #E17E61;
-          color: #E17E61;
-        }
-        .wrap.vidai .compare-label {
-          color: #505050;
-          border-bottom: 1px solid #E2E4E8;
-        }
-        .wrap.vidai .compare-val {
-          color: #232323;
-          border-bottom: 1px solid #E2E4E8;
-        }
-        .wrap.vidai .modal {
-          background: #FFFFFF;
-          border: 1px solid #CBD0D8;
-          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
-          color: #232323;
-        }
-        .wrap.vidai .modal h2 {
-          color: #232323;
-        }
-
-        /* 2. Dark Theme (DevOps / Modern Console) */
-        .wrap.dark {
-          --bg: #0B0F17;
-          --text: #F1F5F9;
-          --muted: #94A3B8;
-          --faint: #64748B;
-          --panel: #0F172A;
-          --panel-2: #1E293B;
-          --border: rgba(255, 255, 255, 0.08);
-          --border-bright: rgba(255, 255, 255, 0.16);
-          --accent: #38BDF8;
-          --ok: #10B981;
-          --warn: #F59E0B;
-          --bad: #F43F5E;
-          --prod: #F97316;
-          --ok-bg: rgba(16, 185, 129, 0.12);
-          --warn-bg: rgba(245, 158, 11, 0.12);
-          --bad-bg: rgba(244, 63, 94, 0.12);
-          --neutral-bg: rgba(148, 163, 184, 0.12);
-          --neutral: #94A3B8;
-          --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-          background-color: #0B0F17;
-          background-image:
-            radial-gradient(ellipse 80% 50% at 50% -15%, rgba(56, 189, 248, 0.05), transparent),
-            radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.04), transparent);
-          color: #F1F5F9;
-        }
-
-        /* 3. Midnight Indigo Theme */
-        .wrap.midnight {
-          --bg: #090D16;
-          --text: #E2E8F0;
-          --muted: #94A3B8;
-          --faint: #64748B;
-          --panel: #0F1629;
-          --panel-2: #18223C;
-          --border: rgba(99, 102, 241, 0.18);
-          --border-bright: rgba(99, 102, 241, 0.32);
-          --accent: #818CF8;
-          --ok: #34D399;
-          --warn: #FBBF24;
-          --bad: #F87171;
-          --prod: #F472B6;
-          --ok-bg: rgba(52, 211, 153, 0.12);
-          --warn-bg: rgba(251, 191, 36, 0.12);
-          --bad-bg: rgba(248, 113, 113, 0.12);
-          --neutral-bg: rgba(148, 163, 184, 0.12);
-          --neutral: #94A3B8;
-          --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-          background-color: #090D16;
-          background-image:
-            radial-gradient(ellipse 80% 50% at 50% -15%, rgba(99, 102, 241, 0.08), transparent),
-            radial-gradient(circle at 100% 0%, rgba(139, 92, 246, 0.06), transparent);
-          color: #E2E8F0;
-        }
-        .wrap.midnight .btn.primary {
-          background: #6366F1;
-          border-color: #6366F1;
-          color: #FFFFFF;
-        }
-        .wrap.midnight .btn.primary:hover {
-          background: #4F46E5;
-          border-color: #4F46E5;
-        }
-
-        /* 4. Minimal Light Theme */
-        .wrap.light {
-          --bg: #F8FAFC;
-          --text: #0F172A;
-          --muted: #475569;
-          --faint: #64748B;
-          --panel: #FFFFFF;
-          --panel-2: #F1F5F9;
-          --border: #E2E8F0;
-          --border-bright: #CBD5E1;
-          --accent: #0284C7;
-          --ok: #059669;
-          --warn: #D97706;
-          --bad: #DC2626;
-          --prod: #EA580C;
-          --ok-bg: rgba(5, 150, 105, 0.1);
-          --warn-bg: rgba(217, 119, 6, 0.1);
-          --bad-bg: rgba(220, 38, 38, 0.1);
-          --neutral-bg: rgba(100, 116, 139, 0.1);
-          --neutral: #64748B;
-          --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-          background-color: #F8FAFC;
-          color: #0F172A;
-        }
-        .wrap.light .terminal-cli-bar {
-          background: #FFFFFF;
-          border: 1px solid #E2E8F0;
-        }
-        .wrap.light .terminal-cli-bar .cli-host { color: #0F172A; font-weight: 700; }
-        .wrap.light select,
-        .wrap.light input[type=text],
-        .wrap.light input[type=search],
-        .wrap.light input[type=date],
-        .wrap.light textarea {
-          background: #FFFFFF;
-          border: 1px solid #E2E8F0;
-          color: #0F172A;
-        }
-
         header.top {
           display: flex;
           justify-content: space-between;
@@ -2377,25 +2125,6 @@ export default function Home() {
           padding-bottom: 18px;
           border-bottom: 1px solid var(--border);
         }
-
-        .terminal-cli-bar {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          background: rgba(15, 23, 42, 0.7);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          padding: 4px 10px;
-          border-radius: 6px;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
-          margin-bottom: 8px;
-        }
-        .cli-prefix { color: var(--ok); font-weight: 700; }
-        .cli-host { color: var(--accent); }
-        .cli-sep { color: var(--faint); }
-        .cli-path { color: #F59E0B; }
-        .cli-git { color: var(--muted); }
-        .cli-cmd { color: var(--faint); }
 
         .title-block h1 {
           font-family: 'Space Grotesk', sans-serif;
@@ -2538,45 +2267,6 @@ export default function Home() {
           gap: 8px;
           flex-wrap: wrap;
           align-items: center;
-        }
-
-        .theme-selector-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
-          background: var(--panel-2);
-          border: 1px solid var(--border);
-          border-radius: 6px;
-          padding: 5px 10px;
-          transition: all 0.15s ease;
-          font-family: 'JetBrains Mono', monospace;
-        }
-        .theme-selector-pill:hover {
-          border-color: var(--accent);
-        }
-        .theme-dot-indicator {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          flex-shrink: 0;
-          box-shadow: 0 0 6px currentColor;
-        }
-        .theme-select-input {
-          background: transparent;
-          border: none;
-          color: var(--text);
-          font-family: inherit;
-          font-size: 11px;
-          font-weight: 600;
-          cursor: pointer;
-          outline: none;
-          padding: 0;
-          margin: 0;
-        }
-        .theme-select-input option {
-          background: var(--panel);
-          color: var(--text);
-          padding: 6px;
         }
 
         button { font-family: inherit; cursor: pointer; }
@@ -2892,12 +2582,12 @@ export default function Home() {
         }
         .b-tag.fe {
           background: rgba(56, 189, 248, 0.14);
-          color: #38BDF8;
+          color: #e17e61;
           border: 1px solid rgba(56, 189, 248, 0.25);
         }
         .b-tag.be {
           background: rgba(129, 140, 248, 0.14);
-          color: #818CF8;
+          color: #e17e61;
           border: 1px solid rgba(129, 140, 248, 0.25);
         }
         .b-tag.git {
@@ -3061,8 +2751,6 @@ export default function Home() {
           border-color: var(--accent);
           box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
         }
-        .wrap.dark input[type=date], .wrap.dark input[type=datetime-local] { color-scheme: dark; }
-        .wrap.light input[type=date], .wrap.light input[type=datetime-local] { color-scheme: light; }
         input[type=datetime-local] {
           background: var(--panel-2);
           border: 1px solid var(--border);
@@ -3179,7 +2867,7 @@ export default function Home() {
           height: 7px;
           border-radius: 50%;
         }
-        .cadence-pulse-dot.cyan { background: #00F0FF; box-shadow: 0 0 6px #00F0FF; }
+        .cadence-pulse-dot.cyan { background: #e17e61; box-shadow: 0 0 6px #e17e61; }
         .cadence-pulse-dot.yellow { background: #F59E0B; box-shadow: 0 0 8px #F59E0B; animation: pulse 1.2s infinite; }
         .cadence-pulse-dot.green { background: #00FF9D; box-shadow: 0 0 10px #00FF9D; animation: pulse 1s infinite; }
         .cadence-badge-title {
@@ -3194,7 +2882,7 @@ export default function Home() {
           padding: 1px 6px;
           border-radius: 3px;
           background: rgba(0, 240, 255, 0.12);
-          color: #00F0FF;
+          color: #e17e61;
           border: 1px solid rgba(0, 240, 255, 0.3);
         }
         .cadence-pill.imminent {
@@ -3216,7 +2904,7 @@ export default function Home() {
         .cadence-timer-val {
           font-size: 15px;
           font-weight: 800;
-          color: #00F0FF;
+          color: #e17e61;
           letter-spacing: -0.01em;
         }
         .qa-release-cadence-box.imminent .cadence-timer-val { color: #F59E0B; }
@@ -3278,7 +2966,7 @@ export default function Home() {
           justify-content: center;
           border-radius: 50%;
           background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(192, 132, 252, 0.2));
-          color: #00F0FF;
+          color: #e17e61;
           font-weight: 700;
           border: 1px solid rgba(0, 240, 255, 0.3);
           flex-shrink: 0;
@@ -3370,7 +3058,7 @@ export default function Home() {
           text-decoration: none;
         }
         .pr-deep-link.pr-fe {
-          color: #38BDF8;
+          color: #e17e61;
           background: rgba(56, 189, 248, 0.1);
           border: 1px solid rgba(56, 189, 248, 0.32);
         }
@@ -3421,7 +3109,7 @@ export default function Home() {
           text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
         }
         .inline-pr-fe {
-          color: #38BDF8;
+          color: #e17e61;
         }
         .inline-pr-fe:hover {
           color: #7DD3FC;
@@ -3447,7 +3135,6 @@ export default function Home() {
           overflow-y: auto;
           padding: 40px 16px;
         }
-        .wrap.light ~ .overlay { background: rgba(0,0,0,0.4); }
         .overlay.open { display: flex; }
         .modal {
           background: var(--panel);
