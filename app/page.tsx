@@ -699,8 +699,10 @@ export default function Home() {
   const getStatusClass = (status: string) => {
     switch (status) {
       case 'Success': return 'success';
+      case 'Rerun - Success': return 'success';
       case 'In Progress': return 'progress';
       case 'Failed': return 'failed';
+      case 'Rerun - Failed': return 'failed';
       case 'Rolled Back': return 'rollback';
       case 'Cancelled': return 'cancelled';
       default: return 'none';
@@ -765,7 +767,7 @@ export default function Home() {
     // Check consecutive failures
     let consecutiveFailures = 0;
     for (const d of envDeps) {
-      if (d.status === 'Failed') consecutiveFailures++;
+      if (d.status === 'Failed' || d.status === 'Rerun - Failed') consecutiveFailures++;
       else break;
     }
     
@@ -811,8 +813,8 @@ export default function Home() {
           d.environment === env.name && d.started_at.startsWith(dateStr)
         );
         envData[env.name] = {
-          success: dayDeps.filter(d => d.status === 'Success').length,
-          failed: dayDeps.filter(d => d.status === 'Failed').length,
+          success: dayDeps.filter(d => d.status === 'Success' || d.status === 'Rerun - Success').length,
+          failed: dayDeps.filter(d => d.status === 'Failed' || d.status === 'Rerun - Failed').length,
           other: dayDeps.filter(d => d.status !== 'Success' && d.status !== 'Failed').length,
         };
       });
@@ -1081,7 +1083,7 @@ export default function Home() {
   }));
 
   const totalDeployments = deployments.length;
-  const successfulDeployments = deployments.filter(d => d.status === 'Success').length;
+  const successfulDeployments = deployments.filter(d => d.status === 'Success' || d.status === 'Rerun - Success').length;
   const successRate = totalDeployments > 0 ? ((successfulDeployments / totalDeployments) * 100).toFixed(1) : '100';
   const rollbackCount = deployments.filter(d => d.status === 'Rolled Back' || d.notes?.toLowerCase().includes('rollback')).length;
   const todayDate = new Date().toISOString().slice(0, 10);

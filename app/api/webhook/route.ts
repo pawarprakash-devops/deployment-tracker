@@ -145,49 +145,38 @@ export async function POST(request: NextRequest) {
     let result;
     if (ticket_link) {
       const existing = await pool.query(
-        'SELECT id FROM deployments WHERE ticket_link = $1 ORDER BY created_at DESC LIMIT 1',
+        'SELECT id, status FROM deployments WHERE ticket_link = $1 ORDER BY created_at DESC LIMIT 1',
         [ticket_link]
       );
       if (existing.rows.length > 0) {
+        // A previous attempt exists — insert a NEW row tagged as rerun.
+        // The original failed row is preserved in history.
+        const rerunStatus = `Rerun - ${status}`;
+        const rerunNotes = notes ? `🔄 Rerun: ${notes}` : `🔄 Rerun of failed deployment`;
         result = await pool.query(
-          `UPDATE deployments SET
-            status = $1,
-            completed_at = $2,
-            duration_seconds = $3,
-            notes = $4,
-            frontend_branch = COALESCE($5, frontend_branch),
-            backend_branch = COALESCE($6, backend_branch),
-            frontend_version = COALESCE($7, frontend_version),
-            backend_version = COALESCE($8, backend_version),
-            branch = COALESCE($9, branch),
-            version = COALESCE($10, version),
-            environment = $11,
-            updated_at = NOW()
-          WHERE id = $12
+          `INSERT INTO deployments (
+            environment, status, deployment_type, branch, version,
+            frontend_branch, backend_branch, frontend_version, backend_version,
+            requested_by, approved_by, tested_by, deployed_by,
+            ticket_link, notes, started_at, completed_at, duration_seconds
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
           RETURNING *`,
           [
-            status,
-            completed_at,
-            calculatedDuration,
-            notes,
-            frontend_branch,
-            backend_branch,
-            frontend_version,
-            backend_version,
-            branch,
-            version,
-            targetEnv,
-            existing.rows[0].id
+            targetEnv, rerunStatus, deployment_type,
+            branch || null, version || null,
+            frontend_branch || null, backend_branch || null,
+            frontend_version || null, backend_version || null,
+            requested_by || null, approved_by || null, tested_by || null, deployed_by || null,
+            ticket_link, rerunNotes,
+            deployStartedAt, completed_at || null, calculatedDuration || null,
           ]
         );
-        console.log('🔄 Re-run detected — updated deployment in-place:', {
-          id: existing.rows[0].id,
-          environment: targetEnv,
-          status,
-          ticket_link
+        console.log('🔄 Re-run detected — new row inserted:', {
+          id: result.rows[0].id, environment: targetEnv, status: rerunStatus, ticket_link
         });
       }
     }
+
 
     if (!result) {
       // Insert new deployment
