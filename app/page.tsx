@@ -86,7 +86,7 @@ const ENV_DEFAULT_BRANCH: Record<string, string> = {
   'Production': 'prod_ank',
 };
 
-export type ThemeMode = 'emr';
+export type ThemeMode = 'light' | 'dark';
 
 const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; type: string }> = {
   'Preview': { region: 'ap-south-1', clusterShort: 'preview-99999', type: 'Fargate' },
@@ -539,8 +539,20 @@ export default function Home() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Theme is fixed to VidAI EMR style
-  // (no user-selectable theme — single brand identity)
+  const [theme, setTheme] = useState<ThemeMode>('dark');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('tracker-theme') as ThemeMode | null;
+    if (saved && ['light', 'dark'].includes(saved)) setTheme(saved);
+  }, []);
+
+  const toggleTheme = () => {
+    const next: ThemeMode = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('tracker-theme', next);
+  };
+
+  // Theme is applied via .wrap.dark / .wrap.light classes
 
   const checkAuth = async () => {
     try {
@@ -1090,7 +1102,7 @@ export default function Home() {
 
   return (
     <>
-      <div className="wrap">
+      <div className={`wrap ${theme}`}>
         {/* Page Header */}
         <header className="top">
           <div className="title-block">
@@ -1122,6 +1134,14 @@ export default function Home() {
             </div>
           </div>
           <div className="actions">
+            <button
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
+              aria-label="Toggle dark/light mode"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             {isAdmin ? (
               <>
                 <button className="btn ghost small" onClick={() => setShowEnvModal(true)}>⚙ Targets</button>
@@ -1878,17 +1898,184 @@ export default function Home() {
 
       <style jsx>{`
 
-/* VidAI EMR Theme — single brand identity */
+/* ─── VidAI EMR Theme — base ─────────────────────────────── */
 .wrap {
   width: 100%;
   max-width: none;
   margin: 0;
   padding: 24px clamp(16px, 2.5vw, 32px) 80px;
-  background: #f0f0f0;
-  color: #2b3445;
   min-height: 100vh;
   font-family: 'Montserrat', 'Inter', system-ui, sans-serif;
+  transition: background 0.25s, color 0.25s;
 }
+
+/* ─── Light mode ─────────────────────────────────────────── */
+.wrap.light {
+  --bg: #f0f0f0;
+  --panel: #ffffff;
+  --panel-2: #f5f5f7;
+  --border: #e2e4e8;
+  --border-bright: #d8d8da;
+  --text: #2b3445;
+  --muted: #505050;
+  --faint: #8a8c91;
+  --accent: #e17e61;
+  --ok: #2e7d32;
+  --ok-bg: rgba(46, 125, 50, 0.1);
+  --warn: #d97706;
+  --warn-bg: rgba(217, 119, 6, 0.1);
+  --bad: #dc2626;
+  --bad-bg: rgba(220, 38, 38, 0.1);
+  --neutral: #505050;
+  --neutral-bg: rgba(80, 80, 80, 0.08);
+  --prod: #e17e61;
+  --card-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  background: #f0f0f0;
+  color: #2b3445;
+}
+
+/* ─── Dark mode (default) ────────────────────────────────── */
+.wrap.dark {
+  --bg: #151c28;
+  --panel: #1e2737;
+  --panel-2: #242f42;
+  --border: rgba(255,255,255,0.08);
+  --border-bright: rgba(255,255,255,0.14);
+  --text: #e8edf5;
+  --muted: #94a3b8;
+  --faint: #64748b;
+  --accent: #e17e61;
+  --ok: #4ade80;
+  --ok-bg: rgba(74, 222, 128, 0.1);
+  --warn: #fbbf24;
+  --warn-bg: rgba(251, 191, 36, 0.1);
+  --bad: #f87171;
+  --bad-bg: rgba(248, 113, 113, 0.1);
+  --neutral: #94a3b8;
+  --neutral-bg: rgba(148, 163, 184, 0.1);
+  --prod: #e17e61;
+  --card-shadow: 0 2px 16px rgba(0,0,0,0.35);
+  background: #151c28;
+  color: #e8edf5;
+}
+
+/* inputs in dark mode */
+.wrap.dark select,
+.wrap.dark input[type=text],
+.wrap.dark input[type=search],
+.wrap.dark input[type=date],
+.wrap.dark input[type=datetime-local],
+.wrap.dark textarea {
+  background: #1e2737;
+  border-color: rgba(255,255,255,0.1);
+  color: #e8edf5;
+  color-scheme: dark;
+}
+.wrap.dark select:focus,
+.wrap.dark input[type=text]:focus,
+.wrap.dark input[type=search]:focus,
+.wrap.dark input[type=date]:focus,
+.wrap.dark input[type=datetime-local]:focus,
+.wrap.dark textarea:focus {
+  border-color: #e17e61;
+}
+
+/* ghost buttons in dark mode */
+.wrap.dark .btn.ghost {
+  background: #1e2737;
+  color: #e8edf5;
+  border-color: rgba(255,255,255,0.12);
+}
+.wrap.dark .btn.ghost:hover {
+  border-color: #e17e61;
+  color: #e17e61;
+}
+
+/* probe-refresh in dark mode */
+.wrap.dark .probe-refresh-btn {
+  background: #1e2737;
+  border-color: rgba(255,255,255,0.12);
+  color: #e8edf5;
+}
+.wrap.dark .probe-refresh-btn:hover:not(:disabled) {
+  border-color: #e17e61;
+  color: #e17e61;
+  background: #1e2737;
+}
+
+/* cards in dark mode */
+.wrap.dark .card {
+  background: #1e2737;
+  border-color: rgba(255,255,255,0.07);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.35);
+}
+.wrap.dark .card:hover {
+  border-color: rgba(255,255,255,0.14);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+}
+
+/* header border in dark */
+.wrap.dark header.top {
+  border-bottom-color: rgba(255,255,255,0.08);
+}
+
+/* status badges in dark — boost readability */
+.wrap.dark .status-badge.success { background: rgba(74,222,128,0.12); color: #4ade80; }
+.wrap.dark .status-badge.failed  { background: rgba(248,113,113,0.12); color: #f87171; }
+.wrap.dark .status-badge.in-progress { background: rgba(251,191,36,0.12); color: #fbbf24; }
+.wrap.dark .status-badge.queued,
+.wrap.dark .status-badge.neutral { background: rgba(148,163,184,0.1); color: #94a3b8; }
+
+/* table rows in dark */
+.wrap.dark .table-row { background: #1e2737; border-bottom-color: rgba(255,255,255,0.06); }
+.wrap.dark .table-row:nth-child(even) { background: #1a2333; }
+
+/* section headers in dark */
+.wrap.dark .section-header { color: #e8edf5; }
+
+/* modal/overlay in dark */
+.wrap.dark .modal-box {
+  background: #1e2737;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.wrap.dark .modal-header,
+.wrap.dark .modal-footer {
+  border-color: rgba(255,255,255,0.08);
+}
+
+/* sys-badge in dark */
+.wrap.dark .sys-badge {
+  background: rgba(74, 222, 128, 0.1);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+/* theme toggle button */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #d8d8da;
+  background: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  flex-shrink: 0;
+}
+.theme-toggle-btn:hover {
+  border-color: #e17e61;
+}
+.wrap.dark .theme-toggle-btn {
+  background: #1e2737;
+  border-color: rgba(255,255,255,0.12);
+}
+.wrap.dark .theme-toggle-btn:hover {
+  border-color: #e17e61;
+}
+
 
 header.top {
   display: flex;
