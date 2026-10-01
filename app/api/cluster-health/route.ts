@@ -30,6 +30,12 @@ const PROBE_TARGETS: ClusterTarget[] = [
     type: 'backend',
   },
   {
+    name: 'Demo-Preview Backend API',
+    env: 'Demo-Preview',
+    url: 'https://preview-api.vidaisolutions.com/api/',
+    type: 'backend',
+  },
+  {
     name: 'QA Backend API',
     env: 'QA',
     url: 'https://qa-aps-api.vidaisolutions.com/api/',

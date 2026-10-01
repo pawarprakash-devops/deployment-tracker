@@ -92,6 +92,7 @@ export type ThemeMode = 'light' | 'dark';
 
 const ENV_CLUSTER_MAP: Record<string, { region: string; clusterShort: string; type: string }> = {
   'Preview': { region: 'ap-south-1', clusterShort: 'preview-99999', type: 'Fargate' },
+  'Demo-Preview': { region: 'ap-south-1', clusterShort: 'preview-ecs', type: 'ECS' },
   'QA': { region: 'ap-south-1', clusterShort: 'qa-aps-ecs', type: 'ECS' },
   'Stage': { region: 'ap-south-1', clusterShort: 'stage-aps-ecs', type: 'ECS' },
   'Stage EUW2': { region: 'eu-west-2', clusterShort: 'staging-euw2', type: 'ECS' },
@@ -624,13 +625,15 @@ export default function Home() {
         const rawList = Array.isArray(data) ? data : [];
         const normalized = rawList.map((d: any) => {
           let env = d.environment;
-          if (env === 'Other') {
-            env = 'Demo-Preview';
-          }
-          if (env === 'Demo-Preview' && d.notes) {
+          // Legacy check for uncategorized 'Other' entries
+          if (env === 'Other' && d.notes) {
             if (/stage-euw2|staging-euw2|euw2/i.test(d.notes)) env = 'Stage EUW2';
-            else if (/qa-aps|qa/i.test(d.notes) && !/prod/i.test(d.notes)) env = 'QA';
+            else if (/qa-aps|\bqa\b/i.test(d.notes) && !/prod|demo/i.test(d.notes)) env = 'QA';
             else if (/stage/i.test(d.notes)) env = 'Stage';
+          }
+          // Never re-route demo deployments away from Demo-Preview
+          if (d.frontend_branch === 'demo' || d.backend_branch === 'demo' || d.branch === 'demo') {
+            env = 'Demo-Preview';
           }
           return { ...d, environment: env };
         });
@@ -639,16 +642,22 @@ export default function Home() {
       if (environmentsRes.ok) {
         const envData = await environmentsRes.json();
         if (Array.isArray(envData)) {
-          const envList = envData.map(e => {
-            const displayName = e.name === 'Other' ? 'Demo-Preview' : e.name;
-            const isProd = e.is_production || e.name.toLowerCase().startsWith('production');
-            return {
+          const seen = new Set<string>();
+          const envList: any[] = [];
+          
+          envData.forEach(e => {
+            const displayName = e.name;
+            if (seen.has(displayName)) return;
+            seen.add(displayName);
+
+            const isProd = e.is_production || displayName.toLowerCase().startsWith('production');
+            envList.push({
               name: displayName,
               color: isProd ? '#EF4444' : '#5B8DEF',
               isProd,
               displayOrder: e.display_order ?? PROMOTION_ORDER[displayName] ?? PROMOTION_ORDER[e.name] ?? 99,
               description: ''
-            };
+            });
           });
           if (!envList.some(e => e.name === 'Stage EUW2')) {
             envList.push({
@@ -659,6 +668,7 @@ export default function Home() {
               description: 'Stage London (eu-west-2)'
             });
           }
+          envList.sort((a, b) => (a.displayOrder ?? 99) - (b.displayOrder ?? 99));
           setEnvironments(envList);
         }
       }
