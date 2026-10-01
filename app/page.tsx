@@ -47,6 +47,7 @@ interface ClusterHealthResult {
 
 const PROMOTION_ORDER: Record<string, number> = {
   'Preview': 1,
+  'Demo-Preview': 1.5,
   'QA': 2,
   'Stage': 3,
   'Stage EUW2': 3,
@@ -58,12 +59,12 @@ const PROMOTION_ORDER: Record<string, number> = {
   'Production (Neotia/Babyjoy)': 7,
   'Production': 8,
   'LMS': 9,
-  'Demo-Preview': 10,
   'Other': 10,
 };
 
 const STANDARD_BRANCHES = [
   { branch: 'dev', env: 'Preview', label: 'dev (Preview)' },
+  { branch: 'demo', env: 'Demo-Preview', label: 'demo (Demo Preview)' },
   { branch: 'qa', env: 'QA', label: 'qa (QA)' },
   { branch: 'stage', env: 'Stage', label: 'stage (Stage)' },
   { branch: 'preprod', env: 'Pre-Prod', label: 'preprod (Pre-Prod India)' },
@@ -74,6 +75,7 @@ const STANDARD_BRANCHES = [
 
 const ENV_DEFAULT_BRANCH: Record<string, string> = {
   'Preview': 'dev',
+  'Demo-Preview': 'demo',
   'QA': 'qa',
   'Stage': 'stage',
   'Stage EUW2': 'stage',

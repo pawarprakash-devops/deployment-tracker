@@ -83,6 +83,32 @@ export async function GET() {
       );
     }
 
+    // 1b. Ensure 'Demo-Preview' exists in environments table
+    const demoEnvCheck = await pool.query("SELECT id FROM environments WHERE name = 'Demo-Preview'");
+    if (demoEnvCheck.rows.length === 0) {
+      await pool.query(
+        "INSERT INTO environments (name, is_production, display_order) VALUES ('Demo-Preview', false, 2) ON CONFLICT DO NOTHING"
+      );
+    } else {
+      await pool.query(
+        "UPDATE environments SET display_order = 2 WHERE name = 'Demo-Preview'"
+      );
+    }
+
+    // Clean up any stale 'Demo' environment
+    await pool.query("DELETE FROM environments WHERE name = 'Demo'");
+
+    // Update deployments for preview-ecs-cluster (demo branch / run 36844319815) to Demo-Preview
+    const updatedDeployments = await pool.query(`
+      UPDATE deployments
+      SET environment = 'Demo-Preview'
+      WHERE ticket_link LIKE '%36844319815%'
+         OR (frontend_branch = 'demo' AND backend_branch = 'demo')
+         OR branch = 'demo'
+         OR environment = 'Demo'
+      RETURNING id, environment, status, branch, frontend_branch, backend_branch, ticket_link, notes
+    `);
+
     // 2. Widen any VARCHAR columns in deployments to TEXT to prevent "value too long for type character varying(100)"
     await pool.query(`
       ALTER TABLE deployments 
@@ -155,6 +181,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
+      updatedDeployments: updatedDeployments.rows,
       insertedQA,
       columns: cols.rows,
     });
