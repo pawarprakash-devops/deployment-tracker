@@ -63,10 +63,17 @@ export async function POST(request: NextRequest) {
       if (/staging-use1|stage-use1|use1/.test(combined)) {
         return { name: 'Stage USE1', isProduction: false };
       }
+      // Demo (preview.vidaisolutions.com) — check BEFORE QA because PR titles
+      // like "QA to Demo" would otherwise match the QA regex below.
+      if (/\bdemo\b/.test(combined) || /preview-ecs-cluster/.test(combined)) {
+        return { name: 'Demo', isProduction: false };
+      }
       if (/preview-99999|preview/.test(combined) && !/stage|pre-prod|preprod/.test((rawEnv || '').toLowerCase())) {
         return { name: 'Preview', isProduction: false };
       }
-      if (/qa-aps|qa/.test(combined) && !/stage|pre-prod|preprod|prod/.test((rawEnv || '').toLowerCase())) {
+      // Use word-boundary or explicit cluster prefix to avoid matching "qa" in
+      // PR titles like "QA to Demo" or notes text.
+      if (/qa-aps|\bqa\b/.test((rawEnv || '').toLowerCase()) || /qa-aps-ecs-cluster/.test(combined)) {
         return { name: 'QA', isProduction: false };
       }
       if (/pre-prod-usw|preprod-usw|preprod_usw/.test(combined)) {
