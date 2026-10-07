@@ -216,7 +216,7 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
     - `prod-account-full-deploy.yaml` (Neotia / Babyjoy Production)
   - Detailed plan: [deployment_gchat_notifications_plan.md](file:///home/pawarpr/Desktop/WSL-Backup/deployment_gchat_notifications_plan.md).
 
-* **Tracker alerts (✅ implemented, optional):** set `GCHAT_ALERT_WEBHOOK_URL` and the tracker's webhook posts to Google Chat on every failed deployment (🚨 *PRODUCTION* for prod environments) and when an environment recovers, including time-to-restore vs `MTTR_TARGET_MINUTES` (default 30). Not built: a reminder while an incident is still open (needs a scheduler).
+* **Tracker alerts (✅ implemented, optional):** set `GCHAT_ALERT_WEBHOOK_URL` and the tracker's webhook posts to Google Chat on every failed **production** deployment (Ankura, Neotia/Babyjoy, Refera, plain Production — lower environments never alert) and when that environment recovers, including time-to-restore vs `MTTR_TARGET_MINUTES` (default 30). Not built: a reminder while an incident is still open (needs a scheduler).
 
 ---
 

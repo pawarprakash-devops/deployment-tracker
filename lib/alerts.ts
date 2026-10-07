@@ -1,6 +1,6 @@
 import pool from '@/lib/db';
 
-// Google Chat alerts for failed deployments and recoveries (MTTR). Entirely optional and best-effort:
+// Google Chat alerts for failed PRODUCTION deployments and recoveries (MTTR). Lower environments never alert. Entirely optional and best-effort:
 // set GCHAT_ALERT_WEBHOOK_URL (Space -> Apps & integrations -> Webhooks) in Vercel to enable it;
 // MTTR_TARGET_MINUTES (default 30) is the target a recovery is compared against.
 // Errors are swallowed so an alert problem can never fail the deployment webhook.
@@ -29,11 +29,12 @@ export async function notifyDeployment(row: {
 }, isProduction: boolean) {
   try {
     if (!process.env.GCHAT_ALERT_WEBHOOK_URL) return;
+    if (!isProduction) return; // production environments only (is_production / Production* names)
     const link = row.ticket_link ? `\n<${row.ticket_link}|Open workflow run>` : '';
     const who = row.requested_by || row.deployed_by || 'unknown';
 
     if (isFailed(row.status)) {
-      await post(`${isProduction ? '🚨 *PRODUCTION* deployment FAILED' : '❌ Deployment failed'} — *${row.environment}*\nBranch: \`${row.branch || '-'}\` · Version: \`${row.version || '-'}\` · By: ${who}${link}`);
+      await post(`🚨 *PRODUCTION* deployment FAILED — *${row.environment}*\nBranch: \`${row.branch || '-'}\` · Version: \`${row.version || '-'}\` · By: ${who}${link}`);
       return;
     }
 

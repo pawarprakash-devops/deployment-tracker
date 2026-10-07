@@ -59,7 +59,7 @@ npm run dev                  # http://localhost:3000
 | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | `/api/jira/*` | Jira Cloud site URL and an Atlassian API token (Basic auth, server-side only). Unset → `/jira` shows setup instructions |
 | `JIRA_DONE_STATUSES` | `/api/jira/stats` | Optional, comma-separated status names to treat as shipped/done (in addition to Jira's Done category and names like Done/Closed/Released/Deployed) |
 | `JIRA_PROJECT_KEYS` | `/api/jira/stats`, key detection | Comma-separated project keys (e.g. `CORE,EMR`); required for metrics, and limits which `ABC-123` patterns count as tickets |
-| `GCHAT_ALERT_WEBHOOK_URL` | `lib/alerts.ts` | Optional Google Chat webhook: alerts on failed deployments (🚨 for production) and on recovery with time-to-restore vs target |
+| `GCHAT_ALERT_WEBHOOK_URL` | `lib/alerts.ts` | Optional Google Chat webhook: alerts on failed **production** deployments and on production recovery with time-to-restore vs target (lower environments never alert) |
 | `MTTR_TARGET_MINUTES` (default `30`) | `lib/alerts.ts` | MTTR target a recovery message is compared with |
 | `GH_TOKEN` | `/api/compare` | GitHub token with read access to the compared repos |
 | `USE_MOCK_DATA` | `lib/db.ts` | Dev-only mock flag |
