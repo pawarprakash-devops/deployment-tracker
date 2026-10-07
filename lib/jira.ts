@@ -73,15 +73,44 @@ function toIssue(i: any): JiraIssue {
 
 const authHeader = () => 'Basic ' + Buffer.from(`${EMAIL}:${TOKEN}`).toString('base64');
 
+// At most MAX_PARALLEL Jira requests in flight (a dashboard load fans out ~100 count queries; unbounded
+// bursts risk Jira's 429 rate limit), one retry on 429 honouring Retry-After.
+const MAX_PARALLEL = 6;
+let inFlight = 0;
+const waiters: Array<() => void> = [];
+async function acquire() { if (inFlight >= MAX_PARALLEL) await new Promise<void>((r) => waiters.push(r)); inFlight++; }
+function release() { inFlight--; waiters.shift()?.(); }
+
 export async function jiraFetch<T = any>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: init?.method || 'GET',
-    headers: { Authorization: authHeader(), Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`Jira ${res.status} ${path.split('?')[0]}: ${(await res.text()).slice(0, 200)}`);
-  return res.json();
+  await acquire();
+  try {
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(`${BASE}${path}`, {
+        method: init?.method || 'GET',
+        headers: { Authorization: authHeader(), Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: init?.body ? JSON.stringify(init.body) : undefined,
+        cache: 'no-store',
+      });
+      if (res.status === 429 && attempt === 0) {
+        await new Promise((r) => setTimeout(r, Math.min(5, Number(res.headers.get('retry-after')) || 2) * 1000));
+        continue;
+      }
+      if (!res.ok) throw new Error(`Jira ${res.status} ${path.split('?')[0]}: ${(await res.text()).slice(0, 200)}`);
+      return res.json();
+    }
+  } finally {
+    release();
+  }
+}
+
+// Tiny per-instance cache so repeated dashboard loads (and several admins) don't each re-run ~100 Jira queries.
+const memo = new Map<string, { at: number; value: unknown }>();
+export async function cached<T>(key: string, ttlMs: number, fresh: boolean, fn: () => Promise<T>): Promise<T> {
+  const hit = memo.get(key);
+  if (!fresh && hit && Date.now() - hit.at < ttlMs) return hit.value as T;
+  const value = await fn();
+  memo.set(key, { at: Date.now(), value });
+  return value;
 }
 
 // POST /rest/api/3/search/jql (the old /search endpoint was removed from Jira Cloud).

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import {
-  isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jqlStr, stageOf, JIRA_PROJECTS,
+  cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jqlStr, stageOf, JIRA_PROJECTS,
   ticketDeploys, isProdEnv, median, percentile, jiraIssuesByKeys, type JiraIssue,
 } from '@/lib/jira';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30; // many Jira calls fan out in parallel; default is 10 s on Hobby
 
 const DAY = 86400000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -19,6 +20,8 @@ export async function GET(request: NextRequest) {
   if (!JIRA_PROJECTS.length) return NextResponse.json({ configured: true, error: 'Set JIRA_PROJECT_KEYS' }, { status: 400 });
   try {
     const stuckDays = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get('stuckDays') || '5', 10) || 5, 1), 60);
+    const fresh = new URL(request.url).searchParams.get('fresh') === '1'; // Refresh button bypasses the 5 min cache
+    const payload = await cached(`insights:${stuckDays}`, 300000, fresh, async () => {
     const proj = `project in (${JIRA_PROJECTS.join(',')})`;
     const statuses = await jiraProjectStatuses(JIRA_PROJECTS);
     const names = (stage: string) => statuses.filter((s) => stageOf(s.name, s.category) === stage).map((s) => s.name);
@@ -79,13 +82,15 @@ export async function GET(request: NextRequest) {
       toProd = { count: d.length, medianDays: +median(d).toFixed(1), p90Days: +percentile(d, 90).toFixed(1) };
     }
 
-    return NextResponse.json({
+    return {
       configured: true, stuckDays,
       readyToShip: { total: qaTotal, statuses: qaPassed, shownOldestFirst: readyToShip.length, notInProd: readyToShip.filter((i) => !i.inProd).length, items: readyToShip },
       stuck: { total: stuckTotal, statuses: active, items: stuckIssues.map(slim) },
       bugs: { weekly, byPriority: byPriority.filter((x) => x.value), byAge },
       leadTime: { overall: lead(doneIssues), byType: Object.fromEntries(Object.entries(byType).map(([t, xs]) => [t, lead(xs)])), createdToProd: toProd, windowDays: 90, sampled: doneIssues.length },
-    }, { headers: { 'Cache-Control': 'private, max-age=300' } });
+    };
+    });
+    return NextResponse.json(payload, { headers: { 'Cache-Control': 'private, max-age=300' } });
   } catch (e) {
     return NextResponse.json({ configured: true, error: e instanceof Error ? e.message : String(e) }, { status: 502 });
   }

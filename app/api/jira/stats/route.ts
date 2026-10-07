@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jiraActiveSprints,
+  cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jiraActiveSprints,
   jqlStr, stageOf, STAGES, JIRA_PROJECTS,
 } from '@/lib/jira';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30; // many Jira calls fan out in parallel; default is 10 s on Hobby
 
 const toList = (o: Record<string, number>) =>
   Object.entries(o).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -20,6 +21,8 @@ export async function GET(request: NextRequest) {
   }
   try {
     const days = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get('days') || '30', 10) || 30, 1), 90);
+    const fresh = new URL(request.url).searchParams.get('fresh') === '1'; // Refresh button bypasses the 5 min cache
+    const payload = await cached(`stats:${days}`, 300000, fresh, async () => {
     const proj = `project in (${JIRA_PROJECTS.join(',')})`;
     const statuses = await jiraProjectStatuses(JIRA_PROJECTS);
     const doneNames = statuses.filter((s) => stageOf(s.name, s.category) === 'Deployed / Done').map((s) => s.name);
@@ -51,7 +54,7 @@ export async function GET(request: NextRequest) {
     const assignee: Record<string, number> = {};
     for (const i of sample) assignee[i.assignee || 'Unassigned'] = (assignee[i.assignee || 'Unassigned'] || 0) + 1;
 
-    return NextResponse.json({
+    return {
       configured: true,
       projects: JIRA_PROJECTS,
       windowDays: days,
@@ -70,7 +73,9 @@ export async function GET(request: NextRequest) {
       openBugs: openBugList,
       sprints: Array.isArray(sprints) ? sprints : [],
       sprintError: Array.isArray(sprints) ? undefined : sprints.error,
-    }, { headers: { 'Cache-Control': 'private, max-age=300' } });
+    };
+    });
+    return NextResponse.json(payload, { headers: { 'Cache-Control': 'private, max-age=300' } });
   } catch (e) {
     return NextResponse.json({ configured: true, error: e instanceof Error ? e.message : String(e) }, { status: 502 });
   }

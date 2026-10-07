@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 
 interface Commit { sha: string; message: string; author?: string; url: string; date?: string }
-interface Pair { from: string; to: string; fromEnv: string; toEnv: string; status?: string; pending?: number; behind?: number; commits?: Commit[]; error?: string }
+interface Promotion { number: number; url: string; mergedAt: string }
+interface Pair { from: string; to: string; fromEnv: string; toEnv: string; basis?: 'promotion-pr' | 'branch-compare'; promotion?: Promotion; status?: string; pending?: number; behind?: number; commits?: Commit[]; error?: string }
+
+const ago = (iso: string) => { const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d}d ago`; };
 
 // "Promotion radar": how many commits each pipeline stage is ahead of the next one.
 export default function DriftRibbon() {
@@ -29,6 +32,7 @@ export default function DriftRibbon() {
           {(['backend', 'frontend'] as const).map((w) => <button key={w} className={which === w ? 'on' : ''} onClick={() => setWhich(w)}>{w === 'backend' ? 'Backend' : 'Frontend'}</button>)}
         </span>
       </div>
+      <div className="drift-sub" style={{ marginTop: 8 }}>“+N” counts commits on the upstream branch since the last merged promotion PR. “~N” = no promotion PR found (e.g. Ankura prod is updated by cherry-picks), so it can over-count.</div>
       {error && <div className="drift-err">Drift unavailable: {error}</div>}
       {!pairs && !error && <div className="drift-sub">Loading…</div>}
       {pairs && (
@@ -38,9 +42,10 @@ export default function DriftRibbon() {
             const sync = !p.error && (p.pending ?? 0) === 0;
             return (
               <button key={k} className={`drift-chip ${p.error ? 'err' : sync ? 'sync' : 'pend'} ${open === k ? 'sel' : ''}`} onClick={() => setOpen(open === k ? null : k)} disabled={!!p.error || sync}
-                title={p.error ? p.error : `${p.from} → ${p.to}${p.behind ? ` · ${p.behind} commit(s) only on ${p.to}` : ''}`}>
+                title={p.error ? p.error : p.promotion ? `${p.from} → ${p.to}: commits on ${p.from} since promotion PR #${p.promotion.number} (${ago(p.promotion.mergedAt)})` : `${p.from} → ${p.to}: no promotion PR found, plain branch compare (can over-count after squash/merge promotions)`}>
                 <span className="drift-env">{p.fromEnv} → {p.toEnv}</span>
-                <span className="drift-val">{p.error ? 'n/a' : sync ? 'IN SYNC' : `+${p.pending} pending`}</span>
+                <span className="drift-val">{p.error ? 'n/a' : sync ? 'IN SYNC' : `${p.basis === 'branch-compare' ? '~' : '+'}${p.pending} pending`}</span>
+                {!p.error && p.promotion && <span className="drift-env">last promoted {ago(p.promotion.mergedAt)}</span>}
               </button>
             );
           })}
@@ -48,6 +53,7 @@ export default function DriftRibbon() {
       )}
       {active?.commits && active.commits.length > 0 && (
         <ul className="drift-list">
+          <li className="drift-sub">{active.promotion ? <>Commits on {active.from} since <a href={active.promotion.url} target="_blank" rel="noopener noreferrer">PR #{active.promotion.number}</a> ({ago(active.promotion.mergedAt)})</> : <>~ No promotion PR found for {active.from} → {active.to}; this is a plain branch compare and may over-count.</>}</li>
           {active.commits.map((c) => (
             <li key={c.sha}><a href={c.url} target="_blank" rel="noopener noreferrer">{c.sha}</a> {c.message} <span className="drift-sub">— {c.author}</span></li>
           ))}

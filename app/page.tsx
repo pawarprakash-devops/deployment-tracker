@@ -527,12 +527,15 @@ export default function Home() {
   const [jiraIssues, setJiraIssues] = useState<Record<string, { url: string; status: string; summary: string }>>({});
 
   // Admin only: resolve Jira keys visible in the history table (status + link). Viewers just see the key chips.
+  // Keyed on the key list itself (not the deployments array, which gets a new identity on every 90 s poll)
+  // so Jira is only queried when the set of tickets actually changes.
+  const jiraKeyList = isAdmin
+    ? [...new Set(deployments.slice(0, 100).flatMap((d) => extractKeys([d.notes, d.branch, d.frontend_branch, d.backend_branch, d.ticket_link].filter(Boolean).join(' '))))].slice(0, 100).join(',')
+    : '';
   useEffect(() => {
-    if (!isAdmin) return;
-    const keys = [...new Set(deployments.slice(0, 100).flatMap((d) => extractKeys([d.notes, d.branch, d.frontend_branch, d.backend_branch, d.ticket_link].filter(Boolean).join(' '))))].slice(0, 100);
-    if (!keys.length) return;
-    fetch(`/api/jira/issues?keys=${keys.join(',')}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.issues) setJiraIssues(j.issues); }).catch(() => {});
-  }, [isAdmin, deployments]);
+    if (!jiraKeyList) return;
+    fetch(`/api/jira/issues?keys=${jiraKeyList}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.issues) setJiraIssues(j.issues); }).catch(() => {});
+  }, [jiraKeyList]);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareData, setCompareData] = useState<any>(null);
   const [compareLoading, setCompareLoading] = useState(false);

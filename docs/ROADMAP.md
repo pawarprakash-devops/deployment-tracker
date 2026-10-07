@@ -157,7 +157,7 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
 ### 3.1 Environment Promotion Drift Matrix (Ahead / Behind Delta)
 
 * **Status:** ✅ **Implemented** as the **Promotion Radar** strip above the environment cards on `/` (`app/DriftRibbon.tsx`, `GET /api/drift`).
-* For the backend or frontend repo (toggle) it compares adjacent pipeline branches — `dev→qa`, `qa→stage`, `stage→preprod`, `preprod→prod_ank`, `preprod→prod_neo` — and shows `IN SYNC` or `+N pending`; clicking a chip lists the pending commits (sha, message, author, link). Results are edge-cached for 120 s and need `GH_TOKEN` on the server.
+* For the backend or frontend repo (toggle) it checks the active promotion flow — `dev→qa`, `qa→preprod` (QA promotes straight to preprod; `stage` is not on the path), `preprod→prod_neo`, `preprod→prod_ank` — and shows `IN SYNC` or `+N pending`, counted from the last merged promotion PR into the downstream branch (a plain branch compare over-counts after squash/merge-commit/cherry-pick promotions, so pairs without a promotion PR show `~N`); clicking a chip lists the pending commits (sha, message, author, link). Results are edge-cached for 120 s and need `GH_TOKEN` on the server.
 * The older two-deployment **compare modal** (`GET /api/compare`) remains for diffing arbitrary refs.
 
 ---

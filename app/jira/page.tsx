@@ -52,12 +52,12 @@ export default function JiraDashboard() {
     fetch('/api/auth/session').then((r) => r.json()).then((s) => setAuth(s.role === 'admin' ? 'admin' : 'viewer')).catch(() => setAuth('viewer'));
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (fresh = false) => {
     setLoading(true);
     const [s, d, ins, nl] = await Promise.all([
-      fetch(`/api/jira/stats?days=${days}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
+      fetch(`/api/jira/stats?days=${days}${fresh ? '&fresh=1' : ''}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
       fetch('/api/jira/deployed').then((r) => r.json()).catch(() => null),
-      fetch(`/api/jira/insights?stuckDays=${stuckDays}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
+      fetch(`/api/jira/insights?stuckDays=${stuckDays}${fresh ? '&fresh=1' : ''}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
       fetch('/api/jira/release-notes').then((r) => r.json()).catch(() => null),
     ]);
     setStats(s); setDeployed(d); setInsights(ins); setNotesList(nl?.deployments || []); setLoading(false);
@@ -97,7 +97,7 @@ export default function JiraDashboard() {
           <select value={stuckDays} onChange={(e) => setStuckDays(Number(e.target.value))} aria-label="Stuck threshold">
             {[3, 5, 7, 14, 30].map((d) => <option key={d} value={d}>Stuck ≥ {d}d</option>)}
           </select>
-          <button onClick={load} disabled={loading || auth !== 'admin'}>{loading ? 'Loading…' : '↺ Refresh'}</button>
+          <button onClick={() => load(true)} disabled={loading || auth !== 'admin'}>{loading ? 'Loading…' : '↺ Refresh'}</button>
           <Link href="/">← Deployments</Link>
         </div>
       </header>
