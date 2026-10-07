@@ -5,10 +5,11 @@ export const dynamic = 'force-dynamic';
 // Promotion pipeline: each pair is [upstream branch, downstream branch]; "pending" = commits on the
 // upstream branch since the last promotion PR into the downstream branch.
 // Active flow observed in vidai-backend PRs: dev -> qa -> preprod (QA promotes straight to preprod; `stage` is
-// not on the path), preprod -> prod_neo via promotion PRs, prod_ank is updated by cherry-pick/release PRs.
+// not on the path), qa -> demo (Demo-Preview), preprod -> prod_neo via promotion PRs, prod_ank is updated by cherry-pick/release PRs.
 const PAIRS: { from: string; to: string; fromEnv: string; toEnv: string }[] = [
   { from: 'dev', to: 'qa', fromEnv: 'Preview', toEnv: 'QA' },
   { from: 'qa', to: 'preprod', fromEnv: 'QA', toEnv: 'Pre-Prod' },
+  { from: 'qa', to: 'demo', fromEnv: 'QA', toEnv: 'Demo-Preview' },
   { from: 'preprod', to: 'prod_neo', fromEnv: 'Pre-Prod', toEnv: 'Production (Neotia/Babyjoy)' },
   { from: 'preprod', to: 'prod_ank', fromEnv: 'Pre-Prod', toEnv: 'Production (Ankura)' },
 ];

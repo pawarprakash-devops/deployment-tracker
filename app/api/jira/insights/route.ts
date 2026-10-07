@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import {
-  cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jqlStr, stageOf, JIRA_PROJECTS,
+  cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jqlStr, filterJql, stageOf, JIRA_PROJECTS,
   ticketDeploys, isProdEnv, median, percentile, jiraIssuesByKeys, type JiraIssue,
 } from '@/lib/jira';
 
@@ -20,9 +20,10 @@ export async function GET(request: NextRequest) {
   if (!JIRA_PROJECTS.length) return NextResponse.json({ configured: true, error: 'Set JIRA_PROJECT_KEYS' }, { status: 400 });
   try {
     const stuckDays = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get('stuckDays') || '5', 10) || 5, 1), 60);
+    const filter = filterJql(new URL(request.url).searchParams);
     const fresh = new URL(request.url).searchParams.get('fresh') === '1'; // Refresh button bypasses the 5 min cache
-    const payload = await cached(`insights:${stuckDays}`, 300000, fresh, async () => {
-    const proj = `project in (${JIRA_PROJECTS.join(',')})`;
+    const payload = await cached(`insights:${stuckDays}:${filter.key}`, 300000, fresh, async () => {
+    const proj = `project in (${JIRA_PROJECTS.join(',')})${filter.clause}`;
     const statuses = await jiraProjectStatuses(JIRA_PROJECTS);
     const names = (stage: string) => statuses.filter((s) => stageOf(s.name, s.category) === stage).map((s) => s.name);
     const inList = (ns: string[]) => ns.map(jqlStr).join(', ');
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     const priorities = ['Highest', 'High', 'Medium', 'Low', 'Lowest'];
 
     const [deploys, qaTotal, qaIssues, stuckTotal, stuckIssues, weekly, byPriority, byAge, doneIssues] = await Promise.all([
-      ticketDeploys(pool),
+      ticketDeploys(pool).catch((e) => { console.error('ticketDeploys failed:', e?.message || e); return {} as Awaited<ReturnType<typeof ticketDeploys>>; }), // environments are optional; don't lose the whole report if the DB hiccups
       qaPassed.length ? jiraCount(`${proj} AND status in (${inList(qaPassed)})`) : 0,
       qaPassed.length ? jiraSearch(`${proj} AND status in (${inList(qaPassed)}) ORDER BY updated ASC`, 60) : [],
       active.length ? jiraCount(`${proj} AND status in (${inList(active)}) AND updated <= -${stuckDays}d`) : 0,

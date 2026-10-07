@@ -17,9 +17,18 @@ export default function DriftRibbon() {
 
   useEffect(() => {
     let alive = true;
-    setPairs(null); setError(''); setOpen(null);
-    fetch(`/api/drift?repo=${which}`).then((r) => r.json()).then((d) => { if (!alive) return; if (d.error) setError(d.error); else setPairs(d.pairs); }).catch((e) => alive && setError(String(e)));
-    return () => { alive = false; };
+    const load = (initial: boolean) => {
+      if (initial) { setPairs(null); setError(''); setOpen(null); }
+      fetch(`/api/drift?repo=${which}`).then((r) => r.json()).then((d) => { if (!alive) return; if (d.error) setError(d.error); else { setError(''); setPairs(d.pairs); } }).catch((e) => alive && setError(String(e)));
+    };
+    load(true);
+    // Recompute automatically every 5 min while the tab is visible, and when it regains focus after a while
+    let last = Date.now();
+    const tick = () => { if (!document.hidden) { last = Date.now(); load(false); } };
+    const timer = setInterval(tick, 300000);
+    const onVis = () => { if (!document.hidden && Date.now() - last > 300000) tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { alive = false; clearInterval(timer); document.removeEventListener('visibilitychange', onVis); };
   }, [which]);
 
   const active = pairs?.find((p) => `${p.from}>${p.to}` === open);

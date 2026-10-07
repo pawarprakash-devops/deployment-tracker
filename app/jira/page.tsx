@@ -4,7 +4,16 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 
 type Theme = 'light' | 'dark';
-interface Issue { key: string; summary: string; status: string; statusCategory: string; type: string; priority: string | null; assignee: string | null; url: string }
+interface Issue { key: string; summary: string; status: string; statusCategory: string; type: string; priority: string | null; assignee: string | null; reporter?: string | null; labels?: string[]; created?: string; updated?: string; url: string }
+interface Person { id: string; name: string }
+interface FilterOptions { people: Person[]; types: string[]; statuses: string[]; priorities: string[]; labels: string[]; components: string[]; versions: string[] }
+interface Filters { assignee: string[]; reporter: string[]; type: string[]; priority: string[]; status: string[]; label: string[]; component: string[]; version: string[]; from: string; to: string; q: string }
+const EMPTY: Filters = { assignee: [], reporter: [], type: [], priority: [], status: [], label: [], component: [], version: [], from: '', to: '', q: '' };
+const LISTS = ['assignee', 'reporter', 'type', 'priority', 'status', 'label', 'component', 'version'] as const;
+const toQS = (f: Filters) => { const sp = new URLSearchParams(); for (const k of LISTS) if (f[k].length) sp.set(k, f[k].join(',')); if (f.from) sp.set('from', f.from); if (f.to) sp.set('to', f.to); if (f.q.trim()) sp.set('q', f.q.trim()); return sp.toString(); };
+const fromQS = (qs: string): Filters => { const sp = new URLSearchParams(qs); const f: Filters = { ...EMPTY, from: sp.get('from') || '', to: sp.get('to') || '', q: sp.get('q') || '' }; for (const k of LISTS) f[k] = (sp.get(k) || '').split(',').filter(Boolean); return f; };
+const activeCount = (f: Filters) => LISTS.filter((k) => f[k].length).length + (f.from || f.to ? 1 : 0) + (f.q.trim() ? 1 : 0);
+const isoDaysAgo = (d: number) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
 interface Count { name: string; value: number }
 interface Sprint { name: string; goal: string | null; startDate: string | null; endDate: string | null; boardName: string; total: number; byStage: Count[]; byStatus: Count[] }
 interface Stats {
@@ -46,22 +55,41 @@ export default function JiraDashboard() {
   const [notesId, setNotesId] = useState('');
   const [notesMd, setNotesMd] = useState('');
   const [copied, setCopied] = useState(false);
+  const [filters, setFilters] = useState<Filters>(EMPTY);   // what the bar shows
+  const [applied, setApplied] = useState<Filters>(EMPTY);   // what the dashboard is loaded with
+  const [options, setOptions] = useState<FilterOptions | null>(null);
+  const [explorer, setExplorer] = useState<{ total: number; shown: number; issues: Issue[]; error?: string } | null>(null);
+  const [sort, setSort] = useState('updated');
 
   useEffect(() => {
     try { const t = localStorage.getItem('tracker-theme'); if (t === 'light' || t === 'dark') setTheme(t); } catch {}
+    try { const f = fromQS(window.location.search); setFilters(f); setApplied(f); } catch {}
     fetch('/api/auth/session').then((r) => r.json()).then((s) => setAuth(s.role === 'admin' ? 'admin' : 'viewer')).catch(() => setAuth('viewer'));
   }, []);
 
   const load = useCallback(async (fresh = false) => {
     setLoading(true);
-    const [s, d, ins, nl] = await Promise.all([
-      fetch(`/api/jira/stats?days=${days}${fresh ? '&fresh=1' : ''}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
+    const qs = toQS(applied);
+    const f = (fresh ? '&fresh=1' : '') + (qs ? `&${qs}` : '');
+    const [s, d, ins, nl, ex] = await Promise.all([
+      fetch(`/api/jira/stats?days=${days}${f}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
       fetch('/api/jira/deployed').then((r) => r.json()).catch(() => null),
-      fetch(`/api/jira/insights?stuckDays=${stuckDays}${fresh ? '&fresh=1' : ''}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
+      fetch(`/api/jira/insights?stuckDays=${stuckDays}${f}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
       fetch('/api/jira/release-notes').then((r) => r.json()).catch(() => null),
+      fetch(`/api/jira/search?sort=${sort}${f}`).then((r) => r.json()).catch((e) => ({ error: String(e) })),
     ]);
-    setStats(s); setDeployed(d); setInsights(ins); setNotesList(nl?.deployments || []); setLoading(false);
-  }, [days, stuckDays]);
+    setStats(s); setDeployed(d); setInsights(ins); setNotesList(nl?.deployments || []); setExplorer(ex); setLoading(false);
+  }, [days, stuckDays, applied, sort]);
+
+  useEffect(() => {
+    if (auth !== 'admin') return;
+    fetch('/api/jira/filters').then((r) => r.json()).then((o) => { if (!o.error && o.people) setOptions(o); }).catch(() => {});
+  }, [auth]);
+
+  const apply = (f: Filters) => {
+    setFilters(f); setApplied(f);
+    try { const qs = toQS(f); window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname); } catch {}
+  };
 
   const loadNotes = async (id: string) => {
     setNotesId(id); setNotesMd(''); setCopied(false);
@@ -101,6 +129,37 @@ export default function JiraDashboard() {
           <Link href="/">← Deployments</Link>
         </div>
       </header>
+
+      {auth === 'admin' && (
+        <section className="jpanel jfilters">
+          <div className="jfrow">
+            <MultiSelect label="Assignee" options={[{ id: 'unassigned', name: 'Unassigned' }, ...(options?.people || [])]} value={filters.assignee} onChange={(v) => setFilters({ ...filters, assignee: v })} />
+            <MultiSelect label="Reported by" options={options?.people || []} value={filters.reporter} onChange={(v) => setFilters({ ...filters, reporter: v })} />
+            <MultiSelect label="Type" options={(options?.types || []).map((x) => ({ id: x, name: x }))} value={filters.type} onChange={(v) => setFilters({ ...filters, type: v })} />
+            <MultiSelect label="Priority" options={(options?.priorities || []).map((x) => ({ id: x, name: x }))} value={filters.priority} onChange={(v) => setFilters({ ...filters, priority: v })} />
+            <MultiSelect label="Status" options={(options?.statuses || []).map((x) => ({ id: x, name: x }))} value={filters.status} onChange={(v) => setFilters({ ...filters, status: v })} />
+            <MultiSelect label="Label" options={(options?.labels || []).map((x) => ({ id: x, name: x }))} value={filters.label} onChange={(v) => setFilters({ ...filters, label: v })} />
+            <MultiSelect label="Component" options={(options?.components || []).map((x) => ({ id: x, name: x }))} value={filters.component} onChange={(v) => setFilters({ ...filters, component: v })} />
+            <MultiSelect label="Fix version" options={(options?.versions || []).map((x) => ({ id: x, name: x }))} value={filters.version} onChange={(v) => setFilters({ ...filters, version: v })} />
+          </div>
+          <div className="jfrow">
+            <label className="jdate">Created from <input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
+            <label className="jdate">to <input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
+            <input className="jsearch" placeholder="Search text (summary, description, comments)…" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && apply(filters)} />
+            <button className="jprimary" onClick={() => apply(filters)}>Apply filters</button>
+            <button onClick={() => apply(EMPTY)} disabled={activeCount(filters) === 0 && activeCount(applied) === 0}>Clear</button>
+          </div>
+          <div className="jfrow jpresets">
+            <span className="jfaint">Quick:</span>
+            <button onClick={() => apply({ ...EMPTY, type: ['Bug'] })}>Bugs</button>
+            <button onClick={() => apply({ ...EMPTY, assignee: ['unassigned'] })}>Unassigned</button>
+            <button onClick={() => apply({ ...EMPTY, from: isoDaysAgo(7) })}>Created last 7d</button>
+            <button onClick={() => apply({ ...EMPTY, type: ['Bug'], from: isoDaysAgo(7) })}>New bugs (7d)</button>
+            <button onClick={() => apply({ ...EMPTY, type: ['Bug'], priority: ['Highest', 'High'] })}>High-priority bugs</button>
+            {activeCount(applied) > 0 && <span className="jfaint">· {activeCount(applied)} filter{activeCount(applied) === 1 ? '' : 's'} applied to every section below (sprint panel and tickets-by-environment are not filtered)</span>}
+          </div>
+        </section>
+      )}
 
       {auth === 'loading' && <div className="jpanel">Loading…</div>}
 
@@ -225,6 +284,21 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
         </section>
       )}
 
+      {auth === 'admin' && explorer && (
+        <section className="jpanel">
+          <h2>Tickets {explorer.total !== undefined && <span className="jfaint">· {explorer.total} match{explorer.total === 1 ? '' : 'es'}{explorer.shown < explorer.total ? ` (showing ${explorer.shown})` : ''}</span>}</h2>
+          {explorer.error && <div className="jerr">{explorer.error}</div>}
+          <div className="jfrow">
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
+              <option value="updated">Recently updated</option><option value="created">Newest first</option><option value="oldest">Oldest first</option>
+              <option value="priority">Priority</option><option value="idle">Longest idle</option>
+            </select>
+            <button onClick={() => exportCsv(explorer.issues)} disabled={!explorer.issues?.length}>Export CSV</button>
+          </div>
+          {explorer.issues?.length ? <ExplorerTable issues={explorer.issues} /> : !explorer.error && <div className="jnote">No tickets match these filters.</div>}
+        </section>
+      )}
+
       {auth === 'admin' && deployed && (
         <section className="jpanel">
           <h2>Tickets by environment</h2>
@@ -281,6 +355,11 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
         .jweeks { display:flex; gap:10px; align-items:flex-end; margin-top:8px; }
         .jweek { flex:1; min-width:36px; text-align:center; } .jbars { height:110px; display:flex; gap:3px; align-items:flex-end; justify-content:center; }
         .jbars span { display:block; width:40%; max-width:22px; border-radius:3px 3px 0 0; min-height:1px; } .jwl { font-size:11px; color:var(--faint); margin-top:4px; } .jwn { font-size:11px; color:var(--muted); }
+        .jfilters { position:relative; z-index:5; } .jfrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; } .jpresets button { padding:4px 10px; font-size:12px; border-radius:16px; }
+        .jfrow button.jprimary { background:var(--accent); color:#fff; border-color:var(--accent); } .jdate { font-size:12px; color:var(--muted); display:flex; gap:6px; align-items:center; } .jsearch { flex:1; min-width:220px; }
+        .jms { position:relative; } .jms-on { border-color:var(--accent) !important; } .jms-back { position:fixed; inset:0; z-index:9; }
+        .jms-pop { position:absolute; top:calc(100% + 4px); left:0; z-index:10; width:260px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 8px 24px rgba(0,0,0,.35); display:flex; flex-direction:column; gap:6px; }
+        .jms-list { max-height:240px; overflow:auto; display:flex; flex-direction:column; } .jms-list label { display:flex; gap:8px; align-items:center; padding:4px 6px; font-size:13px; border-radius:6px; cursor:pointer; } .jms-list label:hover { background:rgba(128,128,128,.12); }
         pre { background:rgba(128,128,128,.12); padding:12px; border-radius:8px; overflow-x:auto; font-size:12.5px; }
       `}</style>
     </div>
@@ -376,4 +455,70 @@ function LTCard({ label, lt }: { label: string; lt: LT }) {
       <div className="jfaint">{lt.count ? `median · p90 ${lt.p90Days}d · n=${lt.count}` : 'no data'}</div>
     </div>
   );
+}
+
+function MultiSelect({ label, options, value, onChange }: { label: string; options: { id: string; name: string }[]; value: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const shown = options.filter((o) => o.name.toLowerCase().includes(q.toLowerCase())).slice(0, 200);
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  const names = value.map((v) => options.find((o) => o.id === v)?.name || v);
+  return (
+    <div className="jms">
+      <button type="button" className={value.length ? 'jms-on' : ''} onClick={() => setOpen(!open)} title={names.join(', ')}>
+        {label}{value.length ? `: ${value.length === 1 ? names[0] : `${value.length} selected`}` : ''} ▾
+      </button>
+      {open && (<>
+        <div className="jms-back" onClick={() => setOpen(false)} />
+        <div className="jms-pop">
+          <input placeholder={`Search ${label.toLowerCase()}…`} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+          <div className="jms-list">
+            {shown.length === 0 && <div className="jfaint" style={{ padding: 6 }}>{options.length ? 'No match' : 'Loading…'}</div>}
+            {shown.map((o) => (
+              <label key={o.id}><input type="checkbox" checked={value.includes(o.id)} onChange={() => toggle(o.id)} /> {o.name}</label>
+            ))}
+          </div>
+          {value.length > 0 && <button type="button" onClick={() => onChange([])}>Clear {label.toLowerCase()}</button>}
+        </div>
+      </>)}
+    </div>
+  );
+}
+
+const idle = (iso?: string) => (iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)) : null);
+
+function ExplorerTable({ issues }: { issues: Issue[] }) {
+  return (
+    <div className="jscroll">
+      <table>
+        <thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Priority</th><th>Assignee</th><th>Reporter</th><th>Labels</th><th>Created</th><th className="jc">Idle</th></tr></thead>
+        <tbody>
+          {issues.map((i) => (
+            <tr key={i.key}>
+              <td className="jmono"><a href={i.url} target="_blank" rel="noopener noreferrer">{i.key}</a></td>
+              <td>{i.summary}</td>
+              <td>{i.type}</td>
+              <td style={{ color: catColor(i.statusCategory) }}>{i.status}</td>
+              <td>{i.priority || '—'}</td>
+              <td>{i.assignee || <span className="jfaint">Unassigned</span>}</td>
+              <td>{i.reporter || '—'}</td>
+              <td className="jfaint">{(i.labels || []).join(', ')}</td>
+              <td className="jfaint" style={{ whiteSpace: 'nowrap' }}>{i.created ? new Date(i.created).toLocaleDateString() : '—'}</td>
+              <td className="jc" style={{ color: 'var(--muted)' }}>{idle(i.updated) ?? '—'}d</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function exportCsv(issues: Issue[]) {
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [['Key', 'Summary', 'Type', 'Status', 'Priority', 'Assignee', 'Reporter', 'Labels', 'Created', 'Updated', 'URL']]
+    .concat(issues.map((i) => [i.key, i.summary, i.type, i.status, i.priority || '', i.assignee || '', i.reporter || '', (i.labels || []).join(' '), i.created || '', i.updated || '', i.url]));
+  const blob = new Blob([rows.map((r) => r.map(esc).join(',')).join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `jira-tickets-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  URL.revokeObjectURL(a.href);
 }

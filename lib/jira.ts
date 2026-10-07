@@ -46,12 +46,16 @@ export interface JiraIssue {
   assignee: string | null;
   created: string;
   resolved: string | null;
+  reporter: string | null;
+  labels: string[];
+  components: string[];
+  fixVersions: string[];
   updated: string;
   statusChanged: string | null; // when the status category last changed (Jira field statuscategorychangedate)
   url: string;
 }
 
-const FIELDS = ['summary', 'status', 'issuetype', 'priority', 'assignee', 'created', 'resolutiondate', 'updated', 'statuscategorychangedate'];
+const FIELDS = ['summary', 'status', 'issuetype', 'priority', 'assignee', 'created', 'resolutiondate', 'updated', 'statuscategorychangedate', 'reporter', 'labels', 'components', 'fixVersions'];
 
 function toIssue(i: any): JiraIssue {
   const f = i.fields || {};
@@ -65,6 +69,10 @@ function toIssue(i: any): JiraIssue {
     assignee: f.assignee?.displayName || null,
     created: f.created,
     resolved: f.resolutiondate || null,
+    reporter: f.reporter?.displayName || null,
+    labels: f.labels || [],
+    components: (f.components || []).map((c: any) => c.name),
+    fixVersions: (f.fixVersions || []).map((v: any) => v.name),
     updated: f.updated,
     statusChanged: f.statuscategorychangedate || null,
     url: jiraBrowseUrl(i.key),
@@ -241,3 +249,34 @@ export const percentile = (xs: number[], p: number) => {
   const a = [...xs].sort((x, y) => x - y);
   return a[Math.min(a.length - 1, Math.ceil((p / 100) * a.length) - 1)];
 };
+
+// ---- Dashboard filters -------------------------------------------------------------------------
+// Query params (comma separated or repeated): assignee, reporter (Atlassian accountIds; assignee also accepts
+// "unassigned"), type, priority, status, label, component, version; plus from/to (YYYY-MM-DD, on created) and q (text).
+// Every value is validated and quoted, so request input can never inject JQL.
+export const FILTER_KEYS = ['assignee', 'reporter', 'type', 'priority', 'status', 'label', 'component', 'version', 'from', 'to', 'q'] as const;
+
+export function filterJql(sp: URLSearchParams): { clause: string; key: string } {
+  const list = (name: string) => [...new Set(sp.getAll(name).flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean))].slice(0, 25);
+  const names = (name: string) => list(name).filter((v) => v.length <= 100).map(jqlStr).join(', ');
+  const ids = (name: string) => list(name).filter((v) => /^[A-Za-z0-9:_-]{1,128}$/.test(v));
+  const parts: string[] = [];
+
+  const a = ids('assignee').filter((v) => v !== 'unassigned');
+  const unassigned = list('assignee').includes('unassigned');
+  if (a.length || unassigned) parts.push(`(${[a.length ? `assignee in (${a.map(jqlStr).join(', ')})` : '', unassigned ? 'assignee is EMPTY' : ''].filter(Boolean).join(' OR ')})`);
+  const r = ids('reporter'); if (r.length) parts.push(`reporter in (${r.map(jqlStr).join(', ')})`);
+  for (const [param, field] of [['type', 'issuetype'], ['priority', 'priority'], ['status', 'status'], ['label', 'labels'], ['component', 'component'], ['version', 'fixVersion']] as const) {
+    const v = names(param); if (v) parts.push(`${field} in (${v})`);
+  }
+  const date = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const from = date(sp.get('from')), to = date(sp.get('to'));
+  if (from) parts.push(`created >= ${jqlStr(from)}`);
+  if (to) parts.push(`created <= ${jqlStr(`${to} 23:59`)}`);
+  const q = (sp.get('q') || '').trim().slice(0, 100);
+  if (q) parts.push(`text ~ ${jqlStr(q)}`);
+
+  return { clause: parts.length ? ` AND ${parts.join(' AND ')}` : '', key: parts.join('|') };
+}
+
+export const hasFilters = (sp: URLSearchParams) => FILTER_KEYS.some((k) => (sp.get(k) || '').trim() !== '');

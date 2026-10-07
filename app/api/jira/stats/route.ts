@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jiraActiveSprints,
-  jqlStr, stageOf, STAGES, JIRA_PROJECTS,
+  jqlStr, filterJql, stageOf, STAGES, JIRA_PROJECTS,
 } from '@/lib/jira';
 
 export const dynamic = 'force-dynamic';
@@ -21,9 +21,10 @@ export async function GET(request: NextRequest) {
   }
   try {
     const days = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get('days') || '30', 10) || 30, 1), 90);
+    const filter = filterJql(new URL(request.url).searchParams);
     const fresh = new URL(request.url).searchParams.get('fresh') === '1'; // Refresh button bypasses the 5 min cache
-    const payload = await cached(`stats:${days}`, 300000, fresh, async () => {
-    const proj = `project in (${JIRA_PROJECTS.join(',')})`;
+    const payload = await cached(`stats:${days}:${filter.key}`, 300000, fresh, async () => {
+    const proj = `project in (${JIRA_PROJECTS.join(',')})${filter.clause}`;
     const statuses = await jiraProjectStatuses(JIRA_PROJECTS);
     const doneNames = statuses.filter((s) => stageOf(s.name, s.category) === 'Deployed / Done').map((s) => s.name);
     const changedToDone = (d: number) =>
