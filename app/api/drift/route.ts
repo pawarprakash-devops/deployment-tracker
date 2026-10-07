@@ -45,15 +45,10 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const res = await gh(`compare/${baseRef}...${p.from}?per_page=15`);
+      const res = await gh(`compare/${baseRef}...${p.from}?per_page=1`);
       if (!res.ok) return { ...p, error: `GitHub ${res.status}` };
       const d = await res.json();
-      return {
-        ...p, basis, promotion, status: d.status as string, pending: d.ahead_by as number, behind: d.behind_by as number,
-        commits: (d.commits || []).slice(-15).reverse().map((c: any) => ({
-          sha: String(c.sha).slice(0, 7), message: String(c.commit.message).split('\n')[0], author: c.author?.login || c.commit.author?.name, url: c.html_url, date: c.commit.author?.date,
-        })),
-      };
+      return { ...p, basis, promotion, baseRef, status: d.status as string, pending: d.ahead_by as number, behind: d.behind_by as number };
     } catch (e) {
       return { ...p, error: e instanceof Error ? e.message : String(e) };
     }

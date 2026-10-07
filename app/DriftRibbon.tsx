@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 interface Commit { sha: string; message: string; author?: string; url: string; date?: string }
 interface Promotion { number: number; url: string; mergedAt: string }
-interface Pair { from: string; to: string; fromEnv: string; toEnv: string; basis?: 'promotion-pr' | 'branch-compare'; promotion?: Promotion; status?: string; pending?: number; behind?: number; commits?: Commit[]; error?: string }
+interface Pair { baseRef?: string; from: string; to: string; fromEnv: string; toEnv: string; basis?: 'promotion-pr' | 'branch-compare'; promotion?: Promotion; status?: string; pending?: number; behind?: number; commits?: Commit[]; error?: string }
 
 const ago = (iso: string) => { const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d}d ago`; };
 
@@ -14,11 +14,13 @@ export default function DriftRibbon() {
   const [pairs, setPairs] = useState<Pair[] | null>(null);
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{ loading: boolean; error?: string; commits: Commit[]; total: number; truncated: boolean; compareUrl?: string } | null>(null);
+  const [filter, setFilter] = useState('');
 
   useEffect(() => {
     let alive = true;
     const load = (initial: boolean) => {
-      if (initial) { setPairs(null); setError(''); setOpen(null); }
+      if (initial) { setPairs(null); setError(''); setOpen(null); setDetail(null); }
       fetch(`/api/drift?repo=${which}`).then((r) => r.json()).then((d) => { if (!alive) return; if (d.error) setError(d.error); else { setError(''); setPairs(d.pairs); } }).catch((e) => alive && setError(String(e)));
     };
     load(true);
@@ -30,6 +32,17 @@ export default function DriftRibbon() {
     document.addEventListener('visibilitychange', onVis);
     return () => { alive = false; clearInterval(timer); document.removeEventListener('visibilitychange', onVis); };
   }, [which]);
+
+  const openPair = (p: Pair | null) => {
+    setFilter('');
+    if (!p) { setOpen(null); setDetail(null); return; }
+    setOpen(`${p.from}>${p.to}`);
+    setDetail({ loading: true, commits: [], total: p.pending ?? 0, truncated: false });
+    fetch(`/api/drift/commits?repo=${which}&base=${encodeURIComponent(p.baseRef || p.to)}&head=${encodeURIComponent(p.from)}`)
+      .then((r) => r.json())
+      .then((d) => setDetail(d.error ? { loading: false, error: d.error, commits: [], total: p.pending ?? 0, truncated: false } : { loading: false, commits: d.commits, total: d.total, truncated: d.truncated, compareUrl: d.compareUrl }))
+      .catch((e) => setDetail({ loading: false, error: String(e), commits: [], total: p.pending ?? 0, truncated: false }));
+  };
 
   const active = pairs?.find((p) => `${p.from}>${p.to}` === open);
   return (
@@ -50,7 +63,7 @@ export default function DriftRibbon() {
             const k = `${p.from}>${p.to}`;
             const sync = !p.error && (p.pending ?? 0) === 0;
             return (
-              <button key={k} className={`drift-chip ${p.error ? 'err' : sync ? 'sync' : 'pend'} ${open === k ? 'sel' : ''}`} onClick={() => setOpen(open === k ? null : k)} disabled={!!p.error || sync}
+              <button key={k} className={`drift-chip ${p.error ? 'err' : sync ? 'sync' : 'pend'} ${open === k ? 'sel' : ''}`} onClick={() => openPair(open === k ? null : p)} disabled={!!p.error || sync}
                 title={p.error ? p.error : p.promotion ? `${p.from} → ${p.to}: commits on ${p.from} since promotion PR #${p.promotion.number} (${ago(p.promotion.mergedAt)})` : `${p.from} → ${p.to}: no promotion PR found, plain branch compare (can over-count after squash/merge promotions)`}>
                 <span className="drift-env">{p.fromEnv} → {p.toEnv}</span>
                 <span className="drift-val">{p.error ? 'n/a' : sync ? 'IN SYNC' : `${p.basis === 'branch-compare' ? '~' : '+'}${p.pending} pending`}</span>
@@ -60,14 +73,26 @@ export default function DriftRibbon() {
           })}
         </div>
       )}
-      {active?.commits && active.commits.length > 0 && (
-        <ul className="drift-list">
-          <li className="drift-sub">{active.promotion ? <>Commits on {active.from} since <a href={active.promotion.url} target="_blank" rel="noopener noreferrer">PR #{active.promotion.number}</a> ({ago(active.promotion.mergedAt)})</> : <>~ No promotion PR found for {active.from} → {active.to}; this is a plain branch compare and may over-count.</>}</li>
-          {active.commits.map((c) => (
-            <li key={c.sha}><a href={c.url} target="_blank" rel="noopener noreferrer">{c.sha}</a> {c.message} <span className="drift-sub">— {c.author}</span></li>
-          ))}
-          {(active.pending ?? 0) > active.commits.length && <li className="drift-sub">…and {(active.pending ?? 0) - active.commits.length} more</li>}
-        </ul>
+      {active && detail && (
+        <div className="drift-detail">
+          <div className="drift-sub">
+            {active.promotion ? <>Commits on {active.from} since <a href={active.promotion.url} target="_blank" rel="noopener noreferrer">PR #{active.promotion.number}</a> ({ago(active.promotion.mergedAt)})</> : <>~ No promotion PR found for {active.from} → {active.to}; this is a plain branch compare and may over-count.</>}
+            {!detail.loading && !detail.error && <> · {detail.total} commit{detail.total === 1 ? '' : 's'}</>}
+          </div>
+          {detail.loading && <div className="drift-sub" style={{ marginTop: 8 }}>Loading all commits…</div>}
+          {detail.error && <div className="drift-err" style={{ marginTop: 8 }}>Could not load commits: {detail.error}</div>}
+          {!detail.loading && detail.commits.length > 0 && (<>
+            <input className="drift-filter" placeholder="Filter by message or author…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+            <ul className="drift-list">
+              {detail.commits.filter((c) => !filter || `${c.message} ${c.author}`.toLowerCase().includes(filter.toLowerCase())).map((c) => (
+                <li key={c.sha}><a href={c.url} target="_blank" rel="noopener noreferrer">{c.sha}</a> {c.message} <span className="drift-sub">— {c.author}</span></li>
+              ))}
+            </ul>
+            {detail.truncated && detail.compareUrl && (
+              <div className="drift-sub" style={{ marginTop: 6 }}>Showing the newest {detail.commits.length} of {detail.total}. <a href={detail.compareUrl} target="_blank" rel="noopener noreferrer">View all on GitHub →</a></div>
+            )}
+          </>)}
+        </div>
       )}
       <style jsx>{`
         .drift { background: var(--panel, #1e2737); border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 14px; padding: 14px 16px; margin: 0 0 16px; }
@@ -88,7 +113,9 @@ export default function DriftRibbon() {
         .drift-chip.sel { box-shadow: 0 0 0 1px var(--accent, #e17e61); }
         .drift-chip.err .drift-val { color: var(--faint, #64748b); }
         .drift-err { color: var(--bad, #f87171); font-size: 12.5px; }
-        .drift-list { list-style: none; padding: 0; margin: 10px 0 0; font-size: 12.5px; display: grid; gap: 4px; }
+        .drift-detail { margin-top: 10px; }
+        .drift-filter { width: 100%; box-sizing: border-box; margin: 8px 0 4px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border, rgba(255,255,255,.12)); background: transparent; color: var(--text, #e8edf5); font-size: 12.5px; }
+        .drift-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12.5px; display: grid; gap: 4px; max-height: 420px; overflow-y: auto; }
         .drift-list a { font-family: 'JetBrains Mono', monospace; color: var(--accent, #e17e61); text-decoration: none; margin-right: 6px; }
       `}</style>
     </div>
