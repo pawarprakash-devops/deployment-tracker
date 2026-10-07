@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import {
-  cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jqlStr, filterJql, stageOf, JIRA_PROJECTS,
+  cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jqlStr, filterJql, stageOf, isDoneStage, isShipReady, JIRA_PROJECTS,
   ticketDeploys, isProdEnv, median, percentile, jiraIssuesByKeys, type JiraIssue,
 } from '@/lib/jira';
 
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const statuses = await jiraProjectStatuses(JIRA_PROJECTS);
     const names = (stage: string) => statuses.filter((s) => stageOf(s.name, s.category) === stage).map((s) => s.name);
     const inList = (ns: string[]) => ns.map(jqlStr).join(', ');
-    const qaPassed = names('QA Passed'), active = [...names('In Development'), ...names('Review / QA')], done = names('Deployed / Done');
+    const qaPassed = statuses.map((x) => x.name).filter(isShipReady), active = [...names('In Development'), ...names('Review / QA')], done = statuses.filter((x) => isDoneStage(stageOf(x.name, x.category))).map((x) => x.name);
 
     // Weekly bug flow, last 8 full weeks ending today (explicit dates so DURING is unambiguous)
     const weeks = Array.from({ length: 8 }, (_, k) => {
@@ -66,8 +66,10 @@ export async function GET(request: NextRequest) {
       const d = xs.filter((i) => i.statusChanged).map((i) => (new Date(i.statusChanged!).getTime() - new Date(i.created).getTime()) / DAY).filter((x) => x >= 0);
       return { count: d.length, medianDays: +median(d).toFixed(1), p90Days: +percentile(d, 90).toFixed(1) };
     };
+    // Sub-tasks (QA/Dev/DevOps/Demo) close within hours and would drown out real delivery time; epics are containers
+    const leadIssues = doneIssues.filter((i) => !/sub-?task|epic/i.test(i.type));
     const byType: Record<string, JiraIssue[]> = {};
-    for (const i of doneIssues) (byType[i.type] ??= []).push(i);
+    for (const i of leadIssues) (byType[i.type] ??= []).push(i);
 
     // Ticket -> first Production deploy (needs the Jira created date of every ticket seen in prod)
     const prodKeys = Object.keys(deploys).filter((k) => Object.keys(deploys[k]).some(isProdEnv));
@@ -88,7 +90,7 @@ export async function GET(request: NextRequest) {
       readyToShip: { total: qaTotal, statuses: qaPassed, shownOldestFirst: readyToShip.length, notInProd: readyToShip.filter((i) => !i.inProd).length, items: readyToShip },
       stuck: { total: stuckTotal, statuses: active, items: stuckIssues.map(slim) },
       bugs: { weekly, byPriority: byPriority.filter((x) => x.value), byAge },
-      leadTime: { overall: lead(doneIssues), byType: Object.fromEntries(Object.entries(byType).map(([t, xs]) => [t, lead(xs)])), createdToProd: toProd, windowDays: 90, sampled: doneIssues.length },
+      leadTime: { overall: lead(leadIssues), byType: Object.fromEntries(Object.entries(byType).map(([t, xs]) => [t, lead(xs)])), createdToProd: toProd, windowDays: 90, sampled: leadIssues.length, excludedSubtasks: doneIssues.length - leadIssues.length },
     };
     });
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'private, max-age=300' } });

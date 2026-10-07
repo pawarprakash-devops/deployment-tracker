@@ -154,23 +154,31 @@ export async function jiraIssuesByKeys(keys: string[]): Promise<Record<string, J
 // Jira only has 3 status categories, but this workflow has many statuses inside "In Progress"
 // (QA PASSED, PREVIEW DEPLOYED ...). Map status names to delivery stages; override the "shipped"
 // set with JIRA_DONE_STATUSES (comma-separated status names) if the defaults are wrong.
-export const STAGES = ['Backlog', 'In Development', 'Review / QA', 'QA Passed', 'Deployed / Done', 'Other'] as const;
+export const STAGES = ['Backlog', 'In Development', 'Review / QA', 'QA Passed', 'Stage / Pre-Prod', 'Released to Prod', 'Done', 'Other'] as const;
 export type Stage = (typeof STAGES)[number];
 
 const EXTRA_DONE = (process.env.JIRA_DONE_STATUSES || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
 
+// Matches the VID workflow: ... READY FOR QA > QA IN PROGRESS > QA PASSED > (demo) > STAGE & QA DEPLOYED >
+// <REGION> PRE-PROD DEPLOYED > <REGION> PRODUCTION DEPLOYED. Jira puts the deployed/verification statuses in its
+// Done category, so names are checked first and the category is only a fallback.
 export function stageOf(status: string, category?: string): Stage {
   const n = status.toLowerCase();
-  if (EXTRA_DONE.includes(n)) return 'Deployed / Done';
-  // "Preview Deployed" happens before QA, so it is not shipped.
-  if (/preview/.test(n)) return 'Review / QA';
-  if (category === 'done' || /\b(done|closed|resolved|released|deployed|live)\b/.test(n)) return 'Deployed / Done';
-  if (/qa passed|passed qa|qa done|verified/.test(n)) return 'QA Passed';
-  if (/ready for qa|in qa|testing|code review|ready for review|in review|qa/.test(n)) return 'Review / QA';
-  if (/in development|in progress|developing/.test(n)) return 'In Development';
-  if (/to-?do|backlog|ready for develop|on hold|open|new|selected/.test(n)) return 'Backlog';
+  if (EXTRA_DONE.includes(n)) return 'Done';
+  if (/production deployed|^deployed$|released/.test(n)) return 'Released to Prod';
+  if (/pre-?prod deployed|stage & qa deployed|stage deployed/.test(n)) return 'Stage / Pre-Prod';
+  if (/preview/.test(n)) return 'Review / QA'; // "Preview Deployed" happens before QA
+  if (/qa passed|passed qa|ready for deployment|^accepted$|ready for demo|\b(pm|po) demo\b/.test(n)) return 'QA Passed';
+  if (/ready for qa|qa in progress|in qa|testing|code review|ready for review|in review/.test(n)) return 'Review / QA';
+  if (/in development|in progress|developing|changes required|rework/.test(n)) return 'In Development';
+  if (/to-?do|to do|backlog|ready for develop|on hold|triage|open|new|selected/.test(n)) return 'Backlog';
+  if (category === 'done' || /\b(done|closed|resolved|verification|not reproducible|won't)\b/.test(n)) return 'Done';
   return 'Other';
 }
+
+export const isDoneStage = (st: Stage) => st === 'Stage / Pre-Prod' || st === 'Released to Prod' || st === 'Done';
+// Waiting to be shipped (excludes demo statuses)
+export const isShipReady = (status: string) => /qa passed|passed qa|ready for deployment|^accepted$/i.test(status);
 
 // All statuses of the given projects: [{ name, category }]
 export async function jiraProjectStatuses(projects: string[]): Promise<{ name: string; category: string }[]> {
@@ -196,10 +204,12 @@ export async function jiraActiveSprints(projectKey: string): Promise<SprintSumma
     try { sprints = await jiraFetch(`/rest/agile/1.0/board/${b.id}/sprint?state=active`); } catch { continue; }
     for (const sp of sprints.values || []) {
       const issues: any[] = [];
-      for (let start = 0; start < 500; start += 100) {
+      let sprintTotal = 0;
+      for (let start = 0; start < 1000; start += 100) {
         const page = await jiraFetch(`/rest/agile/1.0/sprint/${sp.id}/issue?fields=status&maxResults=100&startAt=${start}`);
         issues.push(...(page.issues || []));
-        if (start + 100 >= (page.total ?? 0)) break;
+        sprintTotal = page.total ?? issues.length;
+        if (start + 100 >= sprintTotal) break;
       }
       const byStatus: Record<string, number> = {}, byStage: Record<string, number> = {};
       for (const i of issues) {
@@ -210,7 +220,7 @@ export async function jiraActiveSprints(projectKey: string): Promise<SprintSumma
       }
       const toList = (o: Record<string, number>) => Object.entries(o).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
       out.push({ name: sp.name, goal: sp.goal || null, startDate: sp.startDate || null, endDate: sp.endDate || null, boardName: b.name,
-        total: issues.length, byStage: STAGES.filter((n) => byStage[n]).map((n) => ({ name: n, value: byStage[n] })), byStatus: toList(byStatus) });
+        total: sprintTotal || issues.length, byStage: STAGES.filter((n) => byStage[n]).map((n) => ({ name: n, value: byStage[n] })), byStatus: toList(byStatus) });
     }
   }
   return out;

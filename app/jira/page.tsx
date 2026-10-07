@@ -189,8 +189,8 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
       {auth === 'admin' && t && (
         <>
           <div className="jhud">
-            {[['OPEN', t.open], ['IN DEVELOPMENT', t.inDevelopment], ['IN QA / QA PASSED', t.inQA], ['OPEN BUGS', t.openBugs],
-              ['CREATED 7D', t.createdLast7d], ['DONE 7D', t.doneLast7d], [`CREATED ${days}D`, t.createdInWindow], [`DONE ${days}D`, t.doneInWindow]].map(([l, v]) => (
+            {[['OPEN', t.open], ['IN DEVELOPMENT', t.inDevelopment], ['REVIEW + QA + PASSED', t.inQA], ['OPEN BUGS', t.openBugs],
+              ['CREATED 7D', t.createdLast7d], ['DONE 7D', t.doneLast7d], [`CREATED ${days}D`, t.createdInWindow], [`DONE ${days}D`, t.doneInWindow], [`RELEASED TO PROD ${days}D`, t.releasedInWindow]].map(([l, v]) => (
               <div className="jcard" key={String(l)}><div className="jlabel">{l}</div><div className="jvalue">{v}</div></div>
             ))}
           </div>
@@ -216,7 +216,7 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
           {stats.sprintError && <div className="jnote">Sprint data unavailable: {stats.sprintError}</div>}
 
           <div className="jgrid">
-            <Bars title="Open by stage" data={stats.byStage || []} />
+            <Bars title="By stage (all issues)" data={stats.byStage || []} />
             <Bars title="By status (all)" data={stats.byStatus || []} />
             <Bars title={`Open by assignee (latest ${stats.assigneeSampled ?? 0} updated)`} data={stats.byAssignee || []} />
           </div>
@@ -259,7 +259,7 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
 
       {auth === 'admin' && insights?.leadTime && (
         <section className="jpanel">
-          <h2>Lead time <span className="jfaint">(tickets done in the last {insights.leadTime.windowDays} days, {insights.leadTime.sampled} sampled)</span></h2>
+          <h2>Lead time <span className="jfaint">(tasks/stories/bugs done in the last {insights.leadTime.windowDays} days, {insights.leadTime.sampled} sampled; sub-tasks and epics excluded)</span></h2>
           <div className="jhud" style={{ marginBottom: 0 }}>
             <LTCard label="CREATED → DONE (all)" lt={insights.leadTime.overall} />
             {Object.entries(insights.leadTime.byType).filter(([, v]) => v.count >= 3).slice(0, 4).map(([t, v]) => <LTCard key={t} label={`${t.toUpperCase()}`} lt={v} />)}

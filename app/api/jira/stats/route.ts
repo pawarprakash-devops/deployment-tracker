@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jiraActiveSprints,
-  jqlStr, filterJql, stageOf, STAGES, JIRA_PROJECTS,
+  jqlStr, filterJql, stageOf, isDoneStage, STAGES, JIRA_PROJECTS,
 } from '@/lib/jira';
 
 export const dynamic = 'force-dynamic';
@@ -26,17 +26,20 @@ export async function GET(request: NextRequest) {
     const payload = await cached(`stats:${days}:${filter.key}`, 300000, fresh, async () => {
     const proj = `project in (${JIRA_PROJECTS.join(',')})${filter.clause}`;
     const statuses = await jiraProjectStatuses(JIRA_PROJECTS);
-    const doneNames = statuses.filter((s) => stageOf(s.name, s.category) === 'Deployed / Done').map((s) => s.name);
+    const doneNames = statuses.filter((s) => isDoneStage(stageOf(s.name, s.category))).map((s) => s.name);
+    const prodNames = statuses.filter((s) => stageOf(s.name, s.category) === 'Released to Prod').map((s) => s.name);
     const changedToDone = (d: number) =>
       doneNames.length ? `(${doneNames.map((n) => `status CHANGED TO ${jqlStr(n)} AFTER -${d}d`).join(' OR ')})` : 'resolved >= -' + d + 'd';
 
-    const [open, openBugs, created7, createdW, done7, doneW, perStatus, openBugList, sample, sprints] = await Promise.all([
+    const releasedWindow = prodNames.length ? jiraCount(`${proj} AND (${prodNames.map((n) => `status CHANGED TO ${jqlStr(n)} AFTER -${days}d`).join(' OR ')})`) : Promise.resolve(0);
+    const [open, openBugs, created7, createdW, done7, doneW, released, perStatus, openBugList, sample, sprints] = await Promise.all([
       jiraCount(`${proj} AND statusCategory != Done`),
       jiraCount(`${proj} AND statusCategory != Done AND type = Bug`),
       jiraCount(`${proj} AND created >= -7d`),
       jiraCount(`${proj} AND created >= -${days}d`),
       jiraCount(`${proj} AND ${changedToDone(7)}`),
       jiraCount(`${proj} AND ${changedToDone(days)}`),
+      prodNames.length ? jiraCount(`${proj} AND (${prodNames.map((n) => `status CHANGED TO ${jqlStr(n)} AFTER -${days}d`).join(' OR ')})`) : 0,
       Promise.all(statuses.map(async (s) => ({ ...s, count: await jiraCount(`${proj} AND status = ${jqlStr(s.name)}`) }))),
       jiraSearch(`${proj} AND statusCategory != Done AND type = Bug ORDER BY priority DESC, updated DESC`, 15),
       jiraSearch(`${proj} AND statusCategory != Done ORDER BY updated DESC`, 500),
@@ -64,7 +67,7 @@ export async function GET(request: NextRequest) {
         inDevelopment: byStageMap['In Development'] || 0,
         inQA: (byStageMap['Review / QA'] || 0) + (byStageMap['QA Passed'] || 0),
         createdLast7d: created7, createdInWindow: createdW,
-        doneLast7d: done7, doneInWindow: doneW,
+        doneLast7d: done7, doneInWindow: doneW, releasedInWindow: released,
       },
       doneStatuses: doneNames,
       byStage,
