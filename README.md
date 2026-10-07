@@ -10,7 +10,7 @@ Deployment tracking, release-governance and delivery-metrics dashboard for VidAI
 |-------|-----------|
 | `/` | Main dashboard: HUD counters, one card per environment (latest successful deploy, live health pill, QA release-window countdown), deployment history table, FE/BE compare modal, admin controls |
 | `/admin` | Fleet telemetry: DORA suite (deployment frequency, lead time, change failure rate incl. prod-only CFR, MTTR), charts by environment/status, recent failures, longest runs, top operators, MTTR incident audit trail |
-| `/jira` | Jira dashboard (admin login): ticket metrics for `JIRA_PROJECT_KEYS` (open / in progress / done, open bugs, created vs resolved, by status / assignee / type) and a **tickets-by-environment** matrix built from Jira keys found in deployment notes, branches, versions and ticket links |
+| `/jira` | Jira dashboard (admin login): ticket metrics for `JIRA_PROJECT_KEYS` (open / in development / in QA, open bugs, created vs done, by workflow stage / status / assignee), the active sprint,  and a **tickets-by-environment** matrix built from Jira keys found in deployment notes, branches, versions and ticket links |
 | `/health` | Latest-successful-deploy view per environment (backed by `/api/health`) |
 
 UI: dark theme by default with a light toggle (stored in `localStorage` key `tracker-theme`), VidAI brand palette. The page polls every **90 s, only while the tab is visible**, and refreshes immediately when the tab regains focus. API responses carry ETags and edge `Cache-Control` headers to stay under Neon/Vercel limits.
@@ -56,6 +56,7 @@ npm run dev                  # http://localhost:3000
 | `WEBHOOK_SECRET` | `POST /api/webhook` | Expected as `Authorization: Bearer <secret>`. **If unset, the code falls back to a publicly known default** — always set it. |
 | `ADMIN_TOKEN` | `middleware.ts`, `/api/auth` | Admin password. **If unset, falls back to a publicly known default** — always set it. |
 | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | `/api/jira/*` | Jira Cloud site URL and an Atlassian API token (Basic auth, server-side only). Unset → `/jira` shows setup instructions |
+| `JIRA_DONE_STATUSES` | `/api/jira/stats` | Optional, comma-separated status names to treat as shipped/done (in addition to Jira's Done category and names like Done/Closed/Released/Deployed) |
 | `JIRA_PROJECT_KEYS` | `/api/jira/stats`, key detection | Comma-separated project keys (e.g. `CORE,EMR`); required for metrics, and limits which `ABC-123` patterns count as tickets |
 | `GH_TOKEN` | `/api/compare` | GitHub token with read access to the compared repos |
 | `USE_MOCK_DATA` | `lib/db.ts` | Dev-only mock flag |
@@ -77,7 +78,7 @@ All `GET`s are public. `POST/PUT/PATCH/DELETE` need admin auth (see `AUTHENTICAT
 | `GET /api/health` | Latest `Success` deployment per environment (used by `/health`; 60 s edge cache). It is **not** a live probe |
 | `GET /api/cluster-health` | Live probes of 9 backend API URLs (Preview, Demo-Preview, QA, Stage, Stage EUW2, Pre-Prod India, Pre-Prod USW, Prod Ankura, Prod Neotia) — `HEALTHY` (2xx/3xx ≤ 2000 ms), `DEGRADED` (slow or 4xx/5xx), `OFFLINE` (timeout 4.5 s / network error). 120 s edge cache. Backend only — there is no frontend/CloudFront chunk probe |
 | `GET /api/compare?repo=&base=&head=&run_id=` | GitHub compare (ahead/behind, ≤30 commits, ≤50 files) between two refs; with only `head`, last 15 commits; optional Actions run details. Default repo `vidaisolutions/vidai-react`. Needs `GH_TOKEN` |
-| `GET /api/jira/issues?keys=` · `GET /api/jira/stats?days=` · `GET /api/jira/deployed` | Jira data (**admin session or `Bearer ADMIN_TOKEN` required** — unlike other GETs, because summaries/assignees are internal). `issues` resolves up to 100 keys; `stats` aggregates up to 500 recently updated issues; `deployed` maps keys → environments from the last 300 successful deployments. Uses Jira's `POST /rest/api/3/search/jql` |
+| `GET /api/jira/issues?keys=` · `GET /api/jira/stats?days=` · `GET /api/jira/deployed` | Jira data (**admin session or `Bearer ADMIN_TOKEN` required** — unlike other GETs, because summaries/assignees are internal). `issues` resolves up to 100 keys; `stats` returns exact counts over all issues of `JIRA_PROJECT_KEYS` (Jira's approximate-count API), counts per workflow stage, open bugs, and the active sprint(s) from the Agile API (assignee breakdown samples the 500 most recently updated open issues); `deployed` maps keys → environments from the last 300 successful deployments. Uses Jira's `POST /rest/api/3/search/jql` |
 | `GET /api/admin/stats` | Aggregates + DORA metrics for `/admin` |
 | `GET/POST /api/migrate` | One-off schema/data maintenance (adds FE/BE columns, widens columns to TEXT, renames `Demo`→`Demo-Preview`, dedupes superseded failed rows). Idempotent; POST needs admin, GET is currently unauthenticated |
 | `POST /api/auth`, `DELETE /api/auth`, `GET /api/auth/session` | Admin login / logout / role check |

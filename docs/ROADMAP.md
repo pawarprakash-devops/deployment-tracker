@@ -280,8 +280,9 @@ Preview (dev) ─[+4]→ QA (qa) ─[+2]→ Stage (stage) ─[+1]→ Pre-Prod (p
 
 * **Status:** ✅ **Implemented** (needs `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEYS` in Vercel).
 * Ticket chips (`🎫 CORE-123`) appear in the deployment history table for any Jira-style key in notes/branches/ticket link; admins also see status and a link to Jira.
-* `/jira` (admin only): open / in-progress / done / open-bug counts, created vs resolved (7 d and window), breakdowns by status, assignee and type, open-bug list, and a **tickets × environments** matrix showing where each ticket has been deployed (answers "is CORE-123 in Pre-Prod yet?").
-* Limits: metrics sample the 500 most recently updated issues; no sprint/board data (would need the Jira Agile API).
+* `/jira` (admin only): exact counts over all issues of `JIRA_PROJECT_KEYS` — open, in development, in QA/QA passed, open bugs, created vs done (7 d and window) — plus breakdowns by **workflow stage** (Backlog → In Development → Review/QA → QA Passed → Deployed/Done, mapped from status names in `stageOf()`; "Preview Deployed" counts as pre-QA), by status and by assignee (sampled), the open-bug list, the **active sprint** (Agile API: dates, goal, progress by stage/status) and a **tickets × environments** matrix ("is VID-123 in Pre-Prod yet?").
+* "Done" = moved into a Done-category status or a status named Done/Closed/Resolved/Released/Deployed (override with `JIRA_DONE_STATUSES`).
+* **Feeding the matrix:** deployment records only contain a Jira key if the workflow sends it. [vidai-devops#232](https://github.com/vidaisolutions/vidai-devops/pull/232) adds ` · Jira: VID-123` to the notes of the v2 / Ankura / Neotia deploy workflows (from the PR title, head branch, body and commits). Scheduled QA deploys and LMS deploys carry no PR, so they have no keys yet.
 
 ---
 

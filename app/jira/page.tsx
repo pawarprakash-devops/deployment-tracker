@@ -6,9 +6,11 @@ import Link from 'next/link';
 type Theme = 'light' | 'dark';
 interface Issue { key: string; summary: string; status: string; statusCategory: string; type: string; priority: string | null; assignee: string | null; url: string }
 interface Count { name: string; value: number }
+interface Sprint { name: string; goal: string | null; startDate: string | null; endDate: string | null; boardName: string; total: number; byStage: Count[]; byStatus: Count[] }
 interface Stats {
-  configured: boolean; error?: string; projects?: string[]; windowDays?: number; sampled?: number; truncated?: boolean;
-  totals?: Record<string, number>; byStatus?: Count[]; byAssignee?: Count[]; byType?: Count[]; openBugs?: Issue[];
+  configured: boolean; error?: string; projects?: string[]; windowDays?: number; doneStatuses?: string[];
+  totals?: Record<string, number>; byStage?: Count[]; byStatus?: Count[]; byAssignee?: Count[]; assigneeSampled?: number;
+  openBugs?: Issue[]; sprints?: Sprint[]; sprintError?: string;
 }
 interface Deployed {
   configured: boolean; jiraError?: string; error?: string;
@@ -98,17 +100,36 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
       {auth === 'admin' && t && (
         <>
           <div className="jhud">
-            {[['OPEN', t.open], ['IN PROGRESS', t.inProgress], ['DONE (window)', t.done], ['OPEN BUGS', t.openBugs],
-              ['CREATED 7D', t.createdLast7d], ['RESOLVED 7D', t.resolvedLast7d], [`CREATED ${days}D`, t.createdInWindow], [`RESOLVED ${days}D`, t.resolvedInWindow]].map(([l, v]) => (
+            {[['OPEN', t.open], ['IN DEVELOPMENT', t.inDevelopment], ['IN QA / QA PASSED', t.inQA], ['OPEN BUGS', t.openBugs],
+              ['CREATED 7D', t.createdLast7d], ['DONE 7D', t.doneLast7d], [`CREATED ${days}D`, t.createdInWindow], [`DONE ${days}D`, t.doneInWindow]].map(([l, v]) => (
               <div className="jcard" key={String(l)}><div className="jlabel">{l}</div><div className="jvalue">{v}</div></div>
             ))}
           </div>
-          {stats.truncated && <div className="jnote">Showing the 500 most recently updated issues; counts are a sample.</div>}
+          <div className="jnote">Counts cover all issues in {stats.projects?.join(', ')}. “Done” = moved into {stats.doneStatuses?.length ? stats.doneStatuses.join(', ') : 'a resolved state'} within the window (override with <code>JIRA_DONE_STATUSES</code>).</div>
+
+          {stats.sprints && stats.sprints.length > 0 && stats.sprints.map((sp) => {
+            const days = sp.endDate ? Math.ceil((new Date(sp.endDate).getTime() - Date.now()) / 86400000) : null;
+            return (
+              <section className="jpanel" key={sp.name}>
+                <h2>Active sprint · {sp.name} <span className="jfaint">({sp.boardName})</span></h2>
+                <div className="jnote">
+                  {sp.startDate && new Date(sp.startDate).toLocaleDateString()} → {sp.endDate && new Date(sp.endDate).toLocaleDateString()}
+                  {days !== null && ` · ${days >= 0 ? `${days} day${days === 1 ? '' : 's'} left` : `ended ${-days} day(s) ago`}`} · {sp.total} issues
+                  {sp.goal ? ` · Goal: ${sp.goal}` : ''}
+                </div>
+                <div className="jgrid" style={{ marginBottom: 0 }}>
+                  <Bars title="By stage" data={sp.byStage} bare />
+                  <Bars title="By status" data={sp.byStatus} bare />
+                </div>
+              </section>
+            );
+          })}
+          {stats.sprintError && <div className="jnote">Sprint data unavailable: {stats.sprintError}</div>}
 
           <div className="jgrid">
-            <Bars title="By status" data={stats.byStatus || []} />
-            <Bars title="Open by assignee" data={stats.byAssignee || []} />
-            <Bars title="By type" data={stats.byType || []} />
+            <Bars title="Open by stage" data={stats.byStage || []} />
+            <Bars title="By status (all)" data={stats.byStatus || []} />
+            <Bars title={`Open by assignee (latest ${stats.assigneeSampled ?? 0} updated)`} data={stats.byAssignee || []} />
           </div>
 
           <section className="jpanel">
@@ -177,11 +198,11 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
   );
 }
 
-function Bars({ title, data }: { title: string; data: Count[] }) {
+function Bars({ title, data, bare }: { title: string; data: Count[]; bare?: boolean }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
-    <div className="jpanel" style={{ marginBottom: 0 }}>
-      <h2>{title}</h2>
+    <div className={bare ? '' : 'jpanel'} style={{ marginBottom: 0 }}>
+      <h2 style={bare ? { fontSize: 13, color: 'var(--muted)' } : undefined}>{title}</h2>
       {data.length === 0 && <div className="jnote">No data</div>}
       {data.slice(0, 10).map((d) => (
         <div className="jbar" key={d.name}>
