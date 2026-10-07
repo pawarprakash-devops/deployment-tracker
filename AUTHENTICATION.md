@@ -16,11 +16,9 @@ Rules enforced by the middleware, in order:
 3. Any `GET` → allowed.
 4. `POST` / `PUT` / `PATCH` / `DELETE` → require `Authorization: Bearer <ADMIN_TOKEN>` **or** a `tracker_session` cookie equal to `ADMIN_TOKEN`; otherwise `401 Unauthorized - Admin login required to make changes`.
 
-> `/admin` shows a login challenge until `GET /api/auth/session` reports `admin` — but this is a **client-side gate only**: the data it renders comes from the public `GET /api/admin/stats`, which is not authenticated.
+> `/admin` shows a login challenge until `GET /api/auth/session` reports `admin`, and `GET /api/admin/stats` itself checks the admin session cookie (401 otherwise).
 >
-> `/api/jira/*` are the exception to "every GET is public": they check the admin session/token themselves (`lib/jira.ts#isAdminRequest`) because Jira summaries and assignees are internal.
->
-> `GET /api/migrate` is a `GET`, so it is reachable without auth even though it mutates data (the POST variant is protected). Treat it as a known gap.
+> `/api/jira/*`, `/api/admin/stats` and `GET /api/migrate` are exceptions to "every GET is public": they verify the admin session/token themselves (`lib/auth.ts#isAdminRequest`) because they return internal data or mutate data.
 
 ## Login flow
 

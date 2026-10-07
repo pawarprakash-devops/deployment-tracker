@@ -156,13 +156,9 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
 
 ### 3.1 Environment Promotion Drift Matrix (Ahead / Behind Delta)
 
-* **Status:** 🟡 **Partially implemented.** The GitHub compare plumbing exists; the always-visible ribbon does not.
-* **What exists:** `GET /api/compare?repo=&base=&head=` (`app/api/compare/route.ts`, needs `GH_TOKEN`) returns `status`, `ahead_by`, `behind_by`, up to 30 commits (sha, message, author, avatar, url) and up to 50 changed files; with only `head` it returns the last 15 commits; `run_id` adds the Actions run details. The main page has a **compare modal**: tick two deployments in the history table and the modal diffs their branches (default repo `vidaisolutions/vidai-react`, with a repo toggle for the backend repo). Branch ↔ environment mapping lives in `STANDARD_BRANCHES` / `ENV_DEFAULT_BRANCH` in `app/page.tsx`.
-* **Not built:** the **Promotion Pipeline Ribbon** across the top of `/` (`Preview → QA → Stage → Pre-Prod → Prod` with `+N commits` / `IN SYNC` badges) and a dedicated `/api/git/drift` endpoint. The original design (Octokit `compareCommits` of `prod_ank...preprod` etc.) can be implemented by calling the existing `/api/compare` for each adjacent pair in `STANDARD_BRANCHES` — no new endpoint is strictly required.
-
-```
-Preview (dev) ─[+4]→ QA (qa) ─[+2]→ Stage (stage) ─[+1]→ Pre-Prod (preprod) ─[IN SYNC]→ Prod (prod_ank)
-```
+* **Status:** ✅ **Implemented** as the **Promotion Radar** strip above the environment cards on `/` (`app/DriftRibbon.tsx`, `GET /api/drift`).
+* For the backend or frontend repo (toggle) it compares adjacent pipeline branches — `dev→qa`, `qa→stage`, `stage→preprod`, `preprod→prod_ank`, `preprod→prod_neo` — and shows `IN SYNC` or `+N pending`; clicking a chip lists the pending commits (sha, message, author, link). Results are edge-cached for 120 s and need `GH_TOKEN` on the server.
+* The older two-deployment **compare modal** (`GET /api/compare`) remains for diffing arbitrary refs.
 
 ---
 
@@ -220,14 +216,13 @@ Preview (dev) ─[+4]→ QA (qa) ─[+2]→ Stage (stage) ─[+1]→ Pre-Prod (p
     - `prod-account-full-deploy.yaml` (Neotia / Babyjoy Production)
   - Detailed plan: [deployment_gchat_notifications_plan.md](file:///home/pawarpr/Desktop/WSL-Backup/deployment_gchat_notifications_plan.md).
 
-* **Additional Tracker Webhooks:**
-  - When deployment status changes to `Failed` in any lower environment ➔ Send high-priority alert with direct links to failure logs.
+* **Tracker alerts (✅ implemented, optional):** set `GCHAT_ALERT_WEBHOOK_URL` and the tracker's webhook posts to Google Chat on every failed deployment (🚨 *PRODUCTION* for prod environments) and when an environment recovers, including time-to-restore vs `MTTR_TARGET_MINUTES` (default 30). Not built: a reminder while an incident is still open (needs a scheduler).
 
 ---
 
 ### 3.5 1-Click Rollback Runbook & Dispatcher
 
-* **Status:** ❌ **Not implemented.** Today the tracker only *records* rollbacks (`deployment_type = rollback`, status `Rolled Back`, and a "ROLLBACK AUDIT" HUD counter on `/`); it cannot dispatch a workflow.
+* **Status:** ❌ **Not implemented — deliberately paused.** A design exists (admin-only `POST /api/rollback` dispatching the `rollback` action of the vidai-devops workflows with typed confirmation, a code-only/no-DB-revert acknowledgement for prod, and a `GH_DISPATCH_TOKEN` with Actions write on vidai-devops), but it was not built because it lets the tracker trigger production workflows; decide first who may do that. Today the tracker only *records* rollbacks (`deployment_type = rollback`, status `Rolled Back`, and a "ROLLBACK AUDIT" HUD counter on `/`); it cannot dispatch a workflow.
 
 * **Operator Convenience:** In the `/admin` dashboard or directly on Environment Cards, authenticated operators have a **Rollback** button.
 * **Safety Controls:**
@@ -281,6 +276,7 @@ Preview (dev) ─[+4]→ QA (qa) ─[+2]→ Stage (stage) ─[+1]→ Pre-Prod (p
 * **Status:** ✅ **Implemented** (needs `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEYS` in Vercel).
 * Ticket chips (`🎫 CORE-123`) appear in the deployment history table for any Jira-style key in notes/branches/ticket link; admins also see status and a link to Jira.
 * `/jira` (admin only): exact counts over all issues of `JIRA_PROJECT_KEYS` — open, in development, in QA/QA passed, open bugs, created vs done (7 d and window) — plus breakdowns by **workflow stage** (Backlog → In Development → Review/QA → QA Passed → Deployed/Done, mapped from status names in `stageOf()`; "Preview Deployed" counts as pre-QA), by status and by assignee (sampled), the open-bug list, the **active sprint** (Agile API: dates, goal, progress by stage/status) and a **tickets × environments** matrix ("is VID-123 in Pre-Prod yet?").
+* **Insights:** ready-to-ship queue (QA Passed, flagged with environments seen), stuck tickets (idle ≥ N days in dev/review/QA statuses), weekly bug created-vs-closed (8 weeks), open bugs by priority and age, lead time (created → done via `statuscategorychangedate`, created → first prod deploy), and per-deployment release notes (markdown).
 * "Done" = moved into a Done-category status or a status named Done/Closed/Resolved/Released/Deployed (override with `JIRA_DONE_STATUSES`).
 * **Feeding the matrix:** deployment records only contain a Jira key if the workflow sends it. [vidai-devops#232](https://github.com/vidaisolutions/vidai-devops/pull/232) adds ` · Jira: VID-123` to the notes of the v2 / Ankura / Neotia deploy workflows (from the PR title, head branch, body and commits). Scheduled QA deploys and LMS deploys carry no PR, so they have no keys yet.
 
@@ -314,7 +310,7 @@ PHASE 2: Active Telemetry & Observability (Completed)
 └── [x] Full DORA Metrics Suite & MTTR Recovery Audit Trail on /admin
 
 PHASE 3: Release Governance & Flow Control (Active)
-├── [~] Environment Promotion Drift Matrix — compare API + modal done; top-of-page ribbon not built
+├── [x] Environment Promotion Drift Matrix (Promotion Radar)
 ├── [x] Rerun tracking (`Rerun - <status>` rows) and Demo-Preview environment
 ├── [x] Light/dark theme toggle + VidAI brand palette; 90 s visible-tab polling + edge caching
 ├── [x] QA Scheduled Release Windows countdown (1:30 PM & 4:00 PM IST)
@@ -324,7 +320,7 @@ PHASE 3: Release Governance & Flow Control (Active)
 PHASE 4: Emergency Response & Advanced Guardrails
 ├── [ ] 1-Click Rollback Dispatcher from Tracker UI
 ├── [ ] Frontend Chunk Load 503 & Cache Health Probe
-└── [ ] Multi-channel alerts for Failed runs & MTTR threshold breaches
+└── [~] Alerts for Failed runs & MTTR (Google Chat done; Slack/Teams and open-incident reminders not built)
 ```
 
 ---

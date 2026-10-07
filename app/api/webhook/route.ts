@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { notifyDeployment } from '@/lib/alerts';
 
 export async function POST(request: NextRequest) {
   try {
@@ -237,6 +238,9 @@ export async function POST(request: NextRequest) {
         requested_by,
       });
     }
+
+    // Optional Google Chat alert for failures / recoveries (no-op unless GCHAT_ALERT_WEBHOOK_URL is set)
+    await notifyDeployment(result.rows[0], isProdEnv);
 
     return NextResponse.json({
       success: true,

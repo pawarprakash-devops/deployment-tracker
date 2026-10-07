@@ -17,6 +17,17 @@ interface Deployed {
   tickets: { key: string; environments: Record<string, string> }[]; issues: Record<string, Issue>;
 }
 
+interface Aged extends Issue { ageDays: number | null; createdDays: number | null; environments?: string[]; inProd?: boolean }
+interface LT { count: number; medianDays: number; p90Days: number }
+interface Insights {
+  configured: boolean; error?: string; stuckDays?: number;
+  readyToShip?: { total: number; statuses: string[]; shownOldestFirst: number; notInProd: number; items: Aged[] };
+  stuck?: { total: number; statuses: string[]; items: Aged[] };
+  bugs?: { weekly: { weekStart: string; created: number; closed: number }[]; byPriority: Count[]; byAge: Count[] };
+  leadTime?: { overall: LT; byType: Record<string, LT>; createdToProd: LT; windowDays: number; sampled: number };
+}
+interface NotesItem { id: string; environment: string; branch: string | null; version: string | null; started_at: string; keys: string[] }
+
 const ENV_ORDER = ['Preview', 'Demo-Preview', 'QA', 'Stage', 'Stage EUW2', 'Pre-Prod', 'Pre-Prod USW', 'Production (Ankura)', 'Production (Neotia/Babyjoy)', 'Production'];
 const catColor = (c: string) => (c === 'done' ? 'var(--ok)' : c === 'indeterminate' ? 'var(--warn)' : 'var(--muted)');
 
@@ -29,6 +40,12 @@ export default function JiraDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [deployed, setDeployed] = useState<Deployed | null>(null);
   const [loading, setLoading] = useState(false);
+  const [insights, setInsights] = useState<Insights | null>(null);
+  const [stuckDays, setStuckDays] = useState(5);
+  const [notesList, setNotesList] = useState<NotesItem[]>([]);
+  const [notesId, setNotesId] = useState('');
+  const [notesMd, setNotesMd] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     try { const t = localStorage.getItem('tracker-theme'); if (t === 'light' || t === 'dark') setTheme(t); } catch {}
@@ -37,12 +54,22 @@ export default function JiraDashboard() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [s, d] = await Promise.all([
+    const [s, d, ins, nl] = await Promise.all([
       fetch(`/api/jira/stats?days=${days}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
       fetch('/api/jira/deployed').then((r) => r.json()).catch(() => null),
+      fetch(`/api/jira/insights?stuckDays=${stuckDays}`).then((r) => r.json()).catch((e) => ({ configured: true, error: String(e) })),
+      fetch('/api/jira/release-notes').then((r) => r.json()).catch(() => null),
     ]);
-    setStats(s); setDeployed(d); setLoading(false);
-  }, [days]);
+    setStats(s); setDeployed(d); setInsights(ins); setNotesList(nl?.deployments || []); setLoading(false);
+  }, [days, stuckDays]);
+
+  const loadNotes = async (id: string) => {
+    setNotesId(id); setNotesMd(''); setCopied(false);
+    if (!id) return;
+    const r = await fetch(`/api/jira/release-notes?id=${id}`).then((x) => x.json()).catch(() => null);
+    setNotesMd(r?.markdown || r?.error || 'Failed to load');
+  };
+  const copyNotes = async () => { try { await navigator.clipboard.writeText(notesMd); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} };
 
   useEffect(() => { if (auth === 'admin') load(); }, [auth, load]);
 
@@ -66,6 +93,9 @@ export default function JiraDashboard() {
         <div className="jactions">
           <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Window">
             {[7, 14, 30, 60, 90].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+          </select>
+          <select value={stuckDays} onChange={(e) => setStuckDays(Number(e.target.value))} aria-label="Stuck threshold">
+            {[3, 5, 7, 14, 30].map((d) => <option key={d} value={d}>Stuck ≥ {d}d</option>)}
           </select>
           <button onClick={load} disabled={loading || auth !== 'admin'}>{loading ? 'Loading…' : '↺ Refresh'}</button>
           <Link href="/">← Deployments</Link>
@@ -139,6 +169,62 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
         </>
       )}
 
+      {auth === 'admin' && insights && insights.error && <div className="jpanel jerr">Insights: {insights.error}</div>}
+
+      {auth === 'admin' && insights?.readyToShip && (
+        <section className="jpanel">
+          <h2>Ready to ship · {insights.readyToShip.total} in {insights.readyToShip.statuses.join(', ') || 'QA Passed'}</h2>
+          <div className="jnote">Oldest first (showing {insights.readyToShip.shownOldestFirst}). {insights.readyToShip.notInProd} of these have not been seen in a Production deployment. “Idle” = days since the ticket was last updated.</div>
+          <AgedTable items={insights.readyToShip.items} showEnv />
+        </section>
+      )}
+
+      {auth === 'admin' && insights?.stuck && (
+        <section className="jpanel">
+          <h2>Stuck tickets · {insights.stuck.total} idle ≥ {insights.stuckDays} days</h2>
+          <div className="jnote">In {insights.stuck.statuses.join(', ')} with no update for {insights.stuckDays}+ days (oldest first, top 40).</div>
+          {insights.stuck.items.length ? <AgedTable items={insights.stuck.items} /> : <div className="jnote">Nothing stuck 🎉</div>}
+        </section>
+      )}
+
+      {auth === 'admin' && insights?.bugs && (
+        <section className="jpanel">
+          <h2>Bug trends</h2>
+          <WeeklyChart weeks={insights.bugs.weekly} />
+          <div className="jgrid" style={{ marginTop: 14, marginBottom: 0 }}>
+            <Bars title="Open bugs by priority" data={insights.bugs.byPriority} bare />
+            <Bars title="Open bugs by age" data={insights.bugs.byAge} bare />
+          </div>
+        </section>
+      )}
+
+      {auth === 'admin' && insights?.leadTime && (
+        <section className="jpanel">
+          <h2>Lead time <span className="jfaint">(tickets done in the last {insights.leadTime.windowDays} days, {insights.leadTime.sampled} sampled)</span></h2>
+          <div className="jhud" style={{ marginBottom: 0 }}>
+            <LTCard label="CREATED → DONE (all)" lt={insights.leadTime.overall} />
+            {Object.entries(insights.leadTime.byType).filter(([, v]) => v.count >= 3).slice(0, 4).map(([t, v]) => <LTCard key={t} label={`${t.toUpperCase()}`} lt={v} />)}
+            <LTCard label="CREATED → FIRST PROD DEPLOY" lt={insights.leadTime.createdToProd} />
+          </div>
+        </section>
+      )}
+
+      {auth === 'admin' && (
+        <section className="jpanel">
+          <h2>Release notes</h2>
+          <div className="jnote">Pick a deployment that references Jira tickets; copy the markdown into release notes or chat.</div>
+          <select value={notesId} onChange={(e) => loadNotes(e.target.value)} style={{ maxWidth: '100%' }}>
+            <option value="">Select a deployment…</option>
+            {notesList.map((n) => <option key={n.id} value={n.id}>{n.environment} · {new Date(n.started_at).toLocaleString()} · {n.keys.join(', ')}</option>)}
+          </select>
+          {notesMd && (<>
+            <pre>{notesMd}</pre>
+            <button onClick={copyNotes}>{copied ? 'Copied ✓' : 'Copy markdown'}</button>
+          </>)}
+          {notesList.length === 0 && <div className="jnote">No deployments with Jira keys yet — they appear once deploys carry <code>Jira: VID-123</code> in their notes.</div>}
+        </section>
+      )}
+
       {auth === 'admin' && deployed && (
         <section className="jpanel">
           <h2>Tickets by environment</h2>
@@ -192,6 +278,9 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
         th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); } th { color:var(--faint); font-size:11px; letter-spacing:.05em; white-space:nowrap; }
         .jc { text-align:center; color:var(--ok); font-weight:700; } .jmono { font-family:'JetBrains Mono',monospace; white-space:nowrap; } .jmono a { color:var(--accent); }
         .jnote, .jfaint { color:var(--muted); font-size:12.5px; margin:6px 0; } .jerr { color:var(--bad); font-size:13px; margin:6px 0; }
+        .jweeks { display:flex; gap:10px; align-items:flex-end; margin-top:8px; }
+        .jweek { flex:1; min-width:36px; text-align:center; } .jbars { height:110px; display:flex; gap:3px; align-items:flex-end; justify-content:center; }
+        .jbars span { display:block; width:40%; max-width:22px; border-radius:3px 3px 0 0; min-height:1px; } .jwl { font-size:11px; color:var(--faint); margin-top:4px; } .jwn { font-size:11px; color:var(--muted); }
         pre { background:rgba(128,128,128,.12); padding:12px; border-radius:8px; overflow-x:auto; font-size:12.5px; }
       `}</style>
     </div>
@@ -232,6 +321,59 @@ function IssueTable({ issues }: { issues: Issue[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function AgedTable({ items, showEnv }: { items: Aged[]; showEnv?: boolean }) {
+  return (
+    <div className="jscroll">
+      <table>
+        <thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Assignee</th><th className="jc">Idle</th>{showEnv && <th>Deployed to</th>}</tr></thead>
+        <tbody>
+          {items.map((i) => (
+            <tr key={i.key}>
+              <td className="jmono"><a href={i.url} target="_blank" rel="noopener noreferrer">{i.key}</a></td>
+              <td>{i.summary}</td>
+              <td style={{ color: catColor(i.statusCategory) }}>{i.status}</td>
+              <td>{i.assignee || 'Unassigned'}</td>
+              <td className="jc" style={{ color: (i.ageDays ?? 0) >= 14 ? 'var(--bad)' : (i.ageDays ?? 0) >= 7 ? 'var(--warn)' : 'var(--muted)' }}>{i.ageDays ?? '—'}d</td>
+              {showEnv && <td>{i.environments && i.environments.length ? <span style={{ color: i.inProd ? 'var(--ok)' : 'var(--muted)' }}>{i.environments.join(', ')}</span> : <span className="jfaint">not seen</span>}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function WeeklyChart({ weeks }: { weeks: { weekStart: string; created: number; closed: number }[] }) {
+  const max = Math.max(1, ...weeks.flatMap((w) => [w.created, w.closed]));
+  return (
+    <div>
+      <div className="jnote"><span style={{ color: 'var(--bad)' }}>■</span> created &nbsp; <span style={{ color: 'var(--ok)' }}>■</span> closed (moved to a done status) — per week</div>
+      <div className="jweeks">
+        {weeks.map((w) => (
+          <div key={w.weekStart} className="jweek" title={`Week of ${w.weekStart}: ${w.created} created, ${w.closed} closed`}>
+            <div className="jbars">
+              <span style={{ height: `${(w.created / max) * 100}%`, background: 'var(--bad)' }} />
+              <span style={{ height: `${(w.closed / max) * 100}%`, background: 'var(--ok)' }} />
+            </div>
+            <div className="jwl">{w.weekStart.slice(5)}</div>
+            <div className="jwn">{w.created}/{w.closed}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LTCard({ label, lt }: { label: string; lt: LT }) {
+  return (
+    <div className="jcard">
+      <div className="jlabel">{label}</div>
+      <div className="jvalue">{lt.count ? `${lt.medianDays}d` : '—'}</div>
+      <div className="jfaint">{lt.count ? `median · p90 ${lt.p90Days}d · n=${lt.count}` : 'no data'}</div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/auth';
 import pool from '@/lib/db';
 
 export async function POST() {
@@ -73,7 +74,9 @@ export async function POST() {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // middleware lets every GET through; this handler mutates data, so require the admin session
+  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Unauthorized - Admin login required' }, { status: 401 });
   try {
     // 1. Ensure 'Stage EUW2' exists in environments table
     const envCheck = await pool.query("SELECT id FROM environments WHERE name = 'Stage EUW2'");

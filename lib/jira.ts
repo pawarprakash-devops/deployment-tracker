@@ -1,5 +1,3 @@
-import type { NextRequest } from 'next/server';
-
 // Jira Cloud integration. Credentials live only in server env vars:
 //   JIRA_BASE_URL      e.g. https://vidaisolutions.atlassian.net
 //   JIRA_EMAIL         Atlassian account email that owns the API token
@@ -36,15 +34,7 @@ export function extractJiraKeys(...texts: Array<string | null | undefined>): str
 
 export const isValidKey = (k: string) => /^[A-Z][A-Z0-9]{1,9}-\d{1,6}$/.test(k);
 
-// Same check as middleware.ts for write routes: Jira data (summaries, assignees) is internal,
-// so unlike the other GET APIs these routes require the admin session.
-export function isAdminRequest(request: NextRequest): boolean {
-  const adminToken = process.env.ADMIN_TOKEN || 'admin-change-me';
-  return (
-    request.cookies.get('tracker_session')?.value === adminToken ||
-    request.headers.get('authorization') === `Bearer ${adminToken}`
-  );
-}
+export { isAdminRequest } from './auth';
 
 export interface JiraIssue {
   key: string;
@@ -56,10 +46,12 @@ export interface JiraIssue {
   assignee: string | null;
   created: string;
   resolved: string | null;
+  updated: string;
+  statusChanged: string | null; // when the status category last changed (Jira field statuscategorychangedate)
   url: string;
 }
 
-const FIELDS = ['summary', 'status', 'issuetype', 'priority', 'assignee', 'created', 'resolutiondate'];
+const FIELDS = ['summary', 'status', 'issuetype', 'priority', 'assignee', 'created', 'resolutiondate', 'updated', 'statuscategorychangedate'];
 
 function toIssue(i: any): JiraIssue {
   const f = i.fields || {};
@@ -73,6 +65,8 @@ function toIssue(i: any): JiraIssue {
     assignee: f.assignee?.displayName || null,
     created: f.created,
     resolved: f.resolutiondate || null,
+    updated: f.updated,
+    statusChanged: f.statuscategorychangedate || null,
     url: jiraBrowseUrl(i.key),
   };
 }
@@ -184,3 +178,37 @@ export async function jiraActiveSprints(projectKey: string): Promise<SprintSumma
   }
   return out;
 }
+
+// ---- Deployments <-> tickets -------------------------------------------------------------------
+export interface TicketDeploys { [key: string]: { [env: string]: { first: string; last: string } } }
+
+// Jira keys found in recent successful deployments (notes, branches, versions, ticket link) and the
+// environments they reached. `pool` is passed in to keep this file free of DB imports.
+export async function ticketDeploys(pool: { query: (q: string) => Promise<{ rows: any[] }> }, limit = 300): Promise<TicketDeploys> {
+  const { rows } = await pool.query(
+    `SELECT environment, branch, version, frontend_branch, backend_branch, ticket_link, notes, started_at
+     FROM deployments WHERE status = 'Success' ORDER BY started_at DESC LIMIT ${Math.floor(limit)}`
+  );
+  const out: TicketDeploys = {};
+  for (const d of rows) {
+    const t = new Date(d.started_at).toISOString();
+    for (const key of extractJiraKeys(d.notes, d.branch, d.version, d.frontend_branch, d.backend_branch, d.ticket_link)) {
+      const e = ((out[key] ??= {})[d.environment] ??= { first: t, last: t });
+      if (t < e.first) e.first = t; // rows are newest-first, so keep overwriting `first`
+    }
+  }
+  return out;
+}
+
+export const isProdEnv = (env: string) => /^production/i.test(env);
+
+export const median = (xs: number[]) => {
+  if (!xs.length) return 0;
+  const a = [...xs].sort((x, y) => x - y);
+  return a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+};
+export const percentile = (xs: number[], p: number) => {
+  if (!xs.length) return 0;
+  const a = [...xs].sort((x, y) => x - y);
+  return a[Math.min(a.length - 1, Math.ceil((p / 100) * a.length) - 1)];
+};

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import DriftRibbon from './DriftRibbon';
 
 interface Deployment {
   id: string;
@@ -1238,6 +1239,8 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        <DriftRibbon />
 
         {/* Environment Cards */}
         <div className="cards">
