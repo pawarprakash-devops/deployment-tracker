@@ -267,7 +267,7 @@ function getQANextWindow(): {
   const currentTotalSeconds = istHours * 3600 + istMinutes * 60 + istSeconds;
 
   const W1 = 13 * 3600 + 30 * 60; // 13:30:00 IST (1:30 PM)
-  const W2 = 17 * 3600 + 30 * 60; // 17:30:00 IST (5:30 PM)
+  const W2 = 16 * 3600; // 16:00:00 IST (4:00 PM)
   const WINDOW_DURATION = 15 * 60; // 15 mins
 
   if (currentTotalSeconds >= W1 && currentTotalSeconds < W1 + WINDOW_DURATION) {
@@ -289,7 +289,7 @@ function getQANextWindow(): {
       badge: 'WINDOW 2 ACTIVE',
       isImminent: false,
       isOpen: true,
-      windowLabel: '05:30 PM IST',
+      windowLabel: '04:00 PM IST',
       windowIndex: 1
     };
   }
@@ -306,7 +306,7 @@ function getQANextWindow(): {
   } else if (currentTotalSeconds < W2) {
     targetSeconds = W2;
     windowIndex = 1;
-    windowLabel = '05:30 PM IST';
+    windowLabel = '04:00 PM IST';
   } else {
     targetSeconds = 24 * 3600 + W1;
     windowIndex = 0;
@@ -389,6 +389,28 @@ function extractAllPRs(notes?: string | null, link?: string | null): ExtractedPR
   }
 
   return prs;
+}
+
+function JiraKeyChips({ text, issues }: { text: string; issues: Record<string, { url: string; status: string; summary: string }> }) {
+  // Keys like CORE-123 (also matches branch names such as hotfix/CORE-123-fix). Admin-only details come from /api/jira/issues.
+  const keys = extractKeys(text);
+  if (!keys.length) return null;
+  return (
+    <div className="pr-links-container">
+      {keys.slice(0, 4).map((k) => {
+        const i = issues[k];
+        const chip = <span className="pr-deep-link pr-generic" title={i ? `${i.summary} — ${i.status}` : 'Jira ticket'}>🎫 {k}{i ? ` · ${i.status}` : ''}</span>;
+        return i ? <a key={k} href={i.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>{chip}</a> : <span key={k}>{chip}</span>;
+      })}
+    </div>
+  );
+}
+
+const NOT_JIRA = new Set(['UTF', 'SHA', 'ISO', 'HTTP', 'AES', 'RSA', 'MD', 'TLS', 'SSL', 'PR', 'FE', 'BE', 'ECS', 'EC']);
+function extractKeys(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g)) if (!NOT_JIRA.has(m[1])) out.add(`${m[1]}-${m[2]}`);
+  return [...out];
 }
 
 function PRBadgeList({ prs }: { prs: ExtractedPR[] }) {
@@ -489,7 +511,7 @@ export default function Home() {
   const [isProbing, setIsProbing] = useState(false);
   const [lastProbed, setLastProbed] = useState<Date | null>(null);
   
-  // QA Scheduled Release Cadence (1:30 PM & 5:30 PM IST)
+  // QA Scheduled Release Cadence (1:30 PM & 4:00 PM IST)
   const [qaNextWindow, setQaNextWindow] = useState(getQANextWindow());
 
   useEffect(() => {
@@ -501,6 +523,15 @@ export default function Home() {
   
   // Comparison
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [jiraIssues, setJiraIssues] = useState<Record<string, { url: string; status: string; summary: string }>>({});
+
+  // Admin only: resolve Jira keys visible in the history table (status + link). Viewers just see the key chips.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const keys = [...new Set(deployments.slice(0, 100).flatMap((d) => extractKeys([d.notes, d.branch, d.frontend_branch, d.backend_branch, d.ticket_link].filter(Boolean).join(' '))))].slice(0, 100);
+    if (!keys.length) return;
+    fetch(`/api/jira/issues?keys=${keys.join(',')}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.issues) setJiraIssues(j.issues); }).catch(() => {});
+  }, [isAdmin, deployments]);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [compareData, setCompareData] = useState<any>(null);
   const [compareLoading, setCompareLoading] = useState(false);
@@ -1141,6 +1172,8 @@ export default function Home() {
               >
                 <span className={`probe-icon ${isProbing ? 'spinning' : ''}`}>↺</span> {isProbing ? 'Refreshing...' : 'Refresh'}
               </button>
+              <span>·</span>
+              <a href="/jira" className="jira-pill">Jira Dashboard →</a>
             </div>
           </div>
           <div className="actions">
@@ -1285,7 +1318,7 @@ export default function Home() {
                       <div className="cadence-slots">
                         <span className={`cadence-slot ${qaNextWindow.windowIndex === 0 ? 'active' : ''}`}>1:30 PM IST</span>
                         <span className="slot-dot">•</span>
-                        <span className={`cadence-slot ${qaNextWindow.windowIndex === 1 ? 'active' : ''}`}>5:30 PM IST</span>
+                        <span className={`cadence-slot ${qaNextWindow.windowIndex === 1 ? 'active' : ''}`}>4:00 PM IST</span>
                       </div>
                       <span className="cadence-lead-tag" title="DevOps approval required from Prakash Pawar">
                         @pawarprakash-devops
@@ -1518,6 +1551,7 @@ export default function Home() {
                           {ticketInfo?.prs && ticketInfo.prs.length > 0 && (
                             <PRBadgeList prs={ticketInfo.prs} />
                           )}
+                          <JiraKeyChips text={[d.notes, d.branch, d.frontend_branch, d.backend_branch, d.ticket_link].filter(Boolean).join(' ')} issues={jiraIssues} />
                         </div>
                         {d.notes && <div className="note-text">{renderNoteWithLinks(d.notes)}</div>}
                       </td>
@@ -2168,6 +2202,21 @@ header.top {
   animation: spin 1s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.jira-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(225, 126, 97, 0.08);
+  color: #e17e61;
+  border: 1px solid rgba(225, 126, 97, 0.25);
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.jira-pill:hover { background: rgba(225, 126, 97, 0.15); }
 
 .card {
   background: #ffffff;

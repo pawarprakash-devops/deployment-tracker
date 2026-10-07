@@ -237,17 +237,17 @@ Preview (dev) ─[+4]→ QA (qa) ─[+2]→ Stage (stage) ─[+1]→ Pre-Prod (p
 
 ---
 
-### 3.6 Scheduled Release Windows & Approval Gate Countdown (QA 1:30 PM & 5:30 PM IST in code)
+### 3.6 Scheduled Release Windows & Approval Gate Countdown (QA 1:30 PM & 4:00 PM IST)
 
 * **Status:** ✅ **Implemented & Verified** (Live on `/` at `vidai-deployments.vercel.app`).
 * **The Problem:**
   - QA branch merges were triggering continuous ad-hoc deployments, causing testing interruptions, DB lock collisions, and untracked config drift.
-  - New policy enforces **only two QA deployments daily**: **1:30 PM IST** and **5:30 PM IST**, requiring mandatory DevOps approval.
+  - New policy enforces **only two QA deployments daily**: **1:30 PM IST** and **4:00 PM IST** (manual dispatch also allowed), requiring mandatory DevOps approval.
 * **The Tracker Enhancement:**
   - **Live Countdown Timer:** Displays on the QA card (e.g., `⏱ Next QA Release in 1h 24m · 01:30 PM IST` ticking live).
   - **Window Status Badges:** Transitions dynamically through `COUNTDOWN` ➔ `CLOSING IN` (within 30m) ➔ `WINDOW ACTIVE` (during 15m deployment window).
   - **Approval Gate Indicator:** Visual badge displaying `GATE: MANDATORY APPROVAL (@pawarprakash-devops)`.
-  - ⚠️ **Out of sync with infra:** the countdown in `app/page.tsx` hardcodes windows **13:30 and 17:30 IST** (`W1`/`W2`). The infra docs (`QA-DEPLOY-SCHEDULE-AND-AUTO-DEPLOY-REMOVAL-2026-10-06.md`) set the real QA schedule to **1:30 PM and 4:00 PM IST** (manual dispatch also allowed). Update `W2` to `16 * 3600` and the `05:30 PM IST` labels when the tracker is next touched.
+  - Windows are hardcoded in `app/page.tsx` (`W1` = 13:30, `W2` = 16:00 IST, 15-minute window each); keep in sync with `QA-DEPLOY-SCHEDULE-AND-AUTO-DEPLOY-REMOVAL-2026-10-06.md`.
 
 ---
 
@@ -273,6 +273,15 @@ Preview (dev) ─[+4]→ QA (qa) ─[+2]→ Stage (stage) ─[+1]→ Pre-Prod (p
 * **The Solution:**
   - **Automatic PR Parsing:** Detects `#<number>` and `PR #<number>` patterns in notes and branches, creating 1-click links directly to GitHub PRs.
   - **Author Avatar Badges:** Displays circular user avatar thumbnails with initials fallbacks for team members (`Sonali Mathur`, `kuldeeplodha`, `pawarprakash-devops`, `saranya13-tech`, `dev-prafulk`).
+
+---
+
+### 3.10 Jira Dashboard (`/jira`)
+
+* **Status:** ✅ **Implemented** (needs `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEYS` in Vercel).
+* Ticket chips (`🎫 CORE-123`) appear in the deployment history table for any Jira-style key in notes/branches/ticket link; admins also see status and a link to Jira.
+* `/jira` (admin only): open / in-progress / done / open-bug counts, created vs resolved (7 d and window), breakdowns by status, assignee and type, open-bug list, and a **tickets × environments** matrix showing where each ticket has been deployed (answers "is CORE-123 in Pre-Prod yet?").
+* Limits: metrics sample the 500 most recently updated issues; no sprint/board data (would need the Jira Agile API).
 
 ---
 
@@ -307,7 +316,7 @@ PHASE 3: Release Governance & Flow Control (Active)
 ├── [~] Environment Promotion Drift Matrix — compare API + modal done; top-of-page ribbon not built
 ├── [x] Rerun tracking (`Rerun - <status>` rows) and Demo-Preview environment
 ├── [x] Light/dark theme toggle + VidAI brand palette; 90 s visible-tab polling + edge caching
-├── [x] QA Scheduled Release Windows countdown (1:30 PM & 5:30 PM IST)
+├── [x] QA Scheduled Release Windows countdown (1:30 PM & 4:00 PM IST)
 ├── [x] Dynamic Cluster Auto-Discovery (Resolving stage-euw2 out of 'Other')
 └── [x] PR Deep-Linking & GitHub Operator Avatars
 

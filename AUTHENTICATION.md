@@ -18,6 +18,8 @@ Rules enforced by the middleware, in order:
 
 > `/admin` shows a login challenge until `GET /api/auth/session` reports `admin` — but this is a **client-side gate only**: the data it renders comes from the public `GET /api/admin/stats`, which is not authenticated.
 >
+> `/api/jira/*` are the exception to "every GET is public": they check the admin session/token themselves (`lib/jira.ts#isAdminRequest`) because Jira summaries and assignees are internal.
+>
 > `GET /api/migrate` is a `GET`, so it is reachable without auth even though it mutates data (the POST variant is protected). Treat it as a known gap.
 
 ## Login flow
