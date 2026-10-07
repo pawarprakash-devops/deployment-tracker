@@ -1,3 +1,5 @@
+> ⚠️ **Historical document** — initial local setup (Aug 2026). Behaviour described below may be outdated (e.g. polling is 90 s on a visible tab, not 5 s). For current behaviour see `README.md`, `AUTHENTICATION.md`, `AUTOMATIC_TRACKING.md` and `docs/ROADMAP.md`. Secrets that appeared here have been redacted.
+
 # 🚀 Deployment Tracker - Setup Complete!
 
 ## ✅ Installation Summary
@@ -28,7 +30,7 @@
 
 ### Verify Database
 ```bash
-psql "postgresql://neondb_owner:npg_yDVnf1w5IkOt@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require" -c "SELECT * FROM environments;"
+psql "postgresql://neondb_owner:<DB_PASSWORD>@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require" -c "SELECT * FROM environments;"
 ```
 
 ---
@@ -76,7 +78,7 @@ deployment-tracker/
 
 ## 🌟 Features
 
-✅ **Real-time Updates** - Auto-refreshes every 5 seconds  
+✅ **Real-time Updates** - Auto-refreshes every 90 seconds while the tab is visible  
 ✅ **Neon Postgres** - Serverless database with connection pooling  
 ✅ **Full CRUD API** - Create, read, update, delete deployments  
 ✅ **Modern UI** - Tailwind CSS responsive design  
@@ -104,7 +106,7 @@ deployment-tracker/
    - Select your GitHub repo
    - Add environment variable:
      - Key: `DATABASE_URL`
-     - Value: `postgresql://neondb_owner:npg_yDVnf1w5IkOt@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require`
+     - Value: `postgresql://neondb_owner:<DB_PASSWORD>@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require`
    - Click "Deploy"
 
 3. **Done!** Your deployment tracker will be live at `https://your-app.vercel.app`
@@ -150,7 +152,7 @@ npm update
 
 ### Check Database
 ```bash
-psql "postgresql://neondb_owner:npg_yDVnf1w5IkOt@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
+psql "postgresql://neondb_owner:<DB_PASSWORD>@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
 
 -- In psql:
 \dt                              -- List tables
@@ -161,7 +163,7 @@ SELECT * FROM deployments ORDER BY started_at DESC LIMIT 5;
 ### Backup Database
 Neon automatically backs up your database. To export:
 ```bash
-pg_dump "postgresql://neondb_owner:npg_yDVnf1w5IkOt@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require" > backup.sql
+pg_dump "postgresql://neondb_owner:<DB_PASSWORD>@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require" > backup.sql
 ```
 
 ---

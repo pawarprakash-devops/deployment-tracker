@@ -8,7 +8,7 @@ Your deployment tracker now supports **automatic tracking** from GitHub Actions 
 
 ## 🔗 Webhook Endpoint
 
-**URL:** `https://deployment-tracker-taupe.vercel.app/api/webhook`
+**URL:** `https://vidai-deployments.vercel.app/api/webhook`
 
 **Status:** ✅ Live and Working
 
@@ -26,12 +26,12 @@ Add two secrets:
 
 **`TRACKER_WEBHOOK_URL`**
 ```
-https://deployment-tracker-taupe.vercel.app/api/webhook
+https://vidai-deployments.vercel.app/api/webhook
 ```
 
 **`TRACKER_WEBHOOK_SECRET`**
 ```
-change-me-in-production
+<WEBHOOK_SECRET>
 ```
 
 ⚠️ **Important:** Generate a secure token and update both:
@@ -106,9 +106,9 @@ Add this step to your deployment workflows in `vidai-devops`:
 ### 1. Manual Test (Already Done ✅)
 
 ```bash
-curl -X POST https://deployment-tracker-taupe.vercel.app/api/webhook \
+curl -X POST https://vidai-deployments.vercel.app/api/webhook \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer change-me-in-production" \
+  -H "Authorization: Bearer <WEBHOOK_SECRET>" \
   -d '{
     "environment": "QA",
     "status": "Success",
@@ -123,7 +123,7 @@ curl -X POST https://deployment-tracker-taupe.vercel.app/api/webhook \
 
 ### 2. View Test Deployment
 
-Open: https://deployment-tracker-taupe.vercel.app
+Open: https://vidai-deployments.vercel.app
 
 You should see the test deployment in the QA row!
 
@@ -144,7 +144,7 @@ Deployment Tracker API receives data
          ↓
 Data saved to Neon database
          ↓
-Dashboard auto-refreshes (5 seconds)
+Dashboard refreshes on its 90 s poll (visible tab) or on tab focus
          ↓
 ✅ Deployment appears in real-time!
 ```
@@ -153,15 +153,23 @@ Dashboard auto-refreshes (5 seconds)
 
 ## 📋 Environment Mapping
 
-| Cluster Name | Environment |
-|--------------|-------------|
-| `qa-aps-ecs-cluster` | QA |
-| `vidai-solutions-stage-*` | Stage |
-| `vidai-solutions-preview-99999-*` | Preview |
-| `vidai-solutions-pre-prod-*` | Pre-Prod |
-| `pre-prod-usw-ecs-cluster` | Pre-Prod USW |
-| `production-aps-*` | Production |
-| `lms-usw-*` | LMS |
+| Cluster / raw environment | Tracker environment (resolved server-side) |
+|---------|-------------|
+| `qa-aps-ecs-cluster` | **QA** |
+| `vidai-solutions-preview-99999-*` | **Preview** |
+| `preview-ecs-cluster`, "demo" in env/notes/branch | **Demo-Preview** |
+| `staging-euw2-*` / `stage-euw2` | **Stage EUW2** |
+| `staging-use1-*` | **Stage USE1** |
+| `vidai-solutions-stage-*` / any other `stage*` | **Stage** |
+| `vidai-solutions-pre-prod-*` | **Pre-Prod** |
+| `pre-prod-usw-ecs-cluster` | **Pre-Prod USW** |
+| `prod_ank` / `ankura` | **Production (Ankura)** |
+| `prod_neo` / `neotia` / `babyjoy` | **Production (Neotia/Babyjoy)** |
+| `prod-refera-*` | **Production (Refera)** |
+| any other `prod*` (e.g. `production-aps-*` with no `neo`/`ank` hint) | **Production** |
+| `lms-usw-*` | **LMS** |
+
+The webhook runs `normalizeEnvironment()` (see `README.md`) over the environment, notes and branch fields, so workflows can send the raw cluster name; unknown names are auto-registered as new environments. Order matters: Demo is matched before QA, and Stage EUW2/USE1 before Stage.
 
 ---
 
@@ -169,17 +177,17 @@ Dashboard auto-refreshes (5 seconds)
 
 ### View Recent Deployments
 ```bash
-curl https://deployment-tracker-taupe.vercel.app/api/deployments
+curl https://vidai-deployments.vercel.app/api/deployments
 ```
 
 ### Check Webhook Health
 ```bash
-curl https://deployment-tracker-taupe.vercel.app/api/webhook
+curl https://vidai-deployments.vercel.app/api/webhook
 ```
 
 ### View Vercel Logs
 ```bash
-vercel logs https://deployment-tracker-taupe.vercel.app/api/webhook --follow
+vercel logs https://vidai-deployments.vercel.app/api/webhook --follow
 ```
 
 ### Check GitHub Actions Logs
@@ -202,7 +210,7 @@ vercel logs https://deployment-tracker-taupe.vercel.app/api/webhook --follow
 
 After integration:
 - ✅ **Zero manual entry** - Deployments logged automatically
-- ✅ **Real-time updates** - Dashboard refreshes every 5 seconds
+- ✅ **Real-time updates** - Dashboard refreshes every 90 seconds while the tab is visible
 - ✅ **Complete history** - All deployments tracked
 - ✅ **Failed deployments too** - Even failures are logged
 - ✅ **Audit trail** - Who deployed what, when
@@ -215,7 +223,7 @@ After integration:
 1. **Update secrets** (both GitHub and Vercel) with a secure token
 2. **Add webhook step** to `full_deployment.yaml` in vidai-devops
 3. **Test with real deployment** - Trigger a QA deployment
-4. **Verify on dashboard** - Check https://deployment-tracker-taupe.vercel.app
+4. **Verify on dashboard** - Check https://vidai-deployments.vercel.app
 
 ---
 
@@ -230,4 +238,4 @@ After integration:
 
 **Ready to automate!** 🚀
 
-View your dashboard: https://deployment-tracker-taupe.vercel.app
+View your dashboard: https://vidai-deployments.vercel.app

@@ -522,9 +522,6 @@ export default function AdminDashboard() {
           <button className="btn ghost" onClick={() => router.push('/')}>
             ← RETURN TO RADAR
           </button>
-          <a href="/copilot" className="copilot-pill">
-            ⚡ COPILOT METRICS ➔
-          </a>
           <button className="btn ghost" onClick={() => loadStats()}>
             🔄 REFRESH
           </button>
@@ -1137,23 +1134,6 @@ export default function AdminDashboard() {
           border-color: #FF3366;
           color: #FF3366;
           box-shadow: 0 0 10px rgba(255, 51, 102, 0.3);
-        }
-        .copilot-pill {
-          color: #c084fc;
-          text-decoration: none;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
-          font-weight: 600;
-          padding: 7px 12px;
-          background: rgba(192, 132, 252, 0.1);
-          border: 1px solid rgba(192, 132, 252, 0.25);
-          border-radius: 6px;
-          transition: all 0.2s;
-        }
-        .copilot-pill:hover {
-          background: rgba(192, 132, 252, 0.2);
-          box-shadow: 0 0 12px rgba(192, 132, 252, 0.35);
-          color: #e9d5ff;
         }
 
         /* HUD Ribbon */

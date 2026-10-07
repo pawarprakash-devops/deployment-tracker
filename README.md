@@ -1,172 +1,106 @@
-# Deployment Tracker
+# VidAI Deployment Tracker
 
-A real-time deployment tracking system built with Next.js 16, Neon Postgres, and Tailwind CSS.
+Deployment tracking, release-governance and delivery-metrics dashboard for VidAI. Next.js 16 (App Router) + Neon Postgres + Tailwind 4, deployed to Vercel (`https://vidai-deployments.vercel.app`) by `.github/workflows/deploy.yaml` on every push to `main`.
 
-## Features
+> Next.js 16 has breaking changes vs. older versions — read `node_modules/next/dist/docs/` before changing framework-level code (see `AGENTS.md`).
 
-✅ **Real-time Updates** - Auto-refreshes every 5 seconds  
-✅ **Neon Postgres Database** - Serverless, scalable database  
-✅ **REST API** - Full CRUD operations for deployments  
-✅ **Environment Management** - Track multiple environments  
-✅ **Modern UI** - Built with Tailwind CSS  
-✅ **GitHub Copilot Usage Dashboard** - Per-user AI credits, lines suggested/accepted, chat/agent usage, adoption phase
+## Pages
 
-## Database Schema
+| Route | What it is |
+|-------|-----------|
+| `/` | Main dashboard: HUD counters, one card per environment (latest successful deploy, live health pill, QA release-window countdown), deployment history table, FE/BE compare modal, admin controls |
+| `/admin` | Fleet telemetry: DORA suite (deployment frequency, lead time, change failure rate incl. prod-only CFR, MTTR), charts by environment/status, recent failures, longest runs, top operators, MTTR incident audit trail |
+| `/health` | Latest-successful-deploy view per environment (backed by `/api/health`) |
 
-### Tables
+UI: dark theme by default with a light toggle (stored in `localStorage` key `tracker-theme`), VidAI brand palette. The page polls every **90 s, only while the tab is visible**, and refreshes immediately when the tab regains focus. API responses carry ETags and edge `Cache-Control` headers to stay under Neon/Vercel limits.
 
-**environments**
-- `id` (UUID)
-- `name` (TEXT, unique)
-- `is_production` (BOOLEAN)
-- `display_order` (INTEGER)
-- `created_at`, `updated_at` (TIMESTAMP)
+## Environments and ordering
 
-**deployments**
-- `id` (UUID)
-- `environment` (TEXT)
-- `status` (Success | In Progress | Failed | Cancelled | Rolled Back)
-- `branch`, `version`, `requested_by`, `approved_by`, `tested_by`, `deployed_by`, `ticket_link`, `notes` (TEXT, optional)
-- `started_at`, `completed_at` (TIMESTAMP)
-- `duration_seconds` (INTEGER, optional)
-- `created_at`, `updated_at` (TIMESTAMP)
+Environments are rows in the `environments` table and are **auto-created by the webhook** on first sight. The UI orders cards by `PROMOTION_ORDER` in `app/page.tsx`:
+
+`Preview (1)` → `Demo-Preview (1.5)` → `QA (2)` → `Stage / Stage EUW2 (3)` → `Pre-Prod (4)` → `Pre-Prod USW (5)` → `Production (Ankura) (6)` → `Production (Neotia/Babyjoy) (7)` → `Production (8)` → `LMS (9)`.
+
+Branch → environment map used for compare: `dev`→Preview, `demo`→Demo-Preview, `qa`→QA, `stage`→Stage, `preprod`→Pre-Prod, `preprod_usw`→Pre-Prod USW, `prod_ank`→Production (Ankura), `prod_neo`→Production (Neotia/Babyjoy).
+
+Environment name resolution (`normalizeEnvironment` in `app/api/webhook/route.ts`) matches, in order, against the raw environment + notes + branch names: `euw2` → Stage EUW2; `use1` → Stage USE1; `demo` / `preview-ecs-cluster` / `demo-preview` → **Demo-Preview** (checked *before* QA so PR titles like "QA to Demo" don't match QA); `preview` → Preview; `qa-aps` / `qa` (raw env only) → QA; pre-prod USW; pre-prod; `prod-ank`/`ankura`; `prod-neo`/`neotia`/`babyjoy`; `refera`; `prod`; `stage`; `lms`. Unknown names are cleaned (`-ecs-cluster` stripped) and registered as-is; an empty/`Other` environment falls back to **Demo-Preview**.
+
+## Database
+
+Neon Postgres (`DATABASE_URL`, pooled connection, SSL, pool max 20).
+
+**environments** — `id` (UUID), `name` (unique), `is_production`, `display_order`, `created_at`, `updated_at`.
+
+**deployments** — `id` (UUID), `environment`, `status`, `deployment_type` (`standard` | `rollback` | `hotfix`), `branch`, `version`, `frontend_branch`, `backend_branch`, `frontend_version`, `backend_version`, `requested_by`, `approved_by`, `tested_by`, `deployed_by`, `ticket_link`, `notes`, `started_at`, `completed_at`, `duration_seconds`, `created_at`, `updated_at`. All text columns are `TEXT` (widened so multiple PR authors fit); an index exists on `(frontend_branch, backend_branch)`.
+
+`status` values: `Success`, `In Progress`, `Failed`, `Cancelled`, `Rolled Back`, plus `Rerun - <status>` (see below). Note `lib/db.ts` does not list the `Rerun - …` values in its `Deployment` type.
+
+### Rerun behaviour
+When the webhook receives a payload whose `ticket_link` (the GitHub Actions run URL) already exists, it **inserts a new row** with status `Rerun - <status>` and notes prefixed `🔄 Rerun:` — the original failed row is kept in history (earlier versions updated in place). The one-off `GET /api/migrate` cleanup deletes `Failed` rows that have a later `Success` row for the same `ticket_link`.
 
 ## Setup
 
-### 1. Environment Variables
-
-Already configured in `.env.local`:
-```
-DATABASE_URL=postgresql://neondb_owner:***@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
-```
-
-### 2. Install Dependencies
-
 ```bash
 npm install
+# create .env.local (git-ignored) with the variables below
+npm run dev                  # http://localhost:3000
 ```
 
-### 3. Database
+`next dev` against Neon works only with network access to Neon; set `USE_MOCK_DATA=true` (development only) to enable the mock flag exported by `lib/db.ts`.
 
-Database schema is already created with these tables:
-- `environments` (with 6 default environments: QA, Stage, Preview, Pre-Prod, Pre-Prod USW, Production)
-- `deployments`
+### Environment variables
 
-### 4. Run Development Server
+| Variable | Used by | Notes |
+|----------|---------|-------|
+| `DATABASE_URL` | all DB routes | Neon pooled connection string. **Never commit it.** |
+| `WEBHOOK_SECRET` | `POST /api/webhook` | Expected as `Authorization: Bearer <secret>`. **If unset, the code falls back to a publicly known default** — always set it. |
+| `ADMIN_TOKEN` | `middleware.ts`, `/api/auth` | Admin password. **If unset, falls back to a publicly known default** — always set it. |
+| `GH_TOKEN` | `/api/compare` | GitHub token with read access to the compared repos |
+| `USE_MOCK_DATA` | `lib/db.ts` | Dev-only mock flag |
 
-```bash
-npm run dev
-```
+Rotate the Neon password and admin/webhook secrets if they were ever committed to git history (earlier versions of these docs contained them).
 
-Open [http://localhost:3000](http://localhost:3000)
+## API
 
-## API Endpoints
+All `GET`s are public. `POST/PUT/PATCH/DELETE` need admin auth (see `AUTHENTICATION.md`) except `/api/webhook` (own secret) and `/api/auth*`.
 
-### Deployments
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/deployments?limit=&offset=` | History, newest first (default 500, max 1000). Rows whose `deployed_by` contains "Deployment Tracker" are excluded. ETag + 30 s edge cache |
+| `POST /api/deployments` | Manual create (admin) |
+| `PATCH /api/deployments/[id]` | Update any columns present in the body (admin) |
+| `DELETE /api/deployments/[id]` | Delete (admin) |
+| `GET /api/environments` · `POST` · `DELETE /api/environments/[id]` | Environment list/create/delete (writes need admin). 120 s edge cache |
+| `POST /api/webhook` | CI ingestion (Bearer `WEBHOOK_SECRET`). Required: `environment`, `status`. Accepts the deployment columns above; `deployment_type` defaults to `standard`, `started_at` to now, `duration_seconds` is computed from `completed_at`. Returns `201 {success, deployment}`. `GET` is a liveness check |
+| `GET /api/health` | Latest `Success` deployment per environment (used by `/health`; 60 s edge cache). It is **not** a live probe |
+| `GET /api/cluster-health` | Live probes of 9 backend API URLs (Preview, Demo-Preview, QA, Stage, Stage EUW2, Pre-Prod India, Pre-Prod USW, Prod Ankura, Prod Neotia) — `HEALTHY` (2xx/3xx ≤ 2000 ms), `DEGRADED` (slow or 4xx/5xx), `OFFLINE` (timeout 4.5 s / network error). 120 s edge cache. Backend only — there is no frontend/CloudFront chunk probe |
+| `GET /api/compare?repo=&base=&head=&run_id=` | GitHub compare (ahead/behind, ≤30 commits, ≤50 files) between two refs; with only `head`, last 15 commits; optional Actions run details. Default repo `vidaisolutions/vidai-react`. Needs `GH_TOKEN` |
+| `GET /api/admin/stats` | Aggregates + DORA metrics for `/admin` |
+| `GET/POST /api/migrate` | One-off schema/data maintenance (adds FE/BE columns, widens columns to TEXT, renames `Demo`→`Demo-Preview`, dedupes superseded failed rows). Idempotent; POST needs admin, GET is currently unauthenticated |
+| `POST /api/auth`, `DELETE /api/auth`, `GET /api/auth/session` | Admin login / logout / role check |
 
-- `GET /api/deployments` - List all deployments (last 100)
-- `POST /api/deployments` - Create new deployment
-- `PATCH /api/deployments/[id]` - Update deployment
-- `DELETE /api/deployments/[id]` - Delete deployment
+## CI/CD
 
-### Environments
+- `.github/workflows/deploy.yaml` — build and deploy to Vercel (`vercel pull/build/deploy --prebuilt --prod`) on push to `main` or manual dispatch. Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
+- Feeding the tracker from `vidai-devops` deploys: see `AUTOMATIC_TRACKING.md` and `log-deployment-workflow.yaml`.
 
-- `GET /api/environments` - List all environments
-- `POST /api/environments` - Create new environment
+## Scripts (`scripts/`)
 
-## Deploy to Vercel
+One-off importers/backfills: `import-history.js` (GH Actions runs, `--since`, `--dry-run`), `import-gh-history-rds.js`, `import-history-md.js` / `import-prod-history.js` (from `DEPLOYMENT-HISTORY-2026-08-24.md`), `fix-imported-actors.js` (actor backfill), `add-deployment-type.sql`.
 
-### Quick Deploy
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/deployment-tracker)
-
-### Manual Deploy
-
-1. Push this code to GitHub
-2. Go to [Vercel](https://vercel.com)
-3. Import your repository
-4. Add environment variable:
-   - `DATABASE_URL` = your Neon connection string
-5. Deploy!
-
-### Environment Variables in Vercel
-
-Go to Project Settings → Environment Variables and add:
+## Project structure
 
 ```
-DATABASE_URL=postgresql://neondb_owner:npg_yDVnf1w5IkOt@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+app/
+  page.tsx            # main dashboard (cards, history, compare, QA cadence, admin controls)
+  admin/page.tsx      # DORA + telemetry
+  health/page.tsx     # latest-success view
+  api/{deployments,environments,webhook,health,cluster-health,compare,admin/stats,migrate,auth}/
+lib/db.ts             # pg Pool + types
+middleware.ts         # admin auth for non-GET /api/*
+scripts/              # importers
+.github/workflows/    # deploy.yaml
 ```
 
-## Project Structure
+## Related docs
 
-```
-deployment-tracker/
-├── app/
-│   ├── api/
-│   │   ├── deployments/
-│   │   │   ├── route.ts          # GET, POST deployments
-│   │   │   └── [id]/route.ts     # PATCH, DELETE deployment
-│   │   └── environments/
-│   │       └── route.ts          # GET, POST environments
-│   ├── layout.tsx
-│   └── page.tsx                  # Main UI
-├── lib/
-│   └── db.ts                     # Database connection & types
-├── .env.local                    # Environment variables (DO NOT COMMIT)
-├── package.json
-└── README.md
-```
-
-## Neon Project Details
-
-- **Project Name:** deployment-tracker
-- **Project ID:** divine-breeze-16420695
-- **Organization:** Prakash (org-proud-firefly-79937291)
-- **Region:** us-east-2 (Ohio)
-- **Database:** neondb
-- **Connection:** Pooled connection (recommended for serverless)
-
-## Development
-
-### Add a Test Deployment
-
-You can add a test deployment via the UI or via API:
-
-```bash
-curl -X POST http://localhost:3000/api/deployments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "environment": "QA",
-    "status": "Success",
-    "branch": "main",
-    "version": "v1.0.0",
-    "requested_by": "prakash",
-    "started_at": "2026-08-27T10:00:00"
-  }'
-```
-
-### Query the Database Directly
-
-```bash
-psql "postgresql://neondb_owner:npg_yDVnf1w5IkOt@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require" -c "SELECT * FROM deployments ORDER BY started_at DESC LIMIT 10;"
-```
-
-## Next Steps
-
-1. **Deploy to Vercel** - Push to GitHub and deploy
-2. **Add Authentication** - Implement auth for write operations
-3. **GitHub Actions Integration** - Auto-log deployments from CI/CD
-4. **WebSocket Support** - Replace polling with real-time WebSocket updates
-5. **Export/Import** - Add JSON export/import functionality
-
-## Tech Stack
-
-- **Framework:** Next.js 16 (App Router)
-- **Database:** Neon Postgres (Serverless)
-- **Styling:** Tailwind CSS
-- **Language:** TypeScript
-- **Deployment:** Vercel (recommended)
-
-## License
-
-MIT
+`AUTHENTICATION.md` · `AUTOMATIC_TRACKING.md` · `QUICKSTART_AUTO_TRACKING.md` · `docs/ROADMAP.md` · historical setup logs: `SETUP_COMPLETE.md`, `DEPLOY_TO_VERCEL.md`, `DEPLOYMENT_SUCCESS.md`, `INTEGRATION_COMPLETE.md`, `REDESIGN_COMPLETE.md`.

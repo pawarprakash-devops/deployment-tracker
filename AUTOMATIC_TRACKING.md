@@ -35,12 +35,12 @@ Add these two secrets:
 
 **1. `TRACKER_WEBHOOK_URL`**
 ```
-https://deployment-tracker-taupe.vercel.app/api/webhook
+https://vidai-deployments.vercel.app/api/webhook
 ```
 
 **2. `TRACKER_WEBHOOK_SECRET`**
 ```
-your-secret-token-here-change-me
+<WEBHOOK_SECRET>
 ```
 
 **Generate a secure token:**
@@ -154,19 +154,34 @@ Add this step at the end of your deployment job:
 
 ---
 
+## 🔁 Behaviour notes (from `app/api/webhook/route.ts`)
+
+- **Auth:** `Authorization: Bearer <WEBHOOK_SECRET>` (the `x-tracker-secret` header shown in some older planning docs is **not** read). If `WEBHOOK_SECRET` is unset in Vercel, the code accepts a publicly known default — set it.
+- **Fields:** `environment`, `status` (required); optional `deployment_type` (`standard`|`rollback`|`hotfix`, default `standard`), `branch`, `version`, `frontend_branch`, `backend_branch`, `frontend_version`, `backend_version`, `requested_by`, `approved_by`, `tested_by`, `deployed_by`, `ticket_link`, `notes`, `started_at`, `completed_at`, `duration_seconds` (computed from `completed_at` if omitted).
+- **Reruns:** if a row with the same `ticket_link` (the Actions run URL) already exists, a **new** row is inserted with status `Rerun - <status>` and notes prefixed `🔄 Rerun:`; the original row is preserved. Always send `ticket_link` = run URL so reruns are recognised.
+- **Environments** are resolved and auto-created server-side (table below).
+
 ## 🎯 Environment Name Mapping
 
 Map your cluster names to environment names:
 
-| Cluster | Environment |
+| Cluster / raw environment | Tracker environment (resolved server-side) |
 |---------|-------------|
 | `qa-aps-ecs-cluster` | **QA** |
-| `vidai-solutions-stage-*` | **Stage** |
 | `vidai-solutions-preview-99999-*` | **Preview** |
+| `preview-ecs-cluster`, "demo" in env/notes/branch | **Demo-Preview** |
+| `staging-euw2-*` / `stage-euw2` | **Stage EUW2** |
+| `staging-use1-*` | **Stage USE1** |
+| `vidai-solutions-stage-*` / any other `stage*` | **Stage** |
 | `vidai-solutions-pre-prod-*` | **Pre-Prod** |
 | `pre-prod-usw-ecs-cluster` | **Pre-Prod USW** |
-| `production-aps-*` or `prod-refera-*` | **Production** |
+| `prod_ank` / `ankura` | **Production (Ankura)** |
+| `prod_neo` / `neotia` / `babyjoy` | **Production (Neotia/Babyjoy)** |
+| `prod-refera-*` | **Production (Refera)** |
+| any other `prod*` (e.g. `production-aps-*` with no `neo`/`ank` hint) | **Production** |
 | `lms-usw-*` | **LMS** |
+
+The webhook runs `normalizeEnvironment()` (see `README.md`) over the environment, notes and branch fields, so workflows can send the raw cluster name; unknown names are auto-registered as new environments. Order matters: Demo is matched before QA, and Stage EUW2/USE1 before Stage.
 
 Add this helper function to your workflows:
 
@@ -271,9 +286,9 @@ jobs:
 ### 1. Test the Webhook Endpoint
 
 ```bash
-curl -X POST https://deployment-tracker-taupe.vercel.app/api/webhook \
+curl -X POST https://vidai-deployments.vercel.app/api/webhook \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-secret-token" \
+  -H "Authorization: Bearer <WEBHOOK_SECRET>" \
   -d '{
     "environment": "QA",
     "status": "Success",
@@ -298,7 +313,7 @@ Expected response:
 Trigger a deployment in vidai-devops and check:
 1. ✅ GitHub Actions completes
 2. ✅ Webhook step succeeds
-3. ✅ Deployment appears in tracker: https://deployment-tracker-taupe.vercel.app
+3. ✅ Deployment appears in tracker: https://vidai-deployments.vercel.app
 
 ---
 
@@ -309,7 +324,7 @@ Trigger a deployment in vidai-devops and check:
 - Verify the Authorization header format: `Bearer YOUR_TOKEN`
 
 ### Webhook returns 400 Bad Request
-- Verify required fields: `environment`, `status`, `started_at`
+- Verify required fields: `environment` and `status` (`started_at` is optional and defaults to the receive time)
 - Check JSON format is valid
 
 ### Deployment doesn't appear in tracker
@@ -319,7 +334,7 @@ Trigger a deployment in vidai-devops and check:
 
 ### How to view Vercel logs
 ```bash
-vercel logs https://deployment-tracker-taupe.vercel.app/api/webhook --follow
+vercel logs https://vidai-deployments.vercel.app/api/webhook --follow
 ```
 
 ---
@@ -327,15 +342,15 @@ vercel logs https://deployment-tracker-taupe.vercel.app/api/webhook --follow
 ## 📈 Monitoring
 
 ### View Deployments
-**Dashboard:** https://deployment-tracker-taupe.vercel.app
+**Dashboard:** https://vidai-deployments.vercel.app
 
 **API:**
 ```bash
-# List recent deployments
-curl https://deployment-tracker-taupe.vercel.app/api/deployments
+# List recent deployments (supports ?limit= (max 1000) and ?offset=; there is no server-side environment filter)
+curl https://vidai-deployments.vercel.app/api/deployments
 
-# Filter by environment
-curl https://deployment-tracker-taupe.vercel.app/api/deployments?environment=Production
+# Filter client-side, e.g. Production (Ankura)
+curl -s https://vidai-deployments.vercel.app/api/deployments | jq '.[] | select(.environment=="Production (Ankura)")'
 ```
 
 ---

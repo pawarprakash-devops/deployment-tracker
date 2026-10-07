@@ -1141,10 +1141,6 @@ export default function Home() {
               >
                 <span className={`probe-icon ${isProbing ? 'spinning' : ''}`}>↺</span> {isProbing ? 'Refreshing...' : 'Refresh'}
               </button>
-              <span>·</span>
-              <a href="/copilot" className="copilot-pill">
-                Copilot Metrics →
-              </a>
             </div>
           </div>
           <div className="actions">
@@ -2173,24 +2169,6 @@ header.top {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.copilot-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(225, 126, 97, 0.08);
-  color: #e17e61;
-  border: 1px solid rgba(225, 126, 97, 0.25);
-  border-radius: 20px;
-  padding: 2px 10px;
-  font-size: 11.5px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: background 0.2s;
-}
-.copilot-pill:hover {
-  background: rgba(225, 126, 97, 0.15);
-}
-
 .card {
   background: #ffffff;
   border: 1px solid #e2e4e8;
@@ -2415,24 +2393,6 @@ input[type=date], input[type=datetime-local] { color-scheme: light; }
           font-size: 10px;
           font-weight: 700;
           letter-spacing: 0.05em;
-        }
-
-        .copilot-pill {
-          color: #c084fc;
-          text-decoration: none;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
-          font-weight: 600;
-          padding: 3px 9px;
-          background: rgba(192, 132, 252, 0.1);
-          border: 1px solid rgba(192, 132, 252, 0.25);
-          border-radius: 4px;
-          transition: all 0.2s;
-        }
-        .copilot-pill:hover {
-          background: rgba(192, 132, 252, 0.2);
-          box-shadow: 0 0 12px rgba(192, 132, 252, 0.35);
-          color: #e9d5ff;
         }
 
         .probe-refresh-btn {

@@ -1,8 +1,8 @@
 # VidAI Branching Strategy & Deployment Tracker — Engineering Roadmap
 
-**Date:** 2026-09-07  
+**Date:** 2026-09-07 (code-synced 2026-10-07)  
 **Author:** Prakash Pawar (DevOps)  
-**Status:** Approved Architecture & Roadmap  
+**Status:** Approved Architecture & Roadmap — implementation status below reflects the code on `main` (`bc7249a`)  
 **Applicable Repositories:**  
 - `vidaisolutions/vidai-backend` (Django Core / ECS Fargate & EC2)  
 - `vidaisolutions/vidai-react` (React Web / S3 + CloudFront)  
@@ -106,7 +106,7 @@ On every successful deployment to `prod_ank` or `prod_neo`:
 
 * **Issue Identified:** When automatic pipelines deploy (`Full_Deploy_V2`), the deployment tracker recorded `pawarprakash-devops` (the token owner) instead of the developer who authored the pull request.
 * **Resolution in GitHub Actions:**
-  In `.github/workflows/deploy.yml`:
+  In the `vidai-devops` deploy workflows (note: the webhook authenticates with `Authorization: Bearer`, not `x-tracker-secret`):
   ```yaml
   - name: Extract Deployment Trigger Actor
     id: actor
@@ -123,7 +123,7 @@ On every successful deployment to `prod_ank` or `prod_neo`:
     run: |
       curl -X POST https://vidai-deployments.vercel.app/api/webhook \
         -H "Content-Type: application/json" \
-        -H "x-tracker-secret: ${{ secrets.TRACKER_WEBHOOK_SECRET }}" \
+        -H "Authorization: Bearer ${{ secrets.TRACKER_WEBHOOK_SECRET }}" \
         -d '{
           "environment": "${{ inputs.environment }}",
           "status": "Success",
@@ -156,53 +156,35 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
 
 ### 3.1 Environment Promotion Drift Matrix (Ahead / Behind Delta)
 
-#### The Problem:
-Teams frequently ask: *"Are all the QA bug fixes currently in Pre-Prod?"* or *"What commits in Stage have not been released to Production yet?"*
+* **Status:** 🟡 **Partially implemented.** The GitHub compare plumbing exists; the always-visible ribbon does not.
+* **What exists:** `GET /api/compare?repo=&base=&head=` (`app/api/compare/route.ts`, needs `GH_TOKEN`) returns `status`, `ahead_by`, `behind_by`, up to 30 commits (sha, message, author, avatar, url) and up to 50 changed files; with only `head` it returns the last 15 commits; `run_id` adds the Actions run details. The main page has a **compare modal**: tick two deployments in the history table and the modal diffs their branches (default repo `vidaisolutions/vidai-react`, with a repo toggle for the backend repo). Branch ↔ environment mapping lives in `STANDARD_BRANCHES` / `ENV_DEFAULT_BRANCH` in `app/page.tsx`.
+* **Not built:** the **Promotion Pipeline Ribbon** across the top of `/` (`Preview → QA → Stage → Pre-Prod → Prod` with `+N commits` / `IN SYNC` badges) and a dedicated `/api/git/drift` endpoint. The original design (Octokit `compareCommits` of `prod_ank...preprod` etc.) can be implemented by calling the existing `/api/compare` for each adjacent pair in `STANDARD_BRANCHES` — no new endpoint is strictly required.
 
-#### The Feature:
-* A real-time **Promotion Pipeline Ribbon** across the top of the Tracker.
-* Shows linear promotion flow with ahead/behind badges:
-  - `Preview → QA`: `+4 commits ahead` (Cyan)
-  - `QA → Stage`: `+2 commits ahead` (Yellow)
-  - `Pre-Prod → Prod`: `IN SYNC` (Green) or `3 COMMITS PENDING RELEASE` (Amber).
-* Clicking the badge opens a **Diff Modal** displaying the exact PR titles and authors waiting to be promoted.
-
-#### Implementation:
-Add endpoint `/api/git/drift` leveraging the GitHub Octokit API:
-```ts
-// GET /api/git/drift?base=prod_ank&head=preprod
-const compare = await octokit.rest.repos.compareCommits({
-  owner: 'vidaisolutions',
-  repo: 'vidai-backend',
-  base: 'prod_ank',
-  head: 'preprod'
-});
-return NextResponse.json({
-  ahead_by: compare.data.ahead_by,
-  behind_by: compare.data.behind_by,
-  commits: compare.data.commits.map(c => ({ sha: c.sha, message: c.commit.message, author: c.author?.login }))
-});
+```
+Preview (dev) ─[+4]→ QA (qa) ─[+2]→ Stage (stage) ─[+1]→ Pre-Prod (preprod) ─[IN SYNC]→ Prod (prod_ank)
 ```
 
 ---
 
 ### 3.2 Live Cluster Health Checks (`/api/cluster-health`)
 
-#### The Problem:
-The tracker currently displays the *last known deployment status*. If an ECS container runs out of memory (OOMKilled) 3 hours later, the tracker still displays "Success".
+* **Status:** ✅ **Implemented** (PR #6, extended for Stage EUW2 and Demo-Preview).
+* `GET /api/cluster-health` probes **9 backend API URLs** server-side on each (edge-cached, 120 s) request; the dashboard calls it on load and every **90 s while the tab is visible** (plus "probe now"):
 
-#### The Feature:
-* An active telemetry worker probes each environment's health endpoint every 60 seconds:
-  - **Preview:** `https://99999.preview.vidaisolutions.com/api/health`
-  - **QA:** `https://qa-aps.vidaisolutions.com/api/health`
-  - **Stage:** `https://stage.vidaisolutions.com/api/health`
-  - **Pre-Prod India:** `https://pre-prod.vidaisolutions.com/api/health`
-  - **Pre-Prod USW:** `https://pre-prod-usw.vidaisolutions.com/api/health`
-  - **Production:** `https://production.vidaisolutions.com/api/health`
-* Display on the Environment Card:
-  - `● HEALTHY` (200 OK · 42ms latency) with glowing green indicator.
-  - `▲ DEGRADED` (500/502/504 or >2000ms latency) with amber pulse.
-  - `✖ OFFLINE` (Connection refused/timeout) with red incident banner.
+| Environment | Probe URL |
+|---|---|
+| Preview | `https://99999.preview-api.vidaisolutions.com/api/` |
+| Demo-Preview | `https://preview-api.vidaisolutions.com/api/` |
+| QA | `https://qa-aps-api.vidaisolutions.com/api/` |
+| Stage | `https://stage-api.vidaisolutions.com/api/` |
+| Stage EUW2 | `https://staging-euw2-api.vidaisolutions.com/api/` |
+| Pre-Prod (India) | `https://pre-api.vidaisolutions.com/api/` |
+| Pre-Prod USW | `https://pre-prod-usw-api.vidaisolutions.com/api/` |
+| Production (Ankura) | `https://production-api.vidaisolutions.com/api/` |
+| Production (Neotia/Babyjoy) | `https://production-aps-api.vidaisolutions.com/api/` |
+
+* Classification: `HEALTHY` = 2xx/3xx in ≤ 2000 ms; `DEGRADED` = 2xx/3xx slower than 2000 ms, or 4xx/5xx; `OFFLINE` = timeout (4.5 s) or connection failure. (The earlier design's `/api/health` frontend paths and 60 s server-side worker were not built; `GET /api/health` is a different endpoint — latest successful deploy per environment.)
+* Stage USE1, Pre-Prod USW frontends and all CloudFront frontends have **no** probe (see §3.9).
 
 ---
 
@@ -215,7 +197,7 @@ The tracker currently displays the *last known deployment status*. If an ECS con
   - True MTTR service restoration calculation (chronological delta between `Failed` runs and the subsequent `Success` on that environment).
   - High-visibility **Incident Recovery & MTTR Audit Trail** table displaying target environment, outage start, recovery timestamp, time to restore (MTTR), recovery operator, and direct links to failure and fix GitHub Actions workflow runs.
 
-| Metric | Definition | VidAI Target | Live Tracker Value | Status |
+| Metric | Definition | VidAI Target | Value at time of writing (2026-09-11; live values come from `/api/admin/stats`) | Status |
 |---|---|:---:|:---:|:---:|
 | **Deployment Frequency** | How often code is successfully deployed | Daily | **14.7 / day** | **Elite** |
 | **Lead Time for Changes** | Time from commit creation to production release | < 24 Hours | **~14.2h** | **Elite** |
@@ -245,6 +227,8 @@ The tracker currently displays the *last known deployment status*. If an ECS con
 
 ### 3.5 1-Click Rollback Runbook & Dispatcher
 
+* **Status:** ❌ **Not implemented.** Today the tracker only *records* rollbacks (`deployment_type = rollback`, status `Rolled Back`, and a "ROLLBACK AUDIT" HUD counter on `/`); it cannot dispatch a workflow.
+
 * **Operator Convenience:** In the `/admin` dashboard or directly on Environment Cards, authenticated operators have a **Rollback** button.
 * **Safety Controls:**
   - Requires Admin token authentication.
@@ -253,7 +237,7 @@ The tracker currently displays the *last known deployment status*. If an ECS con
 
 ---
 
-### 3.6 Scheduled Release Windows & Approval Gate Countdown (QA 1:30 PM & 5:30 PM IST)
+### 3.6 Scheduled Release Windows & Approval Gate Countdown (QA 1:30 PM & 5:30 PM IST in code)
 
 * **Status:** ✅ **Implemented & Verified** (Live on `/` at `vidai-deployments.vercel.app`).
 * **The Problem:**
@@ -263,6 +247,7 @@ The tracker currently displays the *last known deployment status*. If an ECS con
   - **Live Countdown Timer:** Displays on the QA card (e.g., `⏱ Next QA Release in 1h 24m · 01:30 PM IST` ticking live).
   - **Window Status Badges:** Transitions dynamically through `COUNTDOWN` ➔ `CLOSING IN` (within 30m) ➔ `WINDOW ACTIVE` (during 15m deployment window).
   - **Approval Gate Indicator:** Visual badge displaying `GATE: MANDATORY APPROVAL (@pawarprakash-devops)`.
+  - ⚠️ **Out of sync with infra:** the countdown in `app/page.tsx` hardcodes windows **13:30 and 17:30 IST** (`W1`/`W2`). The infra docs (`QA-DEPLOY-SCHEDULE-AND-AUTO-DEPLOY-REMOVAL-2026-10-06.md`) set the real QA schedule to **1:30 PM and 4:00 PM IST** (manual dispatch also allowed). Update `W2` to `16 * 3600` and the `05:30 PM IST` labels when the tracker is next touched.
 
 ---
 
@@ -272,7 +257,8 @@ The tracker currently displays the *last known deployment status*. If an ECS con
 * **The Problem:**
   - Deployments to newly spun-up clusters or non-standard environments (e.g., `stage-euw2`, dynamic preview clusters) previously fell into the `Other` category because cluster names were hardcoded in static maps.
 * **The Solution:**
-  - **Pattern Resolver:** Regex auto-detection in `/api/webhook` dynamically extracts region and tier (`*-euw2*` ➔ `Stage EUW2`, `*-aps*` ➔ Mumbai, etc.).
+  - **Pattern Resolver:** Regex auto-detection in `/api/webhook` dynamically extracts region and tier (`euw2` ➔ `Stage EUW2`, `use1` ➔ `Stage USE1`, `demo`/`preview-ecs-cluster` ➔ `Demo-Preview`, `prod_ank`/`ankura` ➔ `Production (Ankura)`, `prod_neo`/`neotia`/`babyjoy` ➔ `Production (Neotia/Babyjoy)`, etc. — see `README.md`).
+  - **Demo-Preview:** the former "Other"/"Demo" bucket is now the named `Demo-Preview` environment (preview.vidaisolutions.com, branch `demo`, ordered after Preview). It is matched *before* QA so PR titles like "QA to Demo" don't land in QA; unresolved environments also default to it. `GET /api/migrate` renames old `Demo` rows.
   - **Self-Registering Environments:** Automatically inserts newly encountered clusters into the `environments` database table on the first webhook event.
   - **Frontend Dynamic Fallback:** `getClusterInfo(envName)` dynamically resolves region and cluster tags for any target environment.
 
@@ -291,6 +277,8 @@ The tracker currently displays the *last known deployment status*. If an ECS con
 ---
 
 ### 3.9 Frontend Chunk Load 503 & Cache-Control Health Telemetry
+
+* **Status:** ❌ **Not implemented** — `/api/cluster-health` probes backend APIs only.
 
 * **The Problem:**
   - After new frontend releases to S3/CloudFront, client browsers often experience `ChunkLoadError: Loading chunk [hash] failed (503)` if `index.html` is cached or old chunks are purged prematurely.
@@ -316,7 +304,9 @@ PHASE 2: Active Telemetry & Observability (Completed)
 └── [x] Full DORA Metrics Suite & MTTR Recovery Audit Trail on /admin
 
 PHASE 3: Release Governance & Flow Control (Active)
-├── [ ] Environment Promotion Drift Matrix (Ahead/Behind ribbon on /)
+├── [~] Environment Promotion Drift Matrix — compare API + modal done; top-of-page ribbon not built
+├── [x] Rerun tracking (`Rerun - <status>` rows) and Demo-Preview environment
+├── [x] Light/dark theme toggle + VidAI brand palette; 90 s visible-tab polling + edge caching
 ├── [x] QA Scheduled Release Windows countdown (1:30 PM & 5:30 PM IST)
 ├── [x] Dynamic Cluster Auto-Discovery (Resolving stage-euw2 out of 'Other')
 └── [x] PR Deep-Linking & GitHub Operator Avatars

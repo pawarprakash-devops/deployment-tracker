@@ -1,3 +1,5 @@
+> ⚠️ **Historical document** — record of the first dark-theme redesign (Sep 2026); the UI has since been redesigned twice (EMR-style theme, then dark/light toggle with VidAI palette). Behaviour described below may be outdated (e.g. polling is 90 s on a visible tab, not 5 s). For current behaviour see `README.md`, `AUTHENTICATION.md`, `AUTOMATIC_TRACKING.md` and `docs/ROADMAP.md`. Secrets that appeared here have been redacted.
+
 # 🎉 Deployment Tracker - Complete Redesign & Enhancement Summary
 
 ## ✅ All Features Implemented Successfully!
@@ -200,7 +202,7 @@ CREATE INDEX idx_deployments_type ON deployments(deployment_type);
 - **Touch-friendly** buttons and interactive elements
 
 ### 🎯 **14. UX Enhancements**
-- **Auto-refresh** every 5 seconds for deployments
+- **Auto-refresh** every 90 seconds while the tab is visible for deployments
 - **Real-time updates** without page reload
 - **Loading states** with skeleton screens
 - **Empty states** with helpful messaging
@@ -213,10 +215,10 @@ CREATE INDEX idx_deployments_type ON deployments(deployment_type);
 ## 🔗 **Live URLs**
 
 **Deployment Tracker:**
-https://deployment-tracker-taupe.vercel.app
+https://vidai-deployments.vercel.app
 
 **Environment Health Dashboard:**
-https://deployment-tracker-taupe.vercel.app/health
+https://vidai-deployments.vercel.app/health
 
 **GitHub Repository:**
 https://github.com/pawarprakash-devops/deployment-tracker
@@ -242,7 +244,7 @@ https://github.com/vidaisolutions/vidai-devops/tree/main/.github/workflows
 2. Complete deployment (frontend/backend)
 3. Automatically send webhook to tracker
 4. Calculate duration
-5. Appear in dashboard within 5 seconds
+5. Appear in dashboard within ~90 seconds
 6. Show in environment health cards
 7. Display with proper status badge
 

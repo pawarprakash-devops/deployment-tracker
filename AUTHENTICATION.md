@@ -1,154 +1,69 @@
-# Authentication & Admin Dashboard - Complete Setup
+# Authentication & Admin Access
 
-## ✅ Features Implemented
+Implemented in `middleware.ts` (matcher `/api/:path*`), `app/api/auth/route.ts` and `app/api/auth/session/route.ts`.
 
-### 1. **Public Access (No Login Required)**
-- ✅ Anyone can view the deployment tracker
-- ✅ All deployments, environments, and stats visible
-- ✅ Export JSON available to everyone
-- ✅ No authentication needed for viewing
+## Access model
 
-### 2. **Admin Authentication**
-- ✅ Admin login required for modifications
-- ✅ Session-based auth with secure httpOnly cookies
-- ✅ 7-day session expiration
-- ✅ Middleware protection for all POST/PUT/DELETE operations
+| Who | Can do |
+|-----|--------|
+| Anyone (no login) | View `/`, `/health`; every `GET /api/*`; export JSON |
+| Admin | Everything above plus the `/admin` telemetry page and create/edit/delete deployments, manage environments, import JSON |
+| CI (`vidai-devops` workflows) | `POST /api/webhook` only, using the **webhook secret** (separate from the admin token) |
 
-### 3. **Admin Features**
-**Main Dashboard (for admins only):**
-- ⚙ Manage Environments (Add/Delete)
-- ⭱ Import JSON
-- ➕ New Deployment
-- ✏️ Edit Deployment (per-row)
-- 🗑️ Delete Deployment (per-row)
-- 📊 Access to Admin Dashboard
-- 🚪 Logout button
+Rules enforced by the middleware, in order:
+1. `/api/webhook` → passes through (the route checks `Authorization: Bearer <WEBHOOK_SECRET>` itself).
+2. `/api/auth*` → always allowed.
+3. Any `GET` → allowed.
+4. `POST` / `PUT` / `PATCH` / `DELETE` → require `Authorization: Bearer <ADMIN_TOKEN>` **or** a `tracker_session` cookie equal to `ADMIN_TOKEN`; otherwise `401 Unauthorized - Admin login required to make changes`.
 
-**Regular Users See:**
-- ⭳ Export JSON (public)
-- 🔐 Admin Login button
+> `/admin` shows a login challenge until `GET /api/auth/session` reports `admin` — but this is a **client-side gate only**: the data it renders comes from the public `GET /api/admin/stats`, which is not authenticated.
+>
+> `GET /api/migrate` is a `GET`, so it is reachable without auth even though it mutates data (the POST variant is protected). Treat it as a known gap.
 
-### 4. **Enhanced Admin Dashboard** (`/admin`)
-Located at: https://deployment-tracker-taupe.vercel.app/admin
+## Login flow
 
-**Stats Cards:**
-- Total Deployments
-- Success Rate
-- Failure Rate
-- Average Duration
-- Deployments Today
-- Deployments This Week
+- `POST /api/auth` with `{"password": "<ADMIN_TOKEN>"}` → sets cookie `tracker_session` (`httpOnly`, `secure` in production, `SameSite=Lax`, 7 days, path `/`).
+- `DELETE /api/auth` → clears the cookie (logout).
+- `GET /api/auth/session` → `{authenticated, role}` where role is `viewer` or `admin`.
+- The main dashboard shows admin buttons (Manage Environments, Import JSON, New Deployment, per-row Edit/Delete, Admin Dashboard link, Logout) only when the session is admin; viewers see Export JSON and an Admin Login button.
 
-**Charts:**
-- Deployments by Environment (bar chart)
-- Deployments by Status (bar chart with color coding)
+## Secrets (set in Vercel project env vars, never in git)
 
-**Tables:**
-- Recent Failures (last 10)
-- Slowest Deployments (top 10 with duration)
-- Most Active Users (top 10 by deployment count)
+| Variable | Purpose | Default if unset |
+|----------|---------|------------------|
+| `ADMIN_TOKEN` | Admin password and session cookie value | `admin-change-me` (public in this repo — **must be set**) |
+| `WEBHOOK_SECRET` | Shared secret for `POST /api/webhook` (GitHub secret `TRACKER_WEBHOOK_SECRET` must match) | `change-me-in-production` (public in this repo — **must be set**) |
 
-## 🔐 Admin Credentials
+Rotate a value:
 
-**Password:** `VidAi@2026!Tracker`
-
-To change the password, update the Vercel environment variable:
 ```bash
 vercel env rm ADMIN_TOKEN production
 vercel env add ADMIN_TOKEN production
-# Enter new password
+# then redeploy (push to main, or run the "Deploy to Vercel" workflow)
 ```
 
-## 🎯 User Experience Flow
+Known limitations of the current design (not yet addressed in code): the session cookie holds the raw admin token rather than a signed session id, there is one shared admin password (no per-user identity), and there is no login rate limiting.
 
-### For Regular Users (Viewers):
-1. Visit https://deployment-tracker-taupe.vercel.app
-2. View all deployments, environments, health status
-3. Export data as JSON
-4. No login required
+## Testing
 
-### For Admins:
-1. Visit https://deployment-tracker-taupe.vercel.app
-2. Click "🔐 Admin Login" button
-3. Enter password: `VidAi@2026!Tracker`
-4. Now see additional buttons:
-   - ⚙ Manage Environments
-   - ⭱ Import JSON
-   - ➕ New Deployment
-   - ✏️ Edit/Delete buttons on each row
-   - 📊 Admin Dashboard
-   - 🚪 Logout
-5. Access enhanced analytics at `/admin`
-
-## 🛡️ Security Features
-
-1. **Middleware Protection**
-   - All POST/PUT/DELETE requests require authentication
-   - GET requests are public (read-only)
-   - Webhook endpoint has separate authentication
-
-2. **Secure Cookies**
-   - httpOnly (not accessible via JavaScript)
-   - Secure flag in production
-   - SameSite: lax
-   - 7-day expiration
-
-3. **Environment Variables**
-   - Admin password stored in Vercel secrets
-   - Never exposed in client-side code
-
-## 📊 Admin Dashboard Metrics
-
-**Success Rate Calculation:**
-```
-Success Rate = (Successful Deployments / Total Deployments) × 100
-```
-
-**Average Duration:**
-```
-Avg Duration = Sum of all deployment durations / Number of deployments with duration
-```
-
-**Time Filters:**
-- Today: Deployments since midnight (local time)
-- This Week: Deployments in last 7 days
-
-## 🚀 Testing
-
-Test the authentication:
 ```bash
-# Check session (should return viewer role)
-curl https://deployment-tracker-taupe.vercel.app/api/auth/session
+BASE=https://vidai-deployments.vercel.app
 
-# Try to create deployment without auth (should fail)
-curl -X POST https://deployment-tracker-taupe.vercel.app/api/deployments \
-  -H "Content-Type: application/json" \
-  -d '{"environment":"QA"}'
+# viewer role
+curl $BASE/api/auth/session
 
-# Login as admin
-curl -X POST https://deployment-tracker-taupe.vercel.app/api/auth \
-  -H "Content-Type: application/json" \
-  -d '{"password":"VidAi@2026!Tracker"}' \
-  -c cookies.txt
+# write without auth -> 401
+curl -X POST $BASE/api/deployments -H "Content-Type: application/json" -d '{"environment":"QA"}'
 
-# Now try with session cookie (should work)
-curl -X POST https://deployment-tracker-taupe.vercel.app/api/deployments \
-  -H "Content-Type: application/json" \
-  -b cookies.txt \
-  -d '{"environment":"QA", "status":"Success", "started_at":"2026-08-27T12:00:00Z"}'
+# login (read the password from your secret store; do not paste it into shared logs)
+curl -X POST $BASE/api/auth -H "Content-Type: application/json" \
+  -d "{\"password\":\"$ADMIN_TOKEN\"}" -c cookies.txt
+
+# write with session -> 201
+curl -X POST $BASE/api/deployments -H "Content-Type: application/json" -b cookies.txt \
+  -d '{"environment":"QA","status":"Success","started_at":"2026-08-27T12:00:00Z"}'
 ```
 
-## 🎨 UI Enhancements
+## `/admin` dashboard contents
 
-- Admin buttons have distinct styling
-- Login modal with password input
-- Logout button colored red (danger)
-- Admin Dashboard link highlighted with 📊 icon
-- Smooth transitions between admin/viewer modes
-
----
-
-**Status:** ✅ COMPLETE
-**Dashboard:** https://deployment-tracker-taupe.vercel.app
-**Admin Panel:** https://deployment-tracker-taupe.vercel.app/admin
-**Password:** `VidAi@2026!Tracker`
+DORA suite (deployment frequency, lead time, change failure rate — fleet and production-only — and MTTR with Elite/High/Medium/Low ratings), plus: deployments by target environment, pipeline execution status, recent critical failures, longest pipeline runs, top operators, and the incident recovery & MTTR audit trail (failure → next success on the same environment, with links to both runs). See `docs/ROADMAP.md` §3.3.

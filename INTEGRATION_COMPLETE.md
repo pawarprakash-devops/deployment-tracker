@@ -1,3 +1,5 @@
+> ⚠️ **Historical document** — record of wiring 4 `vidai-devops` workflows to the webhook (Aug 2026). Behaviour described below may be outdated (e.g. polling is 90 s on a visible tab, not 5 s). For current behaviour see `README.md`, `AUTHENTICATION.md`, `AUTOMATIC_TRACKING.md` and `docs/ROADMAP.md`. Secrets that appeared here have been redacted.
+
 # ✅ AUTOMATIC DEPLOYMENT TRACKING - FULLY INTEGRATED!
 
 ## 🎉 SUCCESS! All Changes Pushed to Production
@@ -101,7 +103,7 @@ Add automatic deployment tracking to all workflows
 - Add log-deployment job to prod-account-full-deploy.yaml (Neotia/Babyjoy)
 
 Each workflow now automatically logs deployments to:
-https://deployment-tracker-taupe.vercel.app
+https://vidai-deployments.vercel.app
 
 Tracks:
 - Environment (QA, Stage, Preview, Pre-Prod, Production, LMS)
@@ -126,7 +128,7 @@ https://github.com/vidaisolutions/vidai-devops/commit/2fb5099
 ## 🔐 Secrets Configured
 
 **GitHub Repository Secrets:**
-- ✅ `TRACKER_WEBHOOK_URL` = `https://deployment-tracker-taupe.vercel.app/api/webhook`
+- ✅ `TRACKER_WEBHOOK_URL` = `https://vidai-deployments.vercel.app/api/webhook`
 - ✅ `TRACKER_WEBHOOK_SECRET` = `938d0036dc1c8b1d7588a542210560c88b9c6fdc57af47f15600630f12fc2a25`
 
 **Vercel Environment Variables:**
@@ -140,14 +142,14 @@ https://github.com/vidaisolutions/vidai-devops/commit/2fb5099
 1. Run normally (frontend/backend)
 2. Execute `log-deployment` job
 3. Send webhook to tracker
-4. Appear in dashboard within 5 seconds
+4. Appear in dashboard within ~90 seconds
 
 ### **Test It:**
 1. Go to: https://github.com/vidaisolutions/vidai-devops/actions
 2. Run any of the 4 workflows (manually trigger a deployment)
 3. Watch the deployment complete
 4. Check the `log-deployment` job in the Actions log
-5. Visit: https://deployment-tracker-taupe.vercel.app
+5. Visit: https://vidai-deployments.vercel.app
 6. ✅ Your deployment should appear!
 
 ---
@@ -203,7 +205,7 @@ https://github.com/vidaisolutions/vidai-devops/commit/2fb5099
 ## 🌐 Links
 
 **Live Dashboard:**  
-https://deployment-tracker-taupe.vercel.app
+https://vidai-deployments.vercel.app
 
 **GitHub Repository (vidai-devops):**  
 https://github.com/vidaisolutions/vidai-devops
@@ -224,7 +226,7 @@ https://console.neon.tech
 **From now on, every deployment will:**
 - ✅ Automatically appear in the tracker
 - ✅ Be logged with full details
-- ✅ Update in real-time (5-second refresh)
+- ✅ Update in real-time (90-second refresh, visible tab only)
 - ✅ Include direct link to GitHub Actions run
 - ✅ Track success, failures, and cancellations
 - ✅ Provide complete audit trail

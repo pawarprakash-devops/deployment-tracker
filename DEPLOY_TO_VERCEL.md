@@ -1,3 +1,5 @@
+> ⚠️ **Historical document** — first Vercel deployment steps (Aug 2026); deploys now run from `.github/workflows/deploy.yaml` on push to `main`. Behaviour described below may be outdated (e.g. polling is 90 s on a visible tab, not 5 s). For current behaviour see `README.md`, `AUTHENTICATION.md`, `AUTOMATIC_TRACKING.md` and `docs/ROADMAP.md`. Secrets that appeared here have been redacted.
+
 # 🚀 Deploy to Vercel - Step by Step
 
 ## ⚠️ Important: Local Development Issue
@@ -39,7 +41,7 @@ Before deploying, add your database connection:
    
    **Value:**
    ```
-   postgresql://neondb_owner:npg_yDVnf1w5IkOt@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
+   postgresql://neondb_owner:<DB_PASSWORD>@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
    ```
 
 3. Select **"Production"**, **"Preview"**, and **"Development"** (all three)
@@ -58,7 +60,7 @@ Before deploying, add your database connection:
 Your deployment tracker will be:
 - ✅ **Live and accessible** from anywhere
 - ✅ **Connected to Neon DB** with real-time updates
-- ✅ **Auto-refreshing** every 5 seconds
+- ✅ **Auto-refreshing** every 90 seconds while the tab is visible
 - ✅ **Fully functional** with no network issues
 
 ---

@@ -1,8 +1,10 @@
+> ⚠️ **Historical document** — first Vercel go-live record (2026-08-27); the live URL is now `https://vidai-deployments.vercel.app`. Behaviour described below may be outdated (e.g. polling is 90 s on a visible tab, not 5 s). For current behaviour see `README.md`, `AUTHENTICATION.md`, `AUTOMATIC_TRACKING.md` and `docs/ROADMAP.md`. Secrets that appeared here have been redacted.
+
 # 🎉 DEPLOYMENT SUCCESSFUL!
 
 ## ✅ Your Deployment Tracker is LIVE!
 
-**Production URL:** https://deployment-tracker-taupe.vercel.app
+**Production URL:** https://vidai-deployments.vercel.app
 
 **Alternative URL:** https://deployment-tracker-1fqdskpi1-prakash-pawar.vercel.app
 
@@ -35,18 +37,18 @@
 ## 🎯 Access Your App
 
 ### Main Dashboard
-👉 **https://deployment-tracker-taupe.vercel.app**
+👉 **https://vidai-deployments.vercel.app**
 
 ### API Endpoints
-- **Environments:** https://deployment-tracker-taupe.vercel.app/api/environments
-- **Deployments:** https://deployment-tracker-taupe.vercel.app/api/deployments
+- **Environments:** https://vidai-deployments.vercel.app/api/environments
+- **Deployments:** https://vidai-deployments.vercel.app/api/deployments
 
 ---
 
 ## 📱 What You Can Do Now
 
 ### 1. Open the App
-Click: https://deployment-tracker-taupe.vercel.app
+Click: https://vidai-deployments.vercel.app
 
 ### 2. Add Your First Deployment
 - Click "+ New Deployment" button
@@ -56,13 +58,13 @@ Click: https://deployment-tracker-taupe.vercel.app
 ### 3. Test the API
 ```bash
 # Get all environments
-curl https://deployment-tracker-taupe.vercel.app/api/environments
+curl https://vidai-deployments.vercel.app/api/environments
 
 # Get all deployments
-curl https://deployment-tracker-taupe.vercel.app/api/deployments
+curl https://vidai-deployments.vercel.app/api/deployments
 
 # Create a new deployment
-curl -X POST https://deployment-tracker-taupe.vercel.app/api/deployments \
+curl -X POST https://vidai-deployments.vercel.app/api/deployments \
   -H "Content-Type: application/json" \
   -d '{
     "environment": "Production",
@@ -78,7 +80,7 @@ curl -X POST https://deployment-tracker-taupe.vercel.app/api/deployments \
 
 ## 🔗 Important Links
 
-- **Live App:** https://deployment-tracker-taupe.vercel.app
+- **Live App:** https://vidai-deployments.vercel.app
 - **Vercel Dashboard:** https://vercel.com/prakash-pawar/deployment-tracker
 - **GitHub Repo:** https://github.com/pawarprakash-devops/deployment-tracker
 - **Neon Console:** https://console.neon.tech
@@ -100,7 +102,7 @@ vercel --prod
 
 ### View Logs in Real-Time
 ```bash
-vercel logs https://deployment-tracker-taupe.vercel.app
+vercel logs https://vidai-deployments.vercel.app
 ```
 
 ### Connect GitHub for Auto-Deploy
@@ -142,7 +144,7 @@ Your deployment tracker comes pre-configured with:
 ### 1. Customize Environments
 Add or modify environments via the API or directly in Neon:
 ```bash
-psql "postgresql://neondb_owner:***@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
+psql "postgresql://neondb_owner:<DB_PASSWORD>@ep-bitter-glade-axhroi23-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
 ```
 
 ### 2. Set Up Custom Domain
@@ -161,7 +163,7 @@ Use the API endpoints in your CI/CD workflows to automatically log deployments
 
 ### If the app doesn't load:
 1. Check Vercel deployment status: https://vercel.com/prakash-pawar/deployment-tracker
-2. View logs: `vercel logs https://deployment-tracker-taupe.vercel.app`
+2. View logs: `vercel logs https://vidai-deployments.vercel.app`
 3. Verify environment variable is set in Vercel dashboard
 
 ### If database queries fail:
@@ -173,7 +175,7 @@ Use the API endpoints in your CI/CD workflows to automatically log deployments
 
 ## ✨ Features Confirmed Working
 
-✅ Real-time dashboard with auto-refresh (every 5 seconds)  
+✅ Real-time dashboard with auto-refresh (every 90 seconds while the tab is visible)  
 ✅ Add new deployments via UI  
 ✅ Track environment, status, branch, version, users  
 ✅ Full REST API for automation  
@@ -205,7 +207,7 @@ Your deployment tracker is now:
 - ✅ **Ready for production use**
 
 **Start tracking your deployments now:**  
-👉 https://deployment-tracker-taupe.vercel.app
+👉 https://vidai-deployments.vercel.app
 
 ---
 
