@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import './tokens.css';
 import './shell.css';
 import AppShell from './AppShell';
+import ClientOnly from './ClientOnly';
 import { ShellProvider } from './ctx';
 
 export const metadata: Metadata = {
@@ -13,9 +14,11 @@ export const metadata: Metadata = {
 export default function V2Layout({ children }: { children: React.ReactNode }) {
   return (
     <ShellProvider>
-      <Suspense fallback={null}>
-        <AppShell>{children}</AppShell>
-      </Suspense>
+      <ClientOnly>
+        <Suspense fallback={null}>
+          <AppShell>{children}</AppShell>
+        </Suspense>
+      </ClientOnly>
     </ShellProvider>
   );
 }

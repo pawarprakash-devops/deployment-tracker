@@ -4,6 +4,7 @@ import ReleaseCompare from './ReleaseCompare';
 import ReleaseEnvs from './ReleaseEnvs';
 import ReleaseHistory from './ReleaseHistory';
 import ReleaseRadar from './ReleaseRadar';
+import ReleaseStatus from './ReleaseStatus';
 import ReleaseStats from './ReleaseStats';
 
 // Landing page of vidai-deployments.vercel.app: environment status first, then what is waiting
@@ -21,6 +22,7 @@ export default function DeploymentsTab() {
         <ReleaseAdmin />
       </div>
       <div className="stack" style={{ marginTop: 0 }}>
+        <ReleaseStatus />
         <ReleaseStats />
         <ReleaseEnvs />
         <ReleaseRadar />
