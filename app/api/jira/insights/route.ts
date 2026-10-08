@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import {
-  cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jqlStr, filterJql, stageOf, isDoneStage, isShipReady, JIRA_PROJECTS,
+  cached, canReadJira, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jqlStr, filterJql, stageOf, isDoneStage, isShipReady, JIRA_PROJECTS,
   ticketDeploys, isProdEnv, median, percentile, jiraIssuesByKeys, type JiraIssue,
 } from '@/lib/jira';
 
@@ -15,7 +15,7 @@ const slim = (i: JiraIssue) => ({ ...i, ageDays: daysSince(i.updated), createdDa
 
 // GET /api/jira/insights?stuckDays=5  (admin session required)
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
+  if (!canReadJira(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
   if (!jiraConfigured()) return NextResponse.json({ configured: false });
   if (!JIRA_PROJECTS.length) return NextResponse.json({ configured: true, error: 'Set JIRA_PROJECT_KEYS' }, { status: 400 });
   try {

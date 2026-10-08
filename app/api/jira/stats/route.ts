@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  cached, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jiraActiveSprints,
+  cached, canReadJira, jiraConfigured, jiraCount, jiraSearch, jiraProjectStatuses, jiraActiveSprints,
   jqlStr, filterJql, stageOf, isDoneStage, STAGES, JIRA_PROJECTS,
 } from '@/lib/jira';
 
@@ -14,7 +14,7 @@ const toList = (o: Record<string, number>) =>
 // Headline numbers use Jira's count endpoint over ALL issues of JIRA_PROJECT_KEYS (not a sample).
 // Only the per-assignee breakdown is sampled (500 most recently updated open issues).
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
+  if (!canReadJira(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
   if (!jiraConfigured()) return NextResponse.json({ configured: false });
   if (!JIRA_PROJECTS.length) {
     return NextResponse.json({ configured: true, error: 'Set JIRA_PROJECT_KEYS (e.g. VID) to enable metrics' }, { status: 400 });

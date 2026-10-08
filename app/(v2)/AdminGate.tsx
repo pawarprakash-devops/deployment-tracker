@@ -5,13 +5,21 @@ import { Skeleton } from './ui';
 // Wraps content that needs an admin session (Tickets, Insights). Anyone else gets a sign-in card.
 // Signing in dispatches the same `tracker:auth-changed` event the toolbar uses, so every
 // component that cares about the session refreshes.
-export default function AdminGate({ title, children }: { title: string; children: React.ReactNode }) {
+// `publicUrl` (optional): an endpoint returning `{ public: boolean }`. When it says true the content is shown to
+// everyone and no sign-in card appears (used by the Tickets tab, whose Jira data is public unless JIRA_PUBLIC_READ=false).
+export default function AdminGate({ title, publicUrl, children }: { title: string; publicUrl?: string; children: React.ReactNode }) {
   const [state, setState] = useState<'loading' | 'admin' | 'viewer'>('loading');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const check = useCallback(async () => {
+    if (publicUrl) {
+      try {
+        const p = await fetch(publicUrl, { cache: 'no-store' });
+        if (p.ok && (await p.json())?.public === true) { setState('admin'); return; }
+      } catch { /* fall through to the session check */ }
+    }
     try {
       const r = await fetch('/api/auth/session', { cache: 'no-store' });
       const j = await r.json();
@@ -19,7 +27,7 @@ export default function AdminGate({ title, children }: { title: string; children
     } catch {
       setState('viewer');
     }
-  }, []);
+  }, [publicUrl]);
 
   useEffect(() => {
     // initial session check on mount, then follow sign-in/out from anywhere in the app

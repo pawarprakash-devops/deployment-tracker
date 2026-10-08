@@ -13,7 +13,7 @@ Everything is one page with tabs: `/?tab=<id>` (the default, `/`, is Deployments
 | **Deployments** (`/`) | Admin toolbar (Refresh, Export JSON, sign-in; when admin: Deploy release, Targets, Import JSON, Sign out), telemetry tiles and 14-day timeline, environment cards (live probe, FE/BE branch + version, last FE/BE deploy, failure/stale banner), promotion radar and QA release windows (approval gate), then the full deployment history: filters, sorting, select-two compare (commits and files via `/api/compare`), detail drawer, Edit/Delete for admins; the Ticket / Notes column shows the workflow-run link, FE/BE/PR links and notes |
 | **Pipeline** | Board of tickets by furthest environment with a ticket drawer (journey stepper, per-env state) from `GET /api/pipeline` |
 | **My view** | Role lenses (Developer, QA, Release, Management); the lens is kept in `localStorage` `tracker-lens` and `?as=dev\|qa\|rel\|mgmt`. A lens changes the view only, it grants no permissions |
-| **Tickets** | The Jira dashboard (admin sign-in): filter bar, KPI tiles, sprint, bugs, ready-to-ship, stuck tickets, bug trends, lead time, release notes, ticket explorer with CSV export, tickets-by-environment. Needs `JIRA_*` env vars |
+| **Tickets** | The Jira dashboard, **open to everyone** (no sign-in; set `JIRA_PUBLIC_READ=false` to require an admin session again): filter bar, KPI tiles, sprint, bugs, ready-to-ship, stuck tickets, bug trends, lead time, release notes, ticket explorer with CSV export, tickets-by-environment. Needs `JIRA_*` env vars |
 | **Insights** | Delivery metrics (admin sign-in): headline tiles, DORA suite, by environment / status, recent failures, longest runs, operator leaderboard, recovery audit trail (`GET /api/admin/stats`) |
 | **Health** | Per-environment live probe (`/api/cluster-health`), freshness and last successful deploy (`/api/health`) |
 
@@ -70,6 +70,7 @@ Jira stays off in this setup (see Known limits), so tickets appear with keys onl
 | `WEBHOOK_SECRET` | `POST /api/webhook` | Expected as `Authorization: Bearer <secret>`. **If unset, the code falls back to a publicly known default** — always set it. |
 | `ADMIN_TOKEN` | `middleware.ts`, `/api/auth` | Admin password. **If unset, falls back to a publicly known default** — always set it. |
 | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | `/api/jira/*` | Jira Cloud site URL and an Atlassian API token (Basic auth, server-side only). Unset → the Tickets tab shows setup instructions |
+| `JIRA_PUBLIC_READ` | `/api/jira/*`, Tickets tab, Jira fields on `/api/pipeline` | Default **true**: Jira data is readable without signing in. Set `false` to require an admin session again (the Tickets tab then shows a sign-in card) |
 | `JIRA_DONE_STATUSES` | `/api/jira/stats` | Optional, comma-separated status names to treat as shipped/done (in addition to Jira's Done category and names like Done/Closed/Released/Deployed) |
 | `JIRA_PROJECT_KEYS` | `/api/jira/stats`, key detection | Comma-separated project keys (e.g. `CORE,EMR`); required for metrics, and limits which `ABC-123` patterns count as tickets |
 | `GCHAT_ALERT_WEBHOOK_URL` | `lib/alerts.ts` | Optional Google Chat webhook: alerts on failed **production** deployments and on production recovery with time-to-restore vs target (lower environments never alert) |

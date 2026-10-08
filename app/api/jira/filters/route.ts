@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cached, isAdminRequest, jiraConfigured, jiraFetch, jiraProjectStatuses, JIRA_PROJECTS } from '@/lib/jira';
+import { cached, canReadJira, jiraConfigured, jiraFetch, jiraProjectStatuses, JIRA_PROJECTS } from '@/lib/jira';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 // GET /api/jira/filters (admin session required): option lists for the dashboard filter bar.
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
+  if (!canReadJira(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
   if (!jiraConfigured()) return NextResponse.json({ configured: false });
   if (!JIRA_PROJECTS.length) return NextResponse.json({ configured: true, error: 'Set JIRA_PROJECT_KEYS' }, { status: 400 });
   try {

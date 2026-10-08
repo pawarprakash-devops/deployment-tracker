@@ -9,3 +9,11 @@ export function isAdminRequest(request: NextRequest | Request): boolean {
     : /(?:^|;\s*)tracker_session=([^;]+)/.exec(request.headers.get('cookie') || '')?.[1];
   return cookie === adminToken || request.headers.get('authorization') === `Bearer ${adminToken}`;
 }
+
+// Jira read access (the Tickets tab and its /api/jira/* routes). Public by default so everyone can see it;
+// set JIRA_PUBLIC_READ=false in the environment to require an admin session again (no code change needed).
+export const jiraPublicRead = (): boolean => (process.env.JIRA_PUBLIC_READ || '').trim().toLowerCase() !== 'false';
+
+export function canReadJira(request: NextRequest | Request): boolean {
+  return jiraPublicRead() || isAdminRequest(request);
+}
