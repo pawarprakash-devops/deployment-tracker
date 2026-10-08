@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deployment Tracker Redesign Mockup</title>
+<meta name="description" content="Clickable mockup of the role-based Deployment Tracker redesign. All data is synthetic.">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f4f6fa; --surface:#ffffff; --surface2:#eef1f7; --text:#161c2b; --muted:#4f5a70; --border:#cfd5e2;
+  --brand:#2848c9; --on-brand:#ffffff; --brand-soft:#e5ebff; --focus:#1a3bd0;
+  --ok-bg:#dff3e7; --ok-fg:#0a6034; --warn-bg:#fdecc8; --warn-fg:#7a4200; --bad-bg:#fbe0dd; --bad-fg:#a61f17;
+  --info-bg:#e1e9ff; --info-fg:#1e3fb4; --neu-bg:#e8ebf2; --neu-fg:#3f485b;
+  --shadow:0 1px 2px rgba(20,28,50,.08),0 4px 14px rgba(20,28,50,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme='light']){
+    color-scheme: dark;
+    --bg:#0d1017; --surface:#161a24; --surface2:#1e2330; --text:#e8ebf3; --muted:#a6b0c6; --border:#303850;
+    --brand:#8da6ff; --on-brand:#0d1017; --brand-soft:#232d55; --focus:#a9bbff;
+    --ok-bg:#12321f; --ok-fg:#76e0a6; --warn-bg:#3a2a0b; --warn-fg:#f6c874; --bad-bg:#40181a; --bad-fg:#ffa39c;
+    --info-bg:#1b2a58; --info-fg:#a5bcff; --neu-bg:#272d3c; --neu-fg:#c3cada;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 4px 14px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme='dark']{
+  color-scheme: dark;
+  --bg:#0d1017; --surface:#161a24; --surface2:#1e2330; --text:#e8ebf3; --muted:#a6b0c6; --border:#303850;
+  --brand:#8da6ff; --on-brand:#0d1017; --brand-soft:#232d55; --focus:#a9bbff;
+  --ok-bg:#12321f; --ok-fg:#76e0a6; --warn-bg:#3a2a0b; --warn-fg:#f6c874; --bad-bg:#40181a; --bad-fg:#ffa39c;
+  --info-bg:#1b2a58; --info-fg:#a5bcff; --neu-bg:#272d3c; --neu-fg:#c3cada;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 4px 14px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:4px}
+.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.num{font-variant-numeric:tabular-nums}
+.skip{position:absolute;left:8px;top:-60px;background:var(--brand);color:var(--on-brand);padding:8px 12px;border-radius:6px;z-index:100}
+.skip:focus{top:8px}
+
+/* shell */
+.shell{display:grid;grid-template-columns:200px minmax(0,1fr);grid-template-areas:"top top" "nav main";min-height:100vh}
+.top{grid-area:top;position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.logo{font-weight:700;font-size:16px;letter-spacing:.2px;display:flex;align-items:center;gap:8px;margin-right:4px}
+.logo i{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--brand);color:var(--on-brand);font-style:normal;font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;background:var(--surface2);padding:2px}
+.seg button{border:0;background:transparent;padding:6px 11px;border-radius:7px;color:var(--muted);font-weight:600}
+.seg button[aria-checked='true']{background:var(--brand);color:var(--on-brand)}
+.seg .s{display:none}
+.search{position:relative;flex:1 1 220px;max-width:430px;min-width:0}
+.search input{width:100%;padding:8px 10px 8px 32px;border:1px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text)}
+.search input::placeholder{color:var(--muted);opacity:1}
+.search .ic{position:absolute;left:10px;top:7px;color:var(--muted);pointer-events:none}
+.results{position:absolute;left:0;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);max-height:320px;overflow:auto;z-index:40;padding:4px}
+.results button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:7px}
+.results button:hover{background:var(--surface2)}
+.results .none{padding:10px;color:var(--muted)}
+.envs{display:flex;gap:6px;align-items:center;margin-left:auto}
+.dot{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;font-size:12px;font-weight:700;line-height:1}
+.dot.ok{background:var(--ok-bg);color:var(--ok-fg)} .dot.warn{background:var(--warn-bg);color:var(--warn-fg)} .dot.bad{background:var(--bad-bg);color:var(--bad-fg)}
+.iconbtn{border:1px solid var(--border);background:var(--surface2);border-radius:9px;padding:6px 10px;font-weight:600}
+.nav{grid-area:nav;background:var(--surface);border-right:1px solid var(--border);padding:12px 10px;position:sticky;top:57px;align-self:start;height:calc(100vh - 57px)}
+.nav a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;color:var(--text);text-decoration:none;font-weight:600;margin-bottom:2px}
+.nav a:hover{background:var(--surface2)}
+.nav a[aria-current='page']{background:var(--brand-soft);color:var(--brand)}
+.nav .g{width:20px;text-align:center}
+main{grid-area:main;padding:20px 24px 40px;min-width:0}
+main:focus{outline:none}
+.phead{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 16px;margin-bottom:16px}
+.phead h1{margin:0;font-size:22px}
+.phead p{margin:2px 0 0;color:var(--muted)}
+.phead .tools{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted)}
+
+/* components */
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));margin-bottom:14px}
+.grid.w2{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+.grid.tiles{grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;box-shadow:var(--shadow);min-width:0}
+.card h2{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card h2 .cnt{font-weight:600;color:var(--muted);font-size:13px}
+.card .sub{color:var(--muted);margin:-4px 0 10px;font-size:13px}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px 2px 7px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok-fg)} .pill.warn{background:var(--warn-bg);color:var(--warn-fg)} .pill.bad{background:var(--bad-bg);color:var(--bad-fg)}
+.pill.info{background:var(--info-bg);color:var(--info-fg)} .pill.neu{background:var(--neu-bg);color:var(--neu-fg)}
+.pill .i{font-size:11px}
+.pill.run .i{display:inline-block}
+@media (prefers-reduced-motion: no-preference){
+  .pill.run .i{animation:spin 1.6s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .drawer{transition:transform .18s ease}
+  .scrim{transition:opacity .18s ease}
+}
+.chip{display:inline-block;padding:1px 7px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);font-size:12px;font-variant-numeric:tabular-nums;color:var(--text)}
+.tcard{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;box-shadow:none}
+.tcard:hover{border-color:var(--brand)}
+.tcard .k{font-weight:700;color:var(--brand);font-variant-numeric:tabular-nums}
+.tcard .t{display:block;margin:2px 0 6px;overflow-wrap:anywhere}
+.tcard .m{display:flex;flex-wrap:wrap;gap:5px;align-items:center;color:var(--muted);font-size:12px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.spacer{flex:1}
+.muted{color:var(--muted)}
+.banner{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;margin-bottom:14px;border:1px solid var(--bad-fg);background:var(--bad-bg);color:var(--bad-fg);font-weight:600}
+.banner button{margin-left:auto;border:1px solid currentColor;background:transparent;color:inherit;border-radius:8px;padding:3px 10px;font-weight:700}
+.tile .lab{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.tile .val{font-size:26px;font-weight:700;margin:2px 0;font-variant-numeric:tabular-nums}
+.tile .delta{font-size:12px;font-weight:700}
+.tile svg{display:block;width:100%;height:36px;color:var(--brand);margin-top:6px}
+.bar{height:10px;border-radius:6px;background:var(--surface2);overflow:hidden;border:1px solid var(--border)}
+.bar>span{display:block;height:100%;background:var(--brand)}
+.hbars{display:grid;gap:8px}
+.hbars .r{display:grid;grid-template-columns:70px 1fr 34px;gap:8px;align-items:center}
+.cd{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.empty{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+.fchip{border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:5px 12px;font-weight:600;color:var(--text)}
+.fchip[aria-pressed='true']{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.fchip[aria-pressed='true']::before{content:"\2713\00a0"}
+.more{margin-bottom:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.more select{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)}
+.link{border:0;background:none;color:var(--brand);text-decoration:underline;padding:0;font-weight:600}
+.link.k{font-variant-numeric:tabular-nums}
+
+/* tables */
+.tw{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);background:var(--surface2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface2)}
+body[data-density='compact'] th, body[data-density='compact'] td{padding:4px 10px}
+body[data-density='compact'] .tcard{padding:6px 8px}
+body[data-density='compact'] .tcard .t{margin-bottom:3px}
+
+/* board */
+.board{display:grid;grid-template-columns:repeat(6,minmax(210px,1fr));gap:12px;overflow-x:auto;padding-bottom:8px}
+.col{background:var(--surface2);border:1px solid var(--border);border-radius:12px;min-width:0;align-self:start}
+.col>button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:10px 12px;text-align:left;font-weight:700;border-radius:12px}
+.col .when{display:block;font-weight:500;color:var(--muted);font-size:12px}
+.col .chev{margin-left:auto;display:none}
+.col .cb{padding:0 8px 8px;display:grid;gap:8px}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(5,8,16,.55);z-index:60;opacity:0}
+.scrim.on{opacity:1}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,100vw);z-index:61;background:var(--surface);border-left:1px solid var(--border);box-shadow:var(--shadow);overflow:auto;padding:16px;transform:translateX(100%)}
+.drawer.on{transform:none}
+.drawer[hidden],.scrim[hidden]{display:none}
+.drawer h2{margin:0 0 4px;font-size:18px;overflow-wrap:anywhere}
+.drawer .dh{display:flex;gap:10px;align-items:flex-start}
+.drawer .x{margin-left:auto;border:1px solid var(--border);background:var(--surface2);border-radius:8px;padding:4px 10px;font-weight:700}
+.steps{list-style:none;margin:12px 0;padding:0;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.steps li{text-align:center;font-size:12px;position:relative;padding-top:2px}
+.steps .n{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;margin:0 auto 4px;font-weight:700;border:2px solid var(--border);background:var(--surface);color:var(--muted)}
+.steps .done .n{background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-fg)}
+.steps .cur .n{background:var(--info-bg);color:var(--info-fg);border-color:var(--info-fg)}
+.steps li:not(:last-child)::after{content:"";position:absolute;top:16px;left:calc(50% + 18px);right:calc(-50% + 18px);height:2px;background:var(--border)}
+.steps .done:not(:last-child)::after{background:var(--ok-fg)}
+.steps .st{display:block;color:var(--muted)}
+dl.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;margin:12px 0}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;overflow-wrap:anywhere}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:9px;z-index:90;max-width:90vw}
+.toast[hidden]{display:none}
+.mock{font-size:12px;color:var(--muted);margin-top:24px}
+
+/* responsive */
+@media (max-width:899px){
+  .shell{grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "main"}
+  .top{padding:8px 16px}
+  .nav{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;z-index:35;display:flex;justify-content:space-around;border-right:0;border-top:1px solid var(--border);padding:4px 4px calc(4px + env(safe-area-inset-bottom))}
+  .nav a{flex-direction:column;gap:0;font-size:11px;padding:6px 4px;margin:0;flex:1;text-align:center;min-width:0}
+  main{padding:16px 16px 96px}
+  .envs{margin-left:0}
+  .seg button{padding:6px 9px}
+  .seg .l{display:none} .seg .s{display:inline}
+  .board{display:block;overflow:visible}
+  .col{margin-bottom:10px}
+  .col .chev{display:inline}
+  .col.collapsed .cb{display:none}
+  .toast{bottom:84px}
+}
+@media (min-width:900px){ .col.collapsed .cb{display:grid} }
+@media (max-width:699px){
+  .rt thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .rt, .rt tbody, .rt tr, .rt td{display:block;width:100%}
+  .rt tr{padding:10px 12px;border-bottom:1px solid var(--border)}
+  .rt td{border:0;padding:3px 0;display:flex;gap:10px;justify-content:space-between;align-items:center;text-align:right}
+  .rt td::before{content:attr(data-label);color:var(--muted);font-size:12px;font-weight:600;text-align:left;flex:none}
+  .rt td > *{min-width:0}
+  .phead h1{font-size:19px}
+}
+</style>
+</head>
+<body data-density="comfortable">
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell" id="app">
+  <header class="top" id="top">
+    <div class="logo"><i aria-hidden="true">V</i><span>VidAI Tracker</span></div>
+    <div class="seg" role="radiogroup" aria-label="Role lens" id="lens"></div>
+    <div class="search">
+      <span class="ic" aria-hidden="true">&#128269;</span>
+      <input id="q" type="search" placeholder="Search ticket, version, assignee ( / )" aria-label="Search tickets, versions, assignees" autocomplete="off" aria-controls="results" aria-expanded="false">
+      <div class="results" id="results" role="listbox" aria-label="Search results" hidden></div>
+    </div>
+    <div class="envs" id="envdots" role="group" aria-label="Environment health"></div>
+    <button class="iconbtn" id="theme" type="button" aria-label="Toggle theme"><span aria-hidden="true" id="themeIc">&#9680;</span> <span id="themeTx">Theme</span></button>
+  </header>
+  <nav class="nav" id="nav" aria-label="Primary"></nav>
+  <main id="main" tabindex="-1"></main>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dtitle" hidden></aside>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+'use strict';
+/* ---------- helpers ---------- */
+function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c];});}
+function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);}catch(e){return null;}}
+var $=function(s,r){return (r||document).querySelector(s);};
+
+/* ---------- synthetic data (fake) ---------- */
+var ME='Asha Rao';
+var LENSES=[{id:'dev',l:'Developer',s:'Dev'},{id:'qa',l:'QA',s:'QA'},{id:'rel',l:'Release / DevOps',s:'Rel'},{id:'mgmt',l:'Management',s:'Mgmt'}];
+var ENVS=[
+ {id:'preview',n:'Preview',st:'ok',last:'35 min ago',ver:'BE 2.32.0-rc1'},
+ {id:'qa',n:'QA',st:'ok',last:'2 h ago',ver:'BE 2.31.4'},
+ {id:'stage',n:'Stage',st:'warn',last:'5 h ago',ver:'BE 2.31.2'},
+ {id:'preprod',n:'Pre-Prod',st:'ok',last:'1 d ago',ver:'BE 2.31.0'},
+ {id:'prodA',n:'Prod Ankura',st:'ok',last:'3 d ago',ver:'BE 2.30.3'},
+ {id:'prodN',n:'Prod Neotia',st:'ok',last:'3 d ago',ver:'BE 2.30.3'}
+];
+var STEPS=['Dev','QA','Stage','Pre-Prod','Prod'];
+var COLIDX={preview:0,qa:1,stage:2,preprod:3,prodA:4,prodN:4};
+var T=[
+ {k:'DEMO-1201',t:'Add export button to clinic report',a:'Asha Rao',s:'In Review',c:'preview',fe:'4.19.0-rc1',be:'2.32.0-rc1',age:1,ty:'Story',p:'P3'},
+ {k:'DEMO-1202',t:'Fix timezone offset in MIS report',a:'Asha Rao',s:'Ready to Test',c:'qa',fe:'4.18.4',be:'2.31.4',age:2,ty:'Bug',p:'P2'},
+ {k:'DEMO-1203',t:'Patient search is slow on large tenants',a:'Vikram Shah',s:'Ready to Test',c:'qa',fe:'4.18.4',be:'2.31.4',age:1,ty:'Bug',p:'P1',hot:1},
+ {k:'DEMO-1204',t:'Bulk invoice download as ZIP',a:'Neha Iyer',s:'QA Passed',c:'stage',fe:'4.18.3',be:'2.31.2',age:6,ty:'Story',p:'P3',stuck:6},
+ {k:'DEMO-1205',t:'Role-based menu visibility',a:'Rohan Das',s:'QA Passed',c:'stage',fe:'4.18.3',be:'2.31.2',age:2,ty:'Story',p:'P2'},
+ {k:'DEMO-1206',t:'Appointment reminder copy update',a:'Asha Rao',s:'QA Passed',c:'preprod',fe:'4.18.1',be:'2.31.0',age:1,ty:'Story',p:'P3'},
+ {k:'DEMO-1207',t:'Fix duplicate SMS on reschedule',a:'Vikram Shah',s:'QA Passed',c:'preprod',fe:'4.18.1',be:'2.31.0',age:5,ty:'Bug',p:'P2',stuck:5},
+ {k:'DEMO-1208',t:'Prescription PDF header layout',a:'Neha Iyer',s:'Done',c:'prodA',fe:'4.17.9',be:'2.30.3',age:3,ty:'Bug',p:'P2'},
+ {k:'DEMO-1209',t:'Hotfix: login loop with expired token',a:'Rohan Das',s:'Done',c:'prodN',fe:'4.17.9',be:'2.30.3',age:3,ty:'Bug',p:'P1',hot:1},
+ {k:'DEMO-1210',t:'Lab results pagination',a:'Asha Rao',s:'In Progress',c:'preview',fe:'4.19.0-rc1',be:'2.32.0-rc1',age:0,ty:'Story',p:'P3'},
+ {k:'DEMO-1211',t:'Billing totals mismatch after refund',a:'Vikram Shah',s:'Ready to Test',c:'preview',fe:'4.19.0-rc1',be:'2.32.0-rc1',age:1,ty:'Bug',p:'P1',rolled:1},
+ {k:'DEMO-1212',t:'Dark-mode contrast on dashboards',a:'Neha Iyer',s:'Ready to Test',c:'qa',fe:'4.18.4',be:'2.31.4',age:4,ty:'Story',p:'P3'},
+ {k:'DEMO-1213',t:'Audit log filters',a:'Rohan Das',s:'QA Passed',c:'qa',fe:'4.18.4',be:'2.31.4',age:1,ty:'Story',p:'P2'},
+ {k:'DEMO-1214',t:'Null pointer on empty visit note',a:'Asha Rao',s:'Done',c:'prodA',fe:'4.17.9',be:'2.30.3',age:8,ty:'Bug',p:'P3'},
+ {k:'DEMO-1215',t:'Inventory low-stock email',a:'Meera Nair',s:'In Review',c:'preview',fe:'4.19.0-rc1',be:'2.32.0-rc1',age:2,ty:'Story',p:'P3'},
+ {k:'DEMO-1216',t:'Webhook retries for payment events',a:'Vikram Shah',s:'QA Passed',c:'stage',fe:'4.18.3',be:'2.31.2',age:1,ty:'Story',p:'P2'}
+];
+var DEPLOYS=[
+ {id:'d1',env:'Preview',fe:'4.19.0-rc1',be:'2.32.0-rc1',by:'ci-bot',when:'35 min ago',st:'run',keys:['DEMO-1201','DEMO-1210']},
+ {id:'d2',env:'QA',fe:'4.18.4',be:'2.31.4',by:'ci-bot',when:'2 h ago',st:'ok',keys:['DEMO-1202','DEMO-1203','DEMO-1212']},
+ {id:'d3',env:'Pre-Prod',fe:'4.18.2',be:'2.31.1',by:'Rohan Das',when:'3 h ago',st:'bad',keys:['DEMO-1206']},
+ {id:'d4',env:'Stage',fe:'4.18.3',be:'2.31.2',by:'ci-bot',when:'5 h ago',st:'ok',keys:['DEMO-1204','DEMO-1205']},
+ {id:'d5',env:'Preview',fe:'4.19.0-rc0',be:'2.32.0-rc0',by:'ci-bot',when:'9 h ago',st:'rb',keys:['DEMO-1211']},
+ {id:'d6',env:'Pre-Prod',fe:'4.18.1',be:'2.31.0',by:'Rohan Das',when:'1 d ago',st:'ok',keys:['DEMO-1206','DEMO-1207']},
+ {id:'d7',env:'Prod Neotia',fe:'4.17.9',be:'2.30.3',by:'Neha Iyer',when:'3 d ago',st:'ok',keys:['DEMO-1209']},
+ {id:'d8',env:'Prod Ankura',fe:'4.17.9',be:'2.30.3',by:'Neha Iyer',when:'3 d ago',st:'ok',keys:['DEMO-1208','DEMO-1214']}
+];
+var DORA=[
+ {l:'Deploy frequency',v:'18 / wk',d:'+12%',good:1,s:[8,10,9,12,11,14,13,15,14,16,17,18]},
+ {l:'Lead time',v:'2.4 d',d:'-0.6 d',good:1,s:[3.8,3.6,3.7,3.2,3.1,3.0,2.9,2.8,2.7,2.6,2.5,2.4]},
+ {l:'Change failure rate',v:'6.1%',d:'+1.2 pts',good:0,s:[4,4.5,5,4.2,4.8,5.1,4.9,5.4,5.0,5.6,5.9,6.1]},
+ {l:'Time to restore',v:'47 min',d:'-9 min',good:1,s:[80,75,78,70,66,62,60,58,55,52,50,47]}
+];
+var HEALTH=[
+ {e:'Preview',p:[['API','ok'],['Web','ok'],['DB','ok'],['Queue','ok']]},
+ {e:'QA',p:[['API','ok'],['Web','ok'],['DB','ok'],['Queue','ok']]},
+ {e:'Stage',p:[['API','warn'],['Web','ok'],['DB','ok'],['Queue','warn']],note:'p95 latency 1.8 s (threshold 1.2 s)'},
+ {e:'Pre-Prod',p:[['API','ok'],['Web','ok'],['DB','ok'],['Queue','ok']]},
+ {e:'Prod Ankura',p:[['API','ok'],['Web','ok'],['DB','ok'],['Queue','ok']]},
+ {e:'Prod Neotia',p:[['API','ok'],['Web','ok'],['DB','ok'],['Queue','ok']]}
+];
+var COLS=[['preview','Preview'],['qa','QA'],['stage','Stage'],['preprod','Pre-Prod'],['prodA','Prod Ankura'],['prodN','Prod Neotia']];
+
+/* ---------- ui bits ---------- */
+var ICON={ok:'✓',warn:'!',bad:'✕',info:'i',run:'↻',neu:'•'};
+function pill(kind,text){var k=kind==='run'?'info':kind;return '<span class="pill '+esc(k)+(kind==='run'?' run':'')+'"><span class="i" aria-hidden="true">'+esc(ICON[kind]||'')+'</span>'+esc(text)+'</span>';}
+function dstat(s){return s==='ok'?pill('ok','Success'):s==='bad'?pill('bad','Failed'):s==='run'?pill('run','In progress'):pill('warn','Rolled back');}
+function hword(s){return s==='ok'?'Healthy':s==='warn'?'Degraded':'Down';}
+function ticket(k){for(var i=0;i<T.length;i++)if(T[i].k===k)return T[i];return null;}
+function envName(c){for(var i=0;i<COLS.length;i++)if(COLS[i][0]===c)return COLS[i][1];return c;}
+function badges(t){var o='';if(t.hot)o+=pill('bad','Hotfix');if(t.stuck)o+=pill('warn','Stuck '+t.stuck+'d');if(t.rolled)o+=pill('warn','Rolled back');return o;}
+function tcard(t,opts){opts=opts||{};
+ return '<button type="button" class="tcard" data-ticket="'+esc(t.k)+'"><span class="k">'+esc(t.k)+'</span> '+badges(t)+
+ '<span class="t">'+esc(t.t)+'</span><span class="m"><span>'+esc(t.a)+'</span>'+
+ '<span class="chip">FE '+esc(t.fe)+'</span><span class="chip">BE '+esc(t.be)+'</span>'+
+ '<span class="num">'+esc(t.age)+'d in stage</span>'+(opts.env?'<span>'+esc(envName(t.c))+'</span>':'')+(opts.status?'<span>'+esc(t.s)+'</span>':'')+'</span></button>';}
+function spark(arr){var w=120,h=36,mn=Math.min.apply(null,arr),mx=Math.max.apply(null,arr),r=(mx-mn)||1;
+ var pts=arr.map(function(v,i){return (i*(w/(arr.length-1))).toFixed(1)+','+(h-3-((v-mn)/r)*(h-8)).toFixed(1);}).join(' ');
+ return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="'+pts+'"/></svg>';}
+function list(items,emptyMsg){return items.length?'<ul class="list">'+items.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul>':'<div class="empty">'+esc(emptyMsg)+'</div>';}
+function card(title,count,body,sub){return '<section class="card"><h2>'+esc(title)+(count!=null?' <span class="cnt">('+esc(count)+')</span>':'')+'</h2>'+(sub?'<p class="sub">'+esc(sub)+'</p>':'')+body+'</section>';}
+function hbars(rows){var mx=Math.max.apply(null,rows.map(function(r){return r[1];}))||1;
+ return '<div class="hbars">'+rows.map(function(r){return '<div class="r"><span>'+esc(r[0])+'</span><div class="bar" aria-hidden="true"><span style="width:'+Math.round(r[1]/mx*100)+'%"></span></div><span class="num">'+esc(r[1])+'</span></div>';}).join('')+'</div>';}
+function nextWindow(){var now=new Date(),slots=[[8,0,'1:30 PM IST'],[10,30,'4:00 PM IST']];
+ for(var o=0;o<3;o++)for(var i=0;i<2;i++){var d=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+o,slots[i][0],slots[i][1]));if(d>now)return {ms:d-now,label:slots[i][2],day:o};}
+ return {ms:0,label:'',day:0};}
+function fmtMs(ms){var m=Math.floor(ms/60000);return Math.floor(m/60)+'h '+('0'+(m%60)).slice(-2)+'m';}
+
+/* ---------- state ---------- */
+var state={lens:'dev',route:'home',chips:{},env:'all',collapsed:{preview:false,qa:false,stage:true,preprod:true,prodA:true,prodN:true},updated:Date.now()};
+var ROUTES=[['home','Home','⌂'],['pipeline','Pipeline','▥'],['tickets','Tickets','☰'],['releases','Releases','⇧'],['insights','Insights','▤'],['health','Health','✚']];
+var TITLES={home:'Home',pipeline:'Pipeline',tickets:'Tickets',releases:'Releases',insights:'Insights',health:'Health'};
+var lastOpener=null;
+
+/* ---------- views ---------- */
+function viewHome(){
+ var L=state.lens, h='';
+ if(L==='dev'){
+  var mine=T.filter(function(t){return t.a===ME;});
+  var failedMine=DEPLOYS.filter(function(d){return d.st==='bad'&&d.keys.some(function(k){return ticket(k)&&ticket(k).a===ME;});});
+  h+='<div class="grid w2">'+
+   card('My tickets by stage',mine.length,list(mine.map(function(t){return tcard(t,{env:1,status:1});}),'Nothing assigned to you.'),'Assignee = '+ME)+
+   '<div>'+card('Promotion radar',null,list([
+     '<span class="row"><strong>QA → Stage</strong><span class="spacer"></span>'+pill('warn','3 tickets behind')+'</span>',
+     '<span class="row"><strong>Stage → Pre-Prod</strong><span class="spacer"></span>'+pill('warn','3 tickets behind')+'</span>',
+     '<span class="row"><strong>Pre-Prod → Prod</strong><span class="spacer"></span>'+pill('ok','In sync')+'</span>'],''),'My PRs waiting to be promoted')+
+   card('Failed deploys involving my work',failedMine.length,list(failedMine.map(function(d){return '<span class="row">'+dstat(d.st)+'<strong>'+esc(d.env)+'</strong><span class="muted">BE '+esc(d.be)+' · '+esc(d.when)+'</span></span>';}),'No failed deploys. Nice.'))+'</div></div>';
+ } else if(L==='qa'){
+  var nw=nextWindow();
+  var rt=T.filter(function(t){return t.s==='Ready to Test';});
+  var qp=T.filter(function(t){return t.s==='QA Passed'&&t.c!=='prodA'&&t.c!=='prodN';});
+  var bugs={P1:0,P2:0,P3:0};T.forEach(function(t){if(t.ty==='Bug'&&t.s!=='Done')bugs[t.p]++;});
+  h+='<div class="grid">'+
+   '<section class="card"><h2>Next release window</h2><div class="cd" id="cd" data-live="1">'+esc(fmtMs(nw.ms))+'</div><p class="muted" style="margin:4px 0 8px">until <strong id="cdl">'+esc(nw.label)+(nw.day?' (tomorrow)':'')+'</strong></p><p class="sub" style="margin:0">QA deploys run at 1:30 PM and 4:00 PM IST, or by manual dispatch.</p></section>'+
+   card('Open bugs by priority',null,hbars([['P1',bugs.P1],['P2',bugs.P2],['P3',bugs.P3]]))+
+  '</div><div class="grid w2">'+
+   card('Ready to test',rt.length,list(rt.map(function(t){return tcard(t,{env:1});}),'Nothing waiting for QA.'),'Deployed, not yet QA Passed')+
+   card('QA passed, not shipped',qp.length,list(qp.map(function(t){return tcard(t,{env:1});}),'Queue is empty.'),'Waiting to be promoted to production')+'</div>';
+ } else if(L==='rel'){
+  var inprog=DEPLOYS.filter(function(d){return d.st==='run'||d.st==='bad';});
+  var stuck=T.filter(function(t){return t.stuck;});
+  h+='<div class="banner" role="alert"><span aria-hidden="true">✕</span><span>Pre-Prod deploy 4.18.2 / 2.31.1 failed 3 h ago: migration gate blocked the backend job.</span><button type="button" data-toast="Mock: opens the run log">View run</button></div>'+
+   card('Environment health',null,'<div class="grid tiles" style="margin:0">'+ENVS.map(function(e){return '<div class="card" style="box-shadow:none"><div class="row"><strong>'+esc(e.n)+'</strong><span class="spacer"></span>'+pill(e.st,hword(e.st))+'</div><div class="muted" style="margin-top:6px">'+esc(e.ver)+'<br>Deployed '+esc(e.last)+'</div></div>';}).join('')+'</div>')+
+   '<div class="grid w2" style="margin-top:14px">'+
+   card('In-progress and failed deploys',inprog.length,list(inprog.map(function(d){return '<span class="row">'+dstat(d.st)+'<strong>'+esc(d.env)+'</strong><span class="chip">FE '+esc(d.fe)+'</span><span class="chip">BE '+esc(d.be)+'</span><span class="muted">'+esc(d.when)+'</span></span>';}),'No active or failed deploys.'))+
+   card('Stuck tickets',stuck.length,list(stuck.map(function(t){return tcard(t,{env:1});}),'Nothing is stuck.'),'Same stage for 5 days or more')+'</div>';
+ } else {
+  var sp=68;
+  var bugs2={P1:2,P2:5,P3:9};
+  h+='<div class="grid tiles">'+DORA.map(function(d){return '<section class="card tile"><div class="lab">'+esc(d.l)+'</div><div class="val">'+esc(d.v)+'</div><div class="delta">'+(d.good?'▲ Improving ':'▼ Worsening ')+esc(d.d)+'</div>'+spark(d.s)+'<div class="muted" style="font-size:12px">Last 30 days</div></section>';}).join('')+'</div>'+
+   '<div class="grid w2">'+
+   card('Sprint 42 progress',null,'<div class="row" style="margin-bottom:8px"><strong class="num">23 of 34 points</strong><span class="spacer"></span><span class="num">'+sp+'%</span></div><div class="bar" role="progressbar" aria-label="Sprint progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+sp+'"><span style="width:'+sp+'%"></span></div><p class="muted" style="margin:10px 0 0">Shipped this week: <strong>7 tickets</strong> · Sprint ends in 4 days</p>')+
+   card('Open bugs by priority',null,hbars([['P1',bugs2.P1],['P2',bugs2.P2],['P3',bugs2.P3]]),'Trend: 4 fewer than last sprint')+'</div>';
+ }
+ return h;
+}
+function viewPipeline(){
+ return '<div class="board">'+COLS.map(function(c){var id=c[0],items=T.filter(function(t){return t.c===id;}),en=ENVS.filter(function(e){return e.id===id;})[0];
+  var col=state.collapsed[id];
+  return '<section class="col'+(col?' collapsed':'')+'" data-col="'+esc(id)+'"><button type="button" data-colbtn="'+esc(id)+'" aria-expanded="'+(col?'false':'true')+'"><span class="dot '+esc(en.st)+'" aria-hidden="true">'+esc(ICON[en.st])+'</span><span><span>'+esc(c[1])+'</span><span class="when">'+esc(hword(en.st))+' · last deploy '+esc(en.last)+'</span></span><span class="muted num" style="margin-left:6px">'+items.length+'</span><span class="chev" aria-hidden="true">'+(col?'▸':'▾')+'</span></button><div class="cb">'+(items.length?items.map(function(t){return tcard(t);}).join(''):'<div class="empty">No tickets</div>')+'</div></section>';}).join('')+'</div>';
+}
+var CHIPS=[['mine','Mine'],['bug','Bugs'],['hot','Hotfix'],['stuck','Stuck'],['qap','QA Passed']];
+function filterTickets(){
+ var ch=state.chips;return T.filter(function(t){
+  if(ch.mine&&t.a!==ME)return false; if(ch.bug&&t.ty!=='Bug')return false; if(ch.hot&&!t.hot)return false;
+  if(ch.stuck&&!t.stuck)return false; if(ch.qap&&t.s!=='QA Passed')return false;
+  if(state.env!=='all'&&t.c!==state.env)return false; return true;});}
+function ticketRows(){var r=filterTickets();if(!r.length)return '<tr><td colspan="7"><div class="empty">No tickets match these filters.</div></td></tr>';
+ return r.map(function(t){return '<tr><td data-label="Key"><button type="button" class="link k" data-ticket="'+esc(t.k)+'">'+esc(t.k)+'</button></td><td data-label="Title">'+esc(t.t)+' '+badges(t)+'</td><td data-label="Assignee">'+esc(t.a)+'</td><td data-label="Jira status">'+(t.s==='QA Passed'||t.s==='Done'?pill('ok',t.s):pill('neu',t.s))+'</td><td data-label="Where deployed">'+esc(envName(t.c))+'</td><td data-label="Priority">'+(t.p==='P1'?pill('bad','P1'):t.p==='P2'?pill('warn','P2'):pill('neu','P3'))+'</td><td data-label="Age" class="num">'+esc(t.age)+'d</td></tr>';}).join('');}
+function viewTickets(){
+ return '<div class="chips" role="group" aria-label="Quick filters"><button type="button" class="fchip" data-chip="all" aria-pressed="'+(Object.keys(state.chips).length?'false':'true')+'">All</button>'+
+ CHIPS.map(function(c){return '<button type="button" class="fchip" data-chip="'+esc(c[0])+'" aria-pressed="'+(state.chips[c[0]]?'true':'false')+'">'+esc(c[1])+'</button>';}).join('')+
+ '<details class="more" style="margin:0"><summary>More filters</summary><label style="display:block;margin-top:8px">Where deployed <select id="envsel"><option value="all">Any environment</option>'+COLS.map(function(c){return '<option value="'+esc(c[0])+'"'+(state.env===c[0]?' selected':'')+'>'+esc(c[1])+'</option>';}).join('')+'</select></label></details></div>'+
+ '<div class="tw"><table class="rt"><thead><tr><th>Key</th><th>Title</th><th>Assignee</th><th>Jira status</th><th>Where deployed</th><th>Priority</th><th>Age</th></tr></thead><tbody id="tbody">'+ticketRows()+'</tbody></table></div><p class="muted" id="tcount" aria-live="polite">'+filterTickets().length+' of '+T.length+' tickets</p>';
+}
+function viewReleases(){
+ var q=T.filter(function(t){return t.s==='QA Passed'&&t.c!=='prodA'&&t.c!=='prodN';});
+ return '<div class="tw"><table class="rt"><thead><tr><th>Environment</th><th>Frontend</th><th>Backend</th><th>Deployer</th><th>When</th><th>Status</th><th>Tickets</th></tr></thead><tbody>'+
+ DEPLOYS.map(function(d){return '<tr><td data-label="Environment"><strong>'+esc(d.env)+'</strong></td><td data-label="Frontend"><span class="chip">'+esc(d.fe)+'</span></td><td data-label="Backend"><span class="chip">'+esc(d.be)+'</span></td><td data-label="Deployer">'+esc(d.by)+'</td><td data-label="When">'+esc(d.when)+'</td><td data-label="Status">'+dstat(d.st)+'</td><td data-label="Tickets">'+d.keys.map(function(k){return '<button type="button" class="link k" data-ticket="'+esc(k)+'">'+esc(k)+'</button>';}).join(' ')+'</td></tr>';}).join('')+'</tbody></table></div>'+
+ '<div style="margin-top:14px">'+card('Ready-to-ship queue',q.length,list(q.map(function(t){return tcard(t,{env:1});}),'Nothing queued.'),'QA Passed and not yet in production')+'</div>';
+}
+function viewInsights(){
+ var cfr=[4,4.5,5,4.2,4.8,5.1,4.9,5.4,5.0,5.6,5.9,6.1],bars='';
+ cfr.forEach(function(v,i){var hh=Math.round(v/7*70);bars+='<rect x="'+(i*24+4)+'" y="'+(80-hh)+'" width="16" height="'+hh+'" rx="2" fill="currentColor"/>';});
+ return '<div class="grid tiles">'+DORA.map(function(d){return '<section class="card tile"><div class="lab">'+esc(d.l)+'</div><div class="val">'+esc(d.v)+'</div><div class="delta">'+(d.good?'▲ Improving ':'▼ Worsening ')+esc(d.d)+'</div>'+spark(d.s)+'</section>';}).join('')+'</div>'+
+ '<div class="grid w2">'+
+ card('Lead time by stage (days)',null,hbars([['Dev',0.9],['QA',0.6],['Stage',0.5],['Pre-Prod',0.4]]),'Average over the last 30 days')+
+ card('Change failure rate, last 12 weeks',null,'<svg viewBox="0 0 296 86" role="img" aria-label="Bar chart: change failure rate rising from 4 percent to 6.1 percent over 12 weeks" style="width:100%;height:110px;color:var(--brand)">'+bars+'</svg><p class="muted" style="margin:6px 0 0">Latest week: 6.1% (target below 5%)</p>')+'</div>';
+}
+function viewHealth(){
+ return '<div class="grid">'+HEALTH.map(function(h){var en=ENVS.filter(function(e){return e.n===h.e;})[0];
+  return '<section class="card"><h2>'+esc(h.e)+' '+pill(en.st,hword(en.st))+'</h2><ul class="list">'+h.p.map(function(p){return '<li class="row"><span>'+esc(p[0])+'</span><span class="spacer"></span>'+pill(p[1],hword(p[1]))+'</li>';}).join('')+'</ul>'+(h.note?'<p class="muted" style="margin:10px 0 0">'+esc(h.note)+'</p>':'')+'<p class="muted" style="margin:10px 0 0">Latest successful deploy: '+esc(en.ver)+', '+esc(en.last)+'</p></section>';}).join('')+'</div>';
+}
+var SUBS={home:function(){return 'What needs attention for the '+LENSES.filter(function(l){return l.id===state.lens;})[0].l+' lens';},pipeline:function(){return 'Tickets by environment, with FE and BE versions';},tickets:function(){return 'Every ticket and where it is deployed';},releases:function(){return 'Deployment history and ready-to-ship queue';},insights:function(){return 'Delivery metrics for the last 30 days';},health:function(){return 'Live probes and latest successful deploy per environment';}};
+var VIEWS={home:viewHome,pipeline:viewPipeline,tickets:viewTickets,releases:viewReleases,insights:viewInsights,health:viewHealth};
+
+/* ---------- render ---------- */
+function ago(){var s=Math.round((Date.now()-state.updated)/1000);return s<5?'just now':s<90?s+' s ago':Math.round(s/60)+' min ago';}
+function renderMain(focus){
+ var m=$('#main');
+ m.innerHTML='<div class="phead"><div><h1>'+esc(TITLES[state.route])+'</h1><p>'+esc(SUBS[state.route]())+'</p></div><div class="tools"><span id="upd" aria-live="off">Updated '+esc(ago())+'</span><button type="button" class="iconbtn" id="refresh">Refresh</button><button type="button" class="iconbtn" id="density" aria-pressed="'+(document.body.getAttribute('data-density')==='compact')+'">Compact</button></div></div>'+VIEWS[state.route]()+'<p class="mock">Mockup only. All names, tickets and numbers are synthetic.</p>';
+ if(focus)m.focus({preventScroll:false});
+ tick();
+}
+function renderChrome(){
+ $('#lens').innerHTML=LENSES.map(function(l){return '<button type="button" role="radio" aria-checked="'+(l.id===state.lens)+'" data-lens="'+esc(l.id)+'" tabindex="'+(l.id===state.lens?0:-1)+'" aria-label="'+esc(l.l)+'"><span class="l" aria-hidden="true">'+esc(l.l==='Release / DevOps'?'Release':l.l)+'</span><span class="s" aria-hidden="true">'+esc(l.s)+'</span></button>';}).join('');
+ $('#envdots').innerHTML=ENVS.map(function(e){return '<span class="dot '+esc(e.st)+'" title="'+esc(e.n+': '+hword(e.st))+'" role="img" aria-label="'+esc(e.n+': '+hword(e.st))+'">'+esc(ICON[e.st])+'</span>';}).join('');
+ $('#nav').innerHTML=ROUTES.map(function(r){return '<a href="#/'+esc(r[0])+'"'+(r[0]===state.route?' aria-current="page"':'')+'><span class="g" aria-hidden="true">'+esc(r[2])+'</span><span>'+esc(r[1])+'</span></a>';}).join('');
+ var dark=isDark();$('#themeIc').textContent=dark?'☾':'☀';$('#themeTx').textContent=dark?'Dark':'Light';
+}
+function tick(){var u=$('#upd');if(u)u.textContent='Updated '+ago();var cd=$('#cd');if(cd){var n=nextWindow();cd.textContent=fmtMs(n.ms);var l=$('#cdl');if(l)l.textContent=n.label+(n.day?' (tomorrow)':'');}}
+setInterval(tick,30000);
+
+/* ---------- theme / lens / route ---------- */
+function isDark(){var a=document.documentElement.getAttribute('data-theme');if(a)return a==='dark';return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;}
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);store('vt-theme',t);renderChrome();}
+function setLens(id,fromUser){state.lens=id;store('vt-lens',id);try{var u=new URL(location.href);u.searchParams.set('as',id);history.replaceState(null,'',u);}catch(e){}renderChrome();renderMain(false);if(fromUser){var b=$('[data-lens="'+id+'"]');if(b)b.focus();}}
+function route(first,name){var h=name||(location.hash||'').replace(/^#\/?/,'');if(!VIEWS[h])h='home';state.route=h;renderChrome();renderMain(!first);document.title='Deployment Tracker Redesign Mockup - '+TITLES[h];}
+window.addEventListener('hashchange',function(){route(false);});
+
+/* ---------- drawer ---------- */
+function openDrawer(k,opener){
+ var t=ticket(k);if(!t)return;lastOpener=opener||document.activeElement;
+ var ci=COLIDX[t.c];
+ var steps=STEPS.map(function(s,i){var cls=i<ci||(i===ci&&ci===4)?'done':i===ci?'cur':'';var ic=cls==='done'?'✓':cls==='cur'?'●':'○';var st=cls==='done'?(Math.round(t.age+(ci-i)*1.5))+'d ago':cls==='cur'?'Now':'Pending';var wd=cls==='done'?'done':cls==='cur'?'in progress':'pending';
+  return '<li class="'+cls+'"'+(cls==='cur'?' aria-current="step"':'')+'><span class="n" aria-hidden="true">'+ic+'</span><strong>'+esc(s)+'</strong><span class="st">'+esc(st)+'</span><span class="sr">'+esc(wd)+'</span></li>';}).join('');
+ var d=$('#drawer');
+ d.innerHTML='<div class="dh"><div><div class="row"><span class="chip">'+esc(t.k)+'</span>'+badges(t)+'</div><h2 id="dtitle">'+esc(t.t)+'</h2></div><button type="button" class="x" id="dclose" aria-label="Close ticket details">Close (Esc)</button></div>'+
+ '<ol class="steps" aria-label="Release journey">'+steps+'</ol>'+
+ '<dl class="kv"><dt>Jira status</dt><dd>'+esc(t.s)+'</dd><dt>Assignee</dt><dd>'+esc(t.a)+'</dd><dt>Type / priority</dt><dd>'+esc(t.ty)+' / '+esc(t.p)+'</dd><dt>Environment</dt><dd>'+esc(envName(t.c))+', '+esc(t.age)+'d in stage</dd><dt>Frontend</dt><dd><span class="chip">'+esc(t.fe)+'</span></dd><dt>Backend</dt><dd><span class="chip">'+esc(t.be)+'</span></dd><dt>Release note</dt><dd>'+esc(t.t)+' (synthetic note text).</dd></dl>'+
+ '<div class="row"><button type="button" class="iconbtn" data-toast="Mock: opens Jira">Open in Jira</button><button type="button" class="iconbtn" data-toast="Mock: opens the pull request">Linked PR #'+esc(1000+parseInt(t.k.slice(-3),10))+'</button><button type="button" class="iconbtn" data-toast="Mock: opens the deploy run">Deploy run</button><button type="button" class="iconbtn" id="copylink">Copy link</button></div>';
+ var s=$('#scrim');s.hidden=false;d.hidden=false;
+ ['top','nav','main'].forEach(function(i){var e=document.getElementById(i);if(e)e.setAttribute('inert','');});
+ requestAnimationFrame(function(){s.classList.add('on');d.classList.add('on');$('#dclose').focus();});
+}
+function closeDrawer(){
+ var d=$('#drawer');if(d.hidden)return;
+ ['top','nav','main'].forEach(function(i){var e=document.getElementById(i);if(e)e.removeAttribute('inert');});
+ d.classList.remove('on');$('#scrim').classList.remove('on');d.hidden=true;$('#scrim').hidden=true;
+ var o=lastOpener;lastOpener=null;
+ if(o&&document.contains(o)&&o.focus)o.focus();
+ else if(o&&o.dataset&&o.dataset.ticket){var again=document.querySelector('[data-ticket="'+o.dataset.ticket.replace(/"/g,'')+'"]');(again||$('#main')).focus();}
+ else $('#main').focus();
+}
+var toastT;function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true;},2200);}
+
+/* ---------- search ---------- */
+function runSearch(){
+ var v=$('#q').value.trim().toLowerCase(),r=$('#results'),q=$('#q');
+ if(!v){r.hidden=true;q.setAttribute('aria-expanded','false');return;}
+ var hits=T.filter(function(t){return (t.k+' '+t.t+' '+t.a+' '+t.fe+' '+t.be).toLowerCase().indexOf(v)>-1;}).slice(0,8);
+ r.innerHTML=hits.length?hits.map(function(t){return '<button type="button" role="option" data-ticket="'+esc(t.k)+'" data-fromsearch="1"><strong>'+esc(t.k)+'</strong> '+esc(t.t)+'<br><span class="muted">'+esc(t.a)+' · '+esc(envName(t.c))+' · BE '+esc(t.be)+'</span></button>';}).join(''):'<div class="none">No matches for "'+esc($('#q').value.trim())+'"</div>';
+ r.hidden=false;q.setAttribute('aria-expanded','true');
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',function(e){
+ var el=e.target.closest?e.target.closest('button,a'):null;if(!el)return;
+ if(el.closest&&el.closest('#nav')&&el.tagName==='A'){e.preventDefault();var nm=el.getAttribute('href').replace(/^#\/?/,'');try{history.replaceState(null,'','#/'+nm);}catch(x){}route(false,nm);return;}
+ if(el.dataset.ticket){var fs=el.dataset.fromsearch;if(fs){$('#results').hidden=true;$('#q').setAttribute('aria-expanded','false');openDrawer(el.dataset.ticket,$('#q'));}else openDrawer(el.dataset.ticket,el);return;}
+ if(el.dataset.lens){setLens(el.dataset.lens,true);return;}
+ if(el.dataset.toast){toast(el.dataset.toast);return;}
+ if(el.dataset.colbtn){var id=el.dataset.colbtn;state.collapsed[id]=!state.collapsed[id];var c=el.closest('.col');c.classList.toggle('collapsed',state.collapsed[id]);el.setAttribute('aria-expanded',String(!state.collapsed[id]));el.querySelector('.chev').textContent=state.collapsed[id]?'▸':'▾';return;}
+ if(el.dataset.chip){var c2=el.dataset.chip;if(c2==='all')state.chips={};else if(state.chips[c2])delete state.chips[c2];else state.chips[c2]=1;refreshTickets();var nb=$('[data-chip="'+c2+'"]');if(nb)nb.focus();return;}
+ if(el.id==='dclose'){closeDrawer();return;}
+ if(el.id==='copylink'){var url=location.href;try{navigator.clipboard.writeText(url).then(function(){toast('Link copied');},function(){toast('Copy not available here');});}catch(x){toast('Copy not available here');}return;}
+ if(el.id==='theme'){setTheme(isDark()?'light':'dark');return;}
+ if(el.id==='refresh'){state.updated=Date.now();tick();toast('Refreshed (synthetic data)');return;}
+ if(el.id==='density'){var cp=document.body.getAttribute('data-density')!=='compact';document.body.setAttribute('data-density',cp?'compact':'comfortable');store('vt-density',cp?'compact':'comfortable');el.setAttribute('aria-pressed',String(cp));return;}
+ if(!e.target.closest('.search'))$('#results').hidden=true;
+});
+document.addEventListener('click',function(e){if(e.target.id==='scrim')closeDrawer();if(!e.target.closest('.search')){var r=$('#results');if(r)r.hidden=true;}});
+function refreshTickets(){
+ var tb=$('#tbody');if(!tb)return;tb.innerHTML=ticketRows();$('#tcount').textContent=filterTickets().length+' of '+T.length+' tickets';
+ Array.prototype.forEach.call(document.querySelectorAll('.fchip'),function(b){var k=b.dataset.chip;b.setAttribute('aria-pressed',String(k==='all'?!Object.keys(state.chips).length:!!state.chips[k]));});
+}
+document.addEventListener('change',function(e){if(e.target.id==='envsel'){state.env=e.target.value;refreshTickets();}});
+$('#q').addEventListener('input',runSearch);
+$('#q').addEventListener('keydown',function(e){
+ if(e.key==='Enter'){var f=$('#results [data-ticket]');if(f){e.preventDefault();$('#results').hidden=true;openDrawer(f.dataset.ticket,$('#q'));}}
+ if(e.key==='Escape'){$('#results').hidden=true;this.setAttribute('aria-expanded','false');}
+ if(e.key==='ArrowDown'){var f2=$('#results [data-ticket]');if(f2){e.preventDefault();f2.focus();}}
+});
+document.addEventListener('keydown',function(e){
+ var d=$('#drawer');
+ if(e.key==='Escape'&&!d.hidden){e.preventDefault();closeDrawer();return;}
+ if(e.key==='Tab'&&!d.hidden){var f=d.querySelectorAll('button,[href],input,select');if(!f.length)return;var a=f[0],z=f[f.length-1];
+  if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus();}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus();}}
+ if((e.key==='/'&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))||((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k')){e.preventDefault();$('#q').focus();}
+ var lg=document.activeElement&&document.activeElement.dataset&&document.activeElement.dataset.lens;
+ if(lg&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){e.preventDefault();var i=LENSES.map(function(l){return l.id;}).indexOf(lg);i=(i+(e.key==='ArrowRight'?1:LENSES.length-1))%LENSES.length;setLens(LENSES[i].id,true);}
+});
+
+/* ---------- init ---------- */
+(function init(){
+ var th=store('vt-theme');if(th==='light'||th==='dark')document.documentElement.setAttribute('data-theme',th);
+ var dn=store('vt-density');if(dn==='compact')document.body.setAttribute('data-density','compact');
+ var as=null;try{as=new URL(location.href).searchParams.get('as');}catch(e){}
+ var saved=as||store('vt-lens');
+ if(LENSES.some(function(l){return l.id===saved;}))state.lens=saved;
+ route(true);
+})();
+})();
+</script>
+</body>
+</html>
