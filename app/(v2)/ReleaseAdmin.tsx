@@ -293,7 +293,7 @@ export default function ReleaseAdmin() {
           <button type="button" {...btn} onClick={openCreate}>Deploy release</button>
           <button type="button" {...btn} onClick={async () => { setError(''); await loadEnvs(); setDialog('envs'); }}>Targets</button>
           <button type="button" {...btn} onClick={() => fileRef.current?.click()}>Import JSON</button>
-          <Link href="/admin" className="btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Telemetry</Link>
+          <Link href="/?tab=insights" className="btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Telemetry</Link>
           <button type="button" {...btn} onClick={logout}>Sign out</button>
         </>
       )}

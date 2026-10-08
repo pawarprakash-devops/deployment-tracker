@@ -1,8 +1,8 @@
 'use client';
 import { useMemo, useState } from 'react';
 import type { PipelineColumn, PipelineEnvEntry, PipelineTicket } from '@/lib/pipeline-types';
-import { useShell } from '../ctx';
-import { Chip, Empty, EnvDot, ErrorNote, JiraNote, Pill, Skeleton, ago, type Tone } from '../ui';
+import { useShell } from './ctx';
+import { Chip, Empty, EnvDot, ErrorNote, JiraNote, Pill, Skeleton, ago, type Tone } from './ui';
 
 const STATUS_TONE: [RegExp, Tone][] = [[/success/, 'ok'], [/fail/, 'bad'], [/progress/, 'info']];
 
@@ -50,7 +50,7 @@ function Card({ t, col, onOpen }: { t: PipelineTicket; col: PipelineColumn; onOp
   );
 }
 
-export default function PipelinePage() {
+export default function PipelineTab() {
   const { pipeline, error, setOpenTicket } = useShell();
   const [q, setQ] = useState('');
   const [hotfix, setHotfix] = useState(false);
