@@ -18,7 +18,7 @@ Rules enforced by the middleware, in order:
 
 > `/admin` shows a login challenge until `GET /api/auth/session` reports `admin`, and `GET /api/admin/stats` itself checks the admin session cookie (401 otherwise).
 >
-> `/api/jira/*`, `/api/admin/stats` and `GET /api/migrate` are exceptions to "every GET is public": they verify the admin session/token themselves (`lib/auth.ts#isAdminRequest`) because they return internal data or mutate data.
+> `/api/jira/*`, `/api/admin/stats` and `GET /api/migrate` are exceptions to "every GET is public": they verify the admin session/token themselves (`lib/auth.ts#isAdminRequest`) because they return internal data or mutate data. `GET /api/pipeline` is public for deployment data, but attaches Jira fields (summary, assignee, status) only when `isAdminRequest` is true.
 
 ## Login flow
 
