@@ -6,8 +6,8 @@ Implemented in `middleware.ts` (matcher `/api/:path*`), `app/api/auth/route.ts` 
 
 | Who | Can do |
 |-----|--------|
-| Anyone (no login) | View `/`, `/health`; every `GET /api/*`; export JSON |
-| Admin | Everything above plus the `/admin` telemetry page and create/edit/delete deployments, manage environments, import JSON |
+| Anyone (no login) | View the Deployments, Pipeline, My view and Health tabs; every `GET /api/*`; export JSON |
+| Admin | Everything above plus the Tickets and Insights tabs (`AdminGate` shows a sign-in card otherwise) and create/edit/delete deployments, manage environments, import JSON |
 | CI (`vidai-devops` workflows) | `POST /api/webhook` only, using the **webhook secret** (separate from the admin token) |
 
 Rules enforced by the middleware, in order:
@@ -16,7 +16,7 @@ Rules enforced by the middleware, in order:
 3. Any `GET` → allowed.
 4. `POST` / `PUT` / `PATCH` / `DELETE` → require `Authorization: Bearer <ADMIN_TOKEN>` **or** a `tracker_session` cookie equal to `ADMIN_TOKEN`; otherwise `401 Unauthorized - Admin login required to make changes`.
 
-> `/admin` shows a login challenge until `GET /api/auth/session` reports `admin`, and `GET /api/admin/stats` itself checks the admin session cookie (401 otherwise).
+> The Insights and Tickets tabs show a sign-in card (`app/(v2)/AdminGate.tsx`) until `GET /api/auth/session` reports `admin`, and `GET /api/admin/stats` itself checks the admin session cookie (401 otherwise).
 >
 > `/api/jira/*`, `/api/admin/stats` and `GET /api/migrate` are exceptions to "every GET is public": they verify the admin session/token themselves (`lib/auth.ts#isAdminRequest`) because they return internal data or mutate data. `GET /api/pipeline` is public for deployment data, but attaches Jira fields (summary, assignee, status) only when `isAdminRequest` is true.
 
@@ -64,6 +64,6 @@ curl -X POST $BASE/api/deployments -H "Content-Type: application/json" -b cookie
   -d '{"environment":"QA","status":"Success","started_at":"2026-08-27T12:00:00Z"}'
 ```
 
-## `/admin` dashboard contents
+## Insights tab contents (formerly `/admin`)
 
 DORA suite (deployment frequency, lead time, change failure rate — fleet and production-only — and MTTR with Elite/High/Medium/Low ratings), plus: deployments by target environment, pipeline execution status, recent critical failures, longest pipeline runs, top operators, and the incident recovery & MTTR audit trail (failure → next success on the same environment, with links to both runs). See `docs/ROADMAP.md` §3.3.
