@@ -2,12 +2,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Empty, ErrorNote } from './ui';
 
-interface Dep { environment: string; status: string; deployed_by?: string | null; notes?: string | null; started_at: string }
+interface Summary { total: number; success: number; failed: number; rollbacks: number; today: number; days: { date: string; success: number; failed: number; other: number; total: number }[]; latest: { environment: string; status: string }[] }
 interface Day { date: string; label: string; short: string; success: number; failed: number; other: number; total: number }
 
-const isSuccess = (s: string) => /(^|\s)success$/i.test(s);
 const isFailed = (s: string) => /fail/i.test(s);
-const isRollback = (s: string) => /roll/i.test(s);
 
 const SR_ONLY: React.CSSProperties = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0, padding: 0, margin: -1 };
 const CHART_H = 84;
@@ -51,25 +49,24 @@ function Stat({ label, value, hint, first, tone, ring }: { label: string; value:
 }
 
 export default function ReleaseStats() {
-  const [deps, setDeps] = useState<Dep[] | null>(null);
+  const [sum, setSum] = useState<Summary | null>(null);
   const [envs, setEnvs] = useState<{ name: string }[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
     const load = async () => {
       try {
+        // whole-table counts come from SQL (/api/summary); /api/deployments is capped at 1000 rows
         const [d, e] = await Promise.all([
-          fetch('/api/deployments?limit=1000', { cache: 'no-store' }),
+          fetch('/api/summary', { cache: 'no-store' }),
           fetch('/api/environments', { cache: 'no-store' }),
         ]);
         if (!d.ok || !e.ok) throw new Error(`HTTP ${!d.ok ? d.status : e.status}`);
         const [dj, ej] = await Promise.all([d.json(), e.json()]);
         if (!alive) return;
-        setDeps(Array.isArray(dj) ? dj : []);
+        setSum(dj as Summary);
         setEnvs(Array.isArray(ej) ? ej : []);
-        setNow(Date.now());
         setError(null);
       } catch (err) {
         if (alive) setError(err instanceof Error ? err.message : 'Failed to load');
@@ -89,35 +86,24 @@ export default function ReleaseStats() {
   }, []);
 
   const stats = useMemo(() => {
-    if (!deps || !envs || now == null) return null;
-    const rows = deps.filter((d) => !(d.deployed_by ?? '').includes('Deployment Tracker'));
-    const total = rows.length;
-    const ok = rows.filter((d) => isSuccess(d.status)).length;
-    const rollbacks = rows.filter((d) => isRollback(d.status) || /rollback/i.test(d.notes ?? '')).length;
-    const today = new Date(now).toISOString().slice(0, 10);
-    const todayCount = rows.filter((d) => d.started_at?.slice(0, 10) === today).length;
-    // latest deploy per environment (rows ordered by time, newest wins)
-    const latest = new Map<string, Dep>();
-    for (const d of rows) {
-      const cur = latest.get(d.environment);
-      if (!cur || d.started_at > cur.started_at) latest.set(d.environment, d);
-    }
-    const failedLatest = envs.filter((e) => { const l = latest.get(e.name); return l && isFailed(l.status); }).length;
-    const days: Day[] = [];
-    for (let i = 13; i >= 0; i--) {
-      const dt = new Date(now - i * 86_400_000);
-      const date = dt.toISOString().slice(0, 10);
-      const day = rows.filter((d) => d.started_at?.startsWith(date));
-      const success = day.filter((d) => isSuccess(d.status)).length;
-      const failed = day.filter((d) => isFailed(d.status)).length;
-      days.push({
-        date, success, failed, other: day.length - success - failed, total: day.length,
+    if (!sum || !envs) return null;
+    const latest = new Map(sum.latest.map((l) => [l.environment, l.status]));
+    const failedLatest = envs.filter((e) => { const l = latest.get(e.name); return l && isFailed(l); }).length;
+    const days: Day[] = sum.days.map((d) => {
+      const dt = new Date(`${d.date}T00:00:00Z`);
+      return {
+        ...d,
         label: dt.toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
         short: String(dt.getUTCDate()),
-      });
-    }
-    return { total, rate: total ? ((ok / total) * 100).toFixed(1) : null, rollbacks, todayCount, failedLatest, envCount: envs.length, days, max: Math.max(1, ...days.map((d) => d.total)) };
-  }, [deps, envs, now]);
+      };
+    });
+    return {
+      total: sum.total,
+      rate: sum.total ? ((sum.success / sum.total) * 100).toFixed(1) : null,
+      rollbacks: sum.rollbacks, todayCount: sum.today, failedLatest, envCount: envs.length, days,
+      max: Math.max(1, ...days.map((d) => d.total)),
+    };
+  }, [sum, envs]);
 
   if (error && !stats) return <ErrorNote>Could not load release stats: {error}</ErrorNote>;
   if (!stats) return <Card title="Delivery pulse"><div className="skeleton" aria-busy="true" aria-label="Loading" style={{ height: 112 }} /></Card>;
