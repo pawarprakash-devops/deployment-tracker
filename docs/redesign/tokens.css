@@ -1,0 +1,218 @@
+/*
+ * VidAI Deployment Tracker - redesign design tokens (proposal, not wired into the app).
+ * Source of truth for docs/redesign/03-DESIGN-SYSTEM.md. Contrast ratios: see section 2 of that doc.
+ *
+ * Theme resolution (matches today's localStorage key 'tracker-theme' = 'light' | 'dark'):
+ *   1. <html data-theme="light|dark"> set from localStorage before first paint (inline script in layout.tsx).
+ *   2. If no data-theme attribute, follow prefers-color-scheme.
+ *   3. Default (no JS, no preference) = light tokens in :root. Today's app defaults to dark; to keep that,
+ *      the inline script should set data-theme="dark" when nothing is stored (decision in doc section 2.4).
+ * Legacy aliases (--bg, --panel, --ok, --warn, --bad, --neutral, --prod, --accent-rgb ...) keep today's names so
+ * existing components keep working during migration.
+ *
+ * Import order in globals.css: @import "tailwindcss"; then @import "./tokens.css";
+ */
+
+:root {
+  color-scheme: light;
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --panel-2: #eef2f7;
+  --border: rgba(23, 32, 51, 0.12);
+  --border-bright: rgba(23, 32, 51, 0.22);
+  --text: #172033;
+  --muted: #4b5a70;
+  --faint: #5b6a80;
+  --accent: #c2512f;
+  --accent-text: #a63f22;
+  --brand: #e17e61;
+  --on-brand: #151c28;
+  --accent-rgb: 194, 81, 47;
+  --focus-ring: #c2512f;
+  --scrim: rgba(21, 28, 40, 0.45);
+  --elev-1: 0 1px 2px rgba(23, 32, 51, 0.08);
+  --elev-2: 0 8px 24px rgba(23, 32, 51, 0.16);
+  --skeleton-a: #e6ebf2;
+  --skeleton-b: #f1f4f8;
+
+  --ok: #15803d;      --ok-text: #166534;      --ok-bg: #e3f0e8;      --ok-border: rgba(21, 128, 61, 0.35);
+  --warn: #b45309;    --warn-text: #8a4204;    --warn-bg: #f6eae1;    --warn-border: rgba(180, 83, 9, 0.35);
+  --bad: #dc2626;     --bad-text: #b91c1c;     --bad-bg: #fbe5e5;     --bad-border: rgba(220, 38, 38, 0.35);
+  --info: #2563eb;    --info-text: #1d4ed8;    --info-bg: #e5ecfd;    --info-border: rgba(37, 99, 235, 0.35);
+  --neutral: #64748b; --neutral-text: #475569; --neutral-bg: #eceef1; --neutral-border: rgba(100, 116, 139, 0.35);
+  --prod: #c2512f;
+
+  /* ---- theme-independent tokens ---- */
+  --font-ui: 'Montserrat', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-code: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  --fs-2xs: 11px;  --lh-2xs: 16px;
+  --fs-xs: 12px;   --lh-xs: 16px;
+  --fs-sm: 13px;   --lh-sm: 20px;   /* data / table / chip default */
+  --fs-base: 14px; --lh-base: 22px; /* body */
+  --fs-md: 16px;   --lh-md: 24px;
+  --fs-lg: 18px;   --lh-lg: 26px;
+  --fs-xl: 22px;   --lh-xl: 28px;
+  --fs-2xl: 28px;  --lh-2xl: 34px;  /* stat tile value */
+
+  --space-0: 0;
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+
+  --r-xs: 4px;   /* version chip, kbd */
+  --r-sm: 6px;   /* inputs, buttons */
+  --r-md: 10px;  /* cards, tiles */
+  --r-lg: 14px;  /* drawer (leading corners), modals */
+  --r-pill: 999px;
+
+  --z-nav: 20; --z-drawer: 40; --z-palette: 50; --z-toast: 60;
+  --dur-fast: 120ms; --dur-base: 200ms; --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  --nav-w: 232px; --nav-w-collapsed: 64px; --tabbar-h: 56px; --topbar-h: 52px; --drawer-w: 480px;
+
+  /* ---- density: comfortable (default) ---- */
+  --row-h: 44px;
+  --ctl-h: 36px;
+  --pad-card: 16px;
+  --gap-stack: 16px;
+  --pad-cell-y: 10px;
+  --pad-cell-x: 12px;
+}
+
+/* Compact density: <html data-density="compact"> (persisted as 'tracker-density') */
+:root[data-density='compact'] {
+  --row-h: 32px;
+  --ctl-h: 28px;
+  --pad-card: 10px;
+  --gap-stack: 8px;
+  --pad-cell-y: 5px;
+  --pad-cell-x: 8px;
+}
+
+/* Touch targets never shrink below 44px on coarse pointers, even in compact */
+@media (pointer: coarse) {
+  :root[data-density='compact'] { --row-h: 44px; --ctl-h: 44px; }
+}
+
+/* Dark: follow the OS unless the user explicitly chose light */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #151c28;
+    --panel: #1e2737;
+    --panel-2: #242f42;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-bright: rgba(255, 255, 255, 0.14);
+    --text: #e8edf5;
+    --muted: #94a3b8;
+    --faint: #8f9db3;
+    --accent: #e17e61;
+    --accent-text: #f0a28d;
+    --brand: #e17e61;
+    --on-brand: #151c28;
+    --accent-rgb: 225, 126, 97;
+    --focus-ring: #e17e61;
+    --scrim: rgba(0, 0, 0, 0.6);
+    --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --elev-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --skeleton-a: #242f42;
+    --skeleton-b: #2c3950;
+
+    --ok: #4ade80;      --ok-text: #6ee7a0;      --ok-bg: #254443;      --ok-border: rgba(74, 222, 128, 0.35);
+    --warn: #fbbf24;    --warn-text: #fcd34d;    --warn-bg: #413f34;    --warn-border: rgba(251, 191, 36, 0.35);
+    --bad: #f87171;     --bad-text: #fca5a5;     --bad-bg: #413340;     --bad-border: rgba(248, 113, 113, 0.35);
+    --info: #60a5fa;    --info-text: #93c5fd;    --info-bg: #293b56;    --info-border: rgba(96, 165, 250, 0.35);
+    --neutral: #94a3b8; --neutral-text: #b6c2d3; --neutral-bg: #313b4c; --neutral-border: rgba(148, 163, 184, 0.35);
+    --prod: #e17e61;
+  }
+}
+
+/* Dark: explicit choice always wins over the OS */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #151c28;
+  --panel: #1e2737;
+  --panel-2: #242f42;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(255, 255, 255, 0.14);
+  --text: #e8edf5;
+  --muted: #94a3b8;
+  --faint: #8f9db3;
+  --accent: #e17e61;
+  --accent-text: #f0a28d;
+  --brand: #e17e61;
+  --on-brand: #151c28;
+  --accent-rgb: 225, 126, 97;
+  --focus-ring: #e17e61;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elev-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --skeleton-a: #242f42;
+  --skeleton-b: #2c3950;
+
+  --ok: #4ade80;      --ok-text: #6ee7a0;      --ok-bg: #254443;      --ok-border: rgba(74, 222, 128, 0.35);
+  --warn: #fbbf24;    --warn-text: #fcd34d;    --warn-bg: #413f34;    --warn-border: rgba(251, 191, 36, 0.35);
+  --bad: #f87171;     --bad-text: #fca5a5;     --bad-bg: #413340;     --bad-border: rgba(248, 113, 113, 0.35);
+  --info: #60a5fa;    --info-text: #93c5fd;    --info-bg: #293b56;    --info-border: rgba(96, 165, 250, 0.35);
+  --neutral: #94a3b8; --neutral-text: #b6c2d3; --neutral-bg: #313b4c; --neutral-border: rgba(148, 163, 184, 0.35);
+  --prod: #e17e61;
+}
+
+/* ---- Tailwind 4 mapping: generates utilities bg-panel, text-muted, border-border, text-ok-text, bg-bad-bg, rounded-md ... ---- */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-border: var(--border);
+  --color-border-bright: var(--border-bright);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-brand: var(--brand);
+  --color-on-brand: var(--on-brand);
+  --color-ok: var(--ok);           --color-ok-text: var(--ok-text);           --color-ok-bg: var(--ok-bg);           --color-ok-border: var(--ok-border);
+  --color-warn: var(--warn);       --color-warn-text: var(--warn-text);       --color-warn-bg: var(--warn-bg);       --color-warn-border: var(--warn-border);
+  --color-bad: var(--bad);         --color-bad-text: var(--bad-text);         --color-bad-bg: var(--bad-bg);         --color-bad-border: var(--bad-border);
+  --color-info: var(--info);       --color-info-text: var(--info-text);       --color-info-bg: var(--info-bg);       --color-info-border: var(--info-border);
+  --color-neutral: var(--neutral); --color-neutral-text: var(--neutral-text); --color-neutral-bg: var(--neutral-bg); --color-neutral-border: var(--neutral-border);
+
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
+
+  --text-2xs: var(--fs-2xs);  --text-2xs--line-height: var(--lh-2xs);
+  --text-xs: var(--fs-xs);    --text-xs--line-height: var(--lh-xs);
+  --text-sm: var(--fs-sm);    --text-sm--line-height: var(--lh-sm);
+  --text-base: var(--fs-base);--text-base--line-height: var(--lh-base);
+  --text-lg: var(--fs-lg);    --text-lg--line-height: var(--lh-lg);
+  --text-xl: var(--fs-xl);    --text-xl--line-height: var(--lh-xl);
+  --text-2xl: var(--fs-2xl);  --text-2xl--line-height: var(--lh-2xl);
+
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+
+  --shadow-1: var(--elev-1);
+  --shadow-2: var(--elev-2);
+}
+
+/* ---- base + shared behaviours ---- */
+body { background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: var(--fs-base); line-height: var(--lh-base); }
+.tnum { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+@keyframes tracker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes tracker-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.skeleton { background: linear-gradient(90deg, var(--skeleton-a), var(--skeleton-b), var(--skeleton-a)); background-size: 200% 100%; animation: tracker-shimmer 1.4s linear infinite; border-radius: var(--r-sm); }
+.pulse { animation: tracker-pulse 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .skeleton { background: var(--skeleton-a); }
+}
+
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; }
+}
