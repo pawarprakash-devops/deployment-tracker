@@ -144,27 +144,6 @@ function AgedTable({ items, showEnv }: { items: Aged[]; showEnv?: boolean }) {
   );
 }
 
-function WeeklyChart({ weeks }: { weeks: { weekStart: string; created: number; closed: number }[] }) {
-  const max = Math.max(1, ...weeks.flatMap((w) => [w.created, w.closed]));
-  return (
-    <div>
-      <div className="subtle"><span style={{ color: 'var(--bad)' }} aria-hidden="true">■</span> created &nbsp; <span style={{ color: 'var(--ok)' }} aria-hidden="true">■</span> closed (moved to a done status), per week. Numbers under each week read created/closed.</div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginTop: 8, overflowX: 'auto' }}>
-        {weeks.map((w) => (
-          <div key={w.weekStart} title={`Week of ${w.weekStart}: ${w.created} created, ${w.closed} closed`} style={{ flex: 1, minWidth: 44, textAlign: 'center' }}>
-            <div style={{ height: 110, display: 'flex', gap: 3, alignItems: 'flex-end', justifyContent: 'center' }}>
-              <span style={{ display: 'block', width: '40%', maxWidth: 22, minHeight: 1, borderRadius: '3px 3px 0 0', height: `${(w.created / max) * 100}%`, background: 'var(--bad)' }} />
-              <span style={{ display: 'block', width: '40%', maxWidth: 22, minHeight: 1, borderRadius: '3px 3px 0 0', height: `${(w.closed / max) * 100}%`, background: 'var(--ok)' }} />
-            </div>
-            <div className="subtle" style={{ marginTop: 4 }}>{w.weekStart.slice(5)}</div>
-            <div className="subtle tnum">{w.created}/{w.closed}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function LTTile({ label, lt }: { label: string; lt: LT }) {
   return <Tile label={label} value={lt.count ? `${lt.medianDays}d` : '—'} hint={lt.count ? `median · p90 ${lt.p90Days}d · n=${lt.count}` : 'no data'} />;
 }
@@ -540,10 +519,6 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
             {insights.stuck.items.length ? <AgedTable items={insights.stuck.items} /> : <Empty>Nothing stuck.</Empty>}
           </>
         ) : <Empty>Nothing stuck.</Empty>)}
-      </Section>
-
-      <Section id="trends" title="Bug trends (weekly)">
-        {insightsState ?? (insights?.bugs ? <WeeklyChart weeks={insights.bugs.weekly} /> : <Empty>No bug data.</Empty>)}
       </Section>
 
       <Section id="leadtime" title="Lead time">
