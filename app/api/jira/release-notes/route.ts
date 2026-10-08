@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { extractJiraKeys, isAdminRequest, jiraConfigured, jiraIssuesByKeys } from '@/lib/jira';
+import { extractJiraKeys, canReadJira, jiraConfigured, jiraIssuesByKeys } from '@/lib/jira';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +9,7 @@ const text = (d: any) => [d.notes, d.branch, d.version, d.frontend_branch, d.bac
 // GET /api/jira/release-notes            -> recent deployments that reference Jira tickets (for a picker)
 // GET /api/jira/release-notes?id=<uuid>  -> release notes (markdown + tickets) for one deployment
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
+  if (!canReadJira(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
   try {
     const id = new URL(request.url).searchParams.get('id');
     if (!id) {

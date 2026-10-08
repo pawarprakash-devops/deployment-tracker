@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cached, filterJql, isAdminRequest, jiraConfigured, jiraCount, jiraSearch, JIRA_PROJECTS } from '@/lib/jira';
+import { cached, filterJql, canReadJira, jiraConfigured, jiraCount, jiraSearch, JIRA_PROJECTS } from '@/lib/jira';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -11,7 +11,7 @@ const SORTS: Record<string, string> = {
 // GET /api/jira/search?<filters>&sort=updated|created|oldest|priority|idle&limit=100  (admin session required)
 // Ticket explorer: the filtered issue list plus the total match count.
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
+  if (!canReadJira(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
   if (!jiraConfigured()) return NextResponse.json({ configured: false });
   if (!JIRA_PROJECTS.length) return NextResponse.json({ configured: true, error: 'Set JIRA_PROJECT_KEYS' }, { status: 400 });
   try {

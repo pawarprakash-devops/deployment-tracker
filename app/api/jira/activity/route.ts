@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { cached, isAdminRequest, jiraConfigured, extractJiraKeys, JIRA_PROJECTS } from '@/lib/jira';
+import { cached, canReadJira, jiraConfigured, extractJiraKeys, JIRA_PROJECTS } from '@/lib/jira';
 import { emptyCounts, eventsFromIssues, fetchIssuesWithChangelog, type IssueMeta } from '@/lib/jira-activity';
 import type { ActivityEvent, ActivityResponse } from '@/lib/tickets-types';
 
@@ -16,7 +16,7 @@ const DEPLOY_SQL = `SELECT id, environment, status, branch, version, frontend_br
 
 // GET /api/jira/activity?days=7&limit=300  (admin session required)
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
+  if (!canReadJira(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
   const sp = new URL(request.url).searchParams;
   const days = Math.min(Math.max(parseInt(sp.get('days') || '7', 10) || 7, 1), 30);
   const limit = Math.min(Math.max(parseInt(sp.get('limit') || '300', 10) || 300, 1), 300);

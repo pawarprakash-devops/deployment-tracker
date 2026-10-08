@@ -34,7 +34,7 @@ export function extractJiraKeys(...texts: Array<string | null | undefined>): str
 
 export const isValidKey = (k: string) => /^[A-Z][A-Z0-9]{1,9}-\d{1,6}$/.test(k);
 
-export { isAdminRequest } from './auth';
+export { isAdminRequest, canReadJira, jiraPublicRead } from './auth';
 
 export interface JiraIssue {
   key: string;

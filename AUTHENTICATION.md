@@ -20,6 +20,8 @@ Rules enforced by the middleware, in order:
 >
 > `/api/jira/*`, `/api/admin/stats` and `GET /api/migrate` are exceptions to "every GET is public": they verify the admin session/token themselves (`lib/auth.ts#isAdminRequest`) because they return internal data or mutate data. `GET /api/pipeline` is public for deployment data, but attaches Jira fields (summary, assignee, status) only when `isAdminRequest` is true.
 
+> **Jira data is public by default.** The Tickets tab, `GET /api/jira/*` and the Jira fields on `GET /api/pipeline` (summaries, assignees, reporters, comments, status) are readable without signing in, because the team asked for it. Anyone who can reach the site URL can see that internal ticket data. Set `JIRA_PUBLIC_READ=false` in Vercel (no code change) to require an admin session again. `GET /api/admin/stats` (Insights) and `GET /api/migrate` always need an admin session.
+
 ## Login flow
 
 - `POST /api/auth` with `{"password": "<ADMIN_TOKEN>"}` → sets cookie `tracker_session` (`httpOnly`, `secure` in production, `SameSite=Lax`, 7 days, path `/`).
