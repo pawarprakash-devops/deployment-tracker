@@ -277,11 +277,11 @@ function Pulse({ stats, bugs, days }: { stats: Stats; bugs: BugsResponse | null;
         <Stat first label="Open" value={v(t.open)} hint="all issues" />
         <Stat label="In development" value={v(t.inDevelopment)} />
         <Stat label="Review + QA + passed" value={v(t.inQA)} />
-        <Stat label="Open bugs" value={v(t.openBugs)} />
+        <Stat label="Open bugs" value={bugs ? bugs.open.total : v(t.openBugs)} hint={bugs ? (bugs.truncated ? 'before QA passed (partial)' : 'before QA passed') : undefined} />
         <Stat label="Bugs raised 7d" value={bugD ? bugD.now : '—'} hint={bs.length ? `last ${bs.length} days` : 'no bug data'}
           extra={bs.length ? <><Sparkline values={bs.map((d) => d.created)} label={`Bugs raised per day, last ${bs.length} days`} />{bugD && <Delta now={bugD.now} before={bugD.before} goodWhen="down" />}</> : undefined} />
         <Stat label="Created 7d" value={v(t.createdLast7d)} extra={cD ? <Delta now={cD.now} before={cD.before} goodWhen="up" /> : undefined} hint={cD ? 'vs previous 7d' : undefined} />
-        <Stat label="Done 7d" value={v(t.doneLast7d)} extra={dD ? <Delta now={dD.now} before={dD.before} goodWhen="up" /> : undefined} hint={dD ? 'vs previous 7d' : undefined} />
+        <Stat label="Resolved 7d" value={dD ? dD.now : v(t.doneLast7d)} extra={dD ? <Delta now={dD.now} before={dD.before} goodWhen="up" /> : undefined} hint={dD ? 'QA passed or later · vs previous 7d' : 'done'} />
         <Stat label={`Created ${days}d`} value={v(t.createdInWindow)} />
         <Stat label={`Done ${days}d`} value={v(t.doneInWindow)} />
         <Stat label={`Released to prod ${days}d`} value={v(t.releasedInWindow)} />
@@ -489,11 +489,17 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
       <div className="tkt-graphs">
         <div className="card tkt-wide">
           <div className="card-h"><h2>Bugs raised vs resolved</h2>{daysSel}</div>
+          <div className="subtle" style={{ marginTop: -4, marginBottom: 8 }}>Resolved = reached QA Passed or any later stage.</div>
+          {bugsData?.truncated && (
+            <div role="note" style={{ marginBottom: 8, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--warn-text)', color: 'var(--warn-text)', fontSize: 12 }}>
+              <strong>Note:</strong> Some counts may be incomplete: this window has more tickets than the dashboard fetches. Choose a shorter window for exact numbers.
+            </div>
+          )}
           {bugsBlock(bugsData && <BugFlowChart series={bugsData.bugSeries} height={220} />)}
         </div>
         <div className="tkt-side">
-          <Card title="Open bugs by priority">{bugsBlock(bugsData && <PriorityBars data={bugsData.open.byPriority} />)}</Card>
-          <Card title="Open bugs by age">{bugsBlock(bugsData && <AgeBuckets data={bugsData.open.byAge} />)}</Card>
+          <Card title="Open bugs by priority (not yet QA passed)">{bugsBlock(bugsData && <PriorityBars data={bugsData.open.byPriority} />)}</Card>
+          <Card title="Open bugs by age (not yet QA passed)">{bugsBlock(bugsData && <AgeBuckets data={bugsData.open.byAge} />)}</Card>
         </div>
         <div className="tkt-stage">
         <Card title="Delivery flow">

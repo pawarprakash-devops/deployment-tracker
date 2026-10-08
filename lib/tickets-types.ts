@@ -17,7 +17,7 @@ export interface BugRow {
   reporter: string | null;
   created: string; // ISO
   updated: string; // ISO
-  resolved: string | null;
+  resolved: string | null; // when it reached QA Passed or any later stage (not Jira's resolution date); null while open
   ageDays: number; // whole days since created (or until resolved)
   labels: string[];
   components: string[];
@@ -32,8 +32,9 @@ export interface BugsResponse {
   bugSeries: DayPoint[]; // exactly `days` entries, oldest first, zero-filled
   issueSeries: DayPoint[]; // same for all issue types
   raised: number; // bugs created in the window
-  resolved: number; // bugs resolved in the window
+  resolved: number; // bugs that reached QA Passed or any later stage in the window (not Jira's resolution date)
   open: { total: number; byPriority: { priority: string; count: number }[]; byAge: { bucket: string; count: number }[] };
+  truncated: boolean; // a cap was hit (issue fetch, bug list, or unresolvable changelog): numbers may be understated
   jiraError: string | null;
 }
 
