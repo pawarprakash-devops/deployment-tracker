@@ -169,11 +169,11 @@ export default function ReleaseStats() {
                   ))}
                   <span>Last 14 days, UTC</span>
                 </div>
-                <table style={SR_ONLY}>
+                <div style={SR_ONLY}><table>
                   <caption>Deployments per day, last 14 days</caption>
                   <thead><tr><th scope="col">Day</th><th scope="col">Success</th><th scope="col">Failed</th><th scope="col">Other</th><th scope="col">Total</th></tr></thead>
                   <tbody>{stats.days.map((d) => <tr key={d.date}><th scope="row">{d.label}</th><td>{d.success}</td><td>{d.failed}</td><td>{d.other}</td><td>{d.total}</td></tr>)}</tbody>
-                </table>
+                </table></div>
               </>
             )}
           </div>

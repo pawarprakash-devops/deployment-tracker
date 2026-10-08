@@ -2,7 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import AdminGate from './AdminGate';
-import { Card, Tile, Pill, Chip, Skeleton, Empty, ErrorNote, fmtDate, fmtDateTime } from './ui';
+import { Card, Tile, Skeleton, Empty, ErrorNote, fmtDate, fmtDateTime } from './ui';
+import { BugFlowChart, PriorityBars, AgeBuckets, StageBars, Sparkline, Delta } from './tickets/Charts';
+import RecentBugs from './tickets/RecentBugs';
+import ActivityLog from './tickets/ActivityLog';
+import type { BugsResponse, DayPoint } from '@/lib/tickets-types';
 
 // ---- types (mirror lib/jira.ts + app/api/jira/* response shapes) ------------------------------------
 interface Issue { key: string; summary: string; status: string; statusCategory: string; type: string; priority: string | null; assignee: string | null; reporter?: string | null; labels?: string[]; created?: string; updated?: string; url: string }
@@ -196,6 +200,97 @@ function MultiSelect({ label, options, value, onChange }: { label: string; optio
   );
 }
 
+
+// ---- layout helpers ---------------------------------------------------------------------------------
+const b34: CSSProperties = { height: 34 };
+const CSS = `
+.v2 .tkt-sum { list-style: none; cursor: pointer; min-height: 34px; align-items: center; margin: 0; user-select: none; }
+.v2 .tkt-sum::-webkit-details-marker { display: none; }
+.v2 .tkt-sum:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--r-xs); }
+.v2 .tkt-caret { display: inline-block; width: 14px; transition: transform var(--dur-fast); }
+.v2 details[open] > .tkt-sum .tkt-caret { transform: rotate(90deg); }
+.v2 .tkt-body { margin-top: var(--space-3); }
+.v2 .tkt-graphs { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr); }
+.v2 .tkt-side { display: grid; gap: var(--space-4); align-content: start; }
+.v2 .tkt-two { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1100px) {
+  .v2 .tkt-graphs { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-areas: 'flow side' 'stage side'; }
+  .v2 .tkt-wide { grid-area: flow; }
+  .v2 .tkt-side { grid-area: side; }
+  .v2 .tkt-stage { grid-area: stage; }
+  .v2 .tkt-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .v2 .tkt-caret { transition: none; } }
+`;
+
+// Native disclosure; open state is remembered per section in localStorage (read after mount).
+function Section({ id, title, meta, defaultOpen = false, children }: { id: string; title: string; meta?: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const ready = useRef(false);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try { const v = localStorage.getItem(`tickets-open-${id}`); if (v === '1' || v === '0') setOpen(v === '1'); } catch { /* storage blocked */ }
+      ready.current = true;
+    }, 0);
+    return () => clearTimeout(t);
+  }, [id]);
+  return (
+    <details className="panel-quiet" open={open} onToggle={(e) => {
+      const o = e.currentTarget.open;
+      if (!ready.current || o === open) return;
+      setOpen(o);
+      try { localStorage.setItem(`tickets-open-${id}`, o ? '1' : '0'); } catch { /* storage blocked */ }
+    }}>
+      <summary className="section-h tkt-sum">
+        <span><span className="tkt-caret" aria-hidden="true">▸</span><h2 style={{ display: 'inline' }}>{title}</h2></span>
+        {meta != null && <span className="meta">{meta}</span>}
+      </summary>
+      <div className="tkt-body">{children}</div>
+    </details>
+  );
+}
+
+function Stat({ label, value, hint, first, extra }: { label: string; value: React.ReactNode; hint?: React.ReactNode; first?: boolean; extra?: React.ReactNode }) {
+  return (
+    <div style={{ minWidth: 0, paddingLeft: first ? 0 : 12, borderLeft: first ? 'none' : '1px solid var(--border)' }}>
+      <div className="subtle" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={typeof label === 'string' ? label : undefined}>{label}</div>
+      <div className="tnum" style={{ fontSize: 22, lineHeight: '30px', fontWeight: 700, fontFamily: 'var(--font-data)' }}>{value}</div>
+      {extra && <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 28 }}>{extra}</div>}
+      {hint != null && <div className="subtle">{hint}</div>}
+    </div>
+  );
+}
+
+const sumOf = (s: DayPoint[], k: 'created' | 'resolved') => s.reduce((a, d) => a + d[k], 0);
+
+// Compact "Ticket pulse": existing KPI numbers as divider-separated stat blocks + trend extras.
+function Pulse({ stats, bugs, days }: { stats: Stats; bugs: BugsResponse | null; days: number }) {
+  const t = stats.totals || {};
+  const bs = bugs?.bugSeries || [];
+  const is = bugs?.issueSeries || [];
+  const two = (s: DayPoint[], k: 'created' | 'resolved') => (s.length >= 14 ? { now: sumOf(s.slice(-7), k), before: sumOf(s.slice(-14, -7), k) } : null);
+  const bugD = two(bs, 'created'), cD = two(is, 'created'), dD = two(is, 'resolved');
+  const v = (n: number | undefined) => n ?? '—';
+  return (
+    <Card title="Ticket pulse">
+      <div role="group" aria-label="Ticket counts" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', rowGap: 14, columnGap: 8 }}>
+        <Stat first label="Open" value={v(t.open)} hint="all issues" />
+        <Stat label="In development" value={v(t.inDevelopment)} />
+        <Stat label="Review + QA + passed" value={v(t.inQA)} />
+        <Stat label="Open bugs" value={v(t.openBugs)} />
+        <Stat label="Bugs raised 7d" value={bugD ? bugD.now : '—'} hint={bs.length ? `last ${bs.length} days` : 'no bug data'}
+          extra={bs.length ? <><Sparkline values={bs.map((d) => d.created)} label={`Bugs raised per day, last ${bs.length} days`} />{bugD && <Delta now={bugD.now} before={bugD.before} goodWhen="down" />}</> : undefined} />
+        <Stat label="Created 7d" value={v(t.createdLast7d)} extra={cD ? <Delta now={cD.now} before={cD.before} goodWhen="up" /> : undefined} hint={cD ? 'vs previous 7d' : undefined} />
+        <Stat label="Done 7d" value={v(t.doneLast7d)} extra={dD ? <Delta now={dD.now} before={dD.before} goodWhen="up" /> : undefined} hint={dD ? 'vs previous 7d' : undefined} />
+        <Stat label={`Created ${days}d`} value={v(t.createdInWindow)} />
+        <Stat label={`Done ${days}d`} value={v(t.doneInWindow)} />
+        <Stat label={`Released to prod ${days}d`} value={v(t.releasedInWindow)} />
+      </div>
+      <div className="subtle" style={{ marginTop: 12 }}>Counts cover all issues in {stats.projects?.join(', ')}. “Done” = moved into {stats.doneStatuses?.length ? stats.doneStatuses.join(', ') : 'a resolved state'} within the window (override with <code>JIRA_DONE_STATUSES</code>).</div>
+    </Card>
+  );
+}
+
 // ---- main -------------------------------------------------------------------------------------------
 export default function TicketsTab() {
   return <AdminGate title="Tickets (Jira)"><Tickets /></AdminGate>;
@@ -203,19 +298,24 @@ export default function TicketsTab() {
 
 function Tickets() {
   const [days, setDays] = useState(30);
+  const [bugDays, setBugDays] = useState(30);
   const [stuckDays, setStuckDays] = useState(5);
   const [sort, setSort] = useState('updated');
   const [filters, setFilters] = useState<Filters>(initialFilters); // what the bar shows
   const [applied, setApplied] = useState<Filters>(initialFilters); // what the dashboard is loaded with
+  const [filtersOpen, setFiltersOpen] = useState(() => activeCount(initialFilters()) > 0);
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [optionsErr, setOptionsErr] = useState<string | null>(null);
   const [res, setRes] = useState<Loaded | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bugs, setBugs] = useState<Res<BugsResponse> | null>(null);
+  const [tick, setTick] = useState(0); // bumps on refresh so the self-fetching ActivityLog reloads
   const [notesId, setNotesId] = useState('');
   const [notesMd, setNotesMd] = useState('');
   const [notesErr, setNotesErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const seq = useRef(0);
+  const bugSeq = useRef(0);
 
   const load = useCallback(async (fresh = false) => {
     const mine = ++seq.current;
@@ -233,7 +333,21 @@ function Tickets() {
     setLoading(false);
   }, [days, stuckDays, applied, sort]);
 
+  const loadBugs = useCallback(async () => {
+    const mine = ++bugSeq.current;
+    const r = await api<BugsResponse>(`/api/jira/bugs?days=${bugDays}`);
+    if (mine !== bugSeq.current) return;
+    setBugs(r);
+  }, [bugDays]);
+
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadBugs(); }, [loadBugs]);
+  useEffect(() => {
+    const on = () => { setTick((n) => n + 1); void loadBugs(); };
+    window.addEventListener('tracker:refresh', on);
+    window.addEventListener('tracker:auth-changed', on);
+    return () => { window.removeEventListener('tracker:refresh', on); window.removeEventListener('tracker:auth-changed', on); };
+  }, [loadBugs]);
 
   useEffect(() => {
     let alive = true;
@@ -256,6 +370,7 @@ function Tickets() {
     } catch { /* URL sync is best effort */ }
   };
   const iso = (d: number) => new Date(Date.now() - d * DAY).toISOString().slice(0, 10);
+  const refresh = () => { setLoading(true); setTick((n) => n + 1); void load(true); void loadBugs(); };
 
   const loadNotes = async (id: string) => {
     setNotesId(id); setNotesMd(''); setCopied(false); setNotesErr(null);
@@ -271,7 +386,6 @@ function Tickets() {
   const explorer = res?.explorer.data;
   const notesList = res?.notes.data?.deployments || [];
   const now = res?.now || 0;
-  const t = stats?.totals;
   const notConfigured = stats?.configured === false;
   const envs = deployed
     ? ENV_ORDER.filter((e) => deployed.tickets.some((x) => x.environments[e])).concat([...new Set(deployed.tickets.flatMap((x) => Object.keys(x.environments)))].filter((e) => !ENV_ORDER.includes(e)))
@@ -282,10 +396,29 @@ function Tickets() {
   const nApplied = activeCount(applied);
   const autoGrid = (min: number): CSSProperties => ({ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}px, 100%), 1fr))` });
 
+  const bugsData = bugs?.data;
+  const bugsBlock = (body: React.ReactNode) => {
+    if (!bugs) return <Skeleton variant="tile" height={150} />;
+    if (bugs.error) return <ErrorNote onRetry={() => void loadBugs()}>Bug data: {bugs.error}</ErrorNote>;
+    if (bugsData && !bugsData.configured) return <Empty>Jira is not configured, so bug charts are unavailable.</Empty>;
+    return <>{bugsData?.jiraError && <ErrorNote onRetry={() => void loadBugs()}>Jira: {bugsData.jiraError}</ErrorNote>}{body}</>;
+  };
+  const insightsState = !res ? <Skeleton rows={3} /> : (res.insights.error || insights?.error) ? <ErrorNote onRetry={refresh}>Insights: {res.insights.error || insights?.error}</ErrorNote> : null;
+  const daysSel = (
+    <select style={ctl} value={bugDays} onChange={(e) => { setBugs(null); setBugDays(Number(e.target.value)); }} aria-label="Bug chart window">
+      {[7, 14, 30, 60].map((d) => <option key={d} value={d}>{d} days</option>)}
+    </select>
+  );
+
   return (
     <div className="stack" style={{ marginTop: 0 }}>
-      <div style={{ ...row, justifyContent: 'space-between' }}>
-        <div className="subtle">Delivery tickets and what has shipped to each environment{stats?.projects ? ` · ${stats.projects.join(', ')}` : ''}</div>
+      <style>{CSS}</style>
+      <div className="page-h" style={{ marginBottom: 0 }}>
+        <h1>Tickets</h1>
+        <p>What was just raised, what is moving, what is stuck{stats?.projects ? ` · ${stats.projects.join(', ')}` : ''}</p>
+      </div>
+
+      <div role="toolbar" aria-label="Ticket view controls" style={{ ...row, justifyContent: 'space-between' }}>
         <div style={row}>
           <select style={ctl} value={days} onChange={(e) => { setLoading(true); setDays(Number(e.target.value)); }} aria-label="Window">
             {[7, 14, 30, 60, 90].map((d) => <option key={d} value={d}>Last {d} days</option>)}
@@ -293,41 +426,48 @@ function Tickets() {
           <select style={ctl} value={stuckDays} onChange={(e) => { setLoading(true); setStuckDays(Number(e.target.value)); }} aria-label="Stuck threshold">
             {[3, 5, 7, 14, 30].map((d) => <option key={d} value={d}>Stuck ≥ {d}d</option>)}
           </select>
-          <button type="button" className="btn" style={{ height: 34 }} onClick={() => { setLoading(true); void load(true); }} disabled={loading}>{loading ? 'Loading…' : '↺ Refresh'}</button>
+          <button type="button" className="btn" style={b34} onClick={refresh} disabled={loading}>{loading ? 'Loading…' : '↺ Refresh'}</button>
         </div>
+        <button type="button" className="btn" style={{ ...b34, display: 'inline-flex', alignItems: 'center', gap: 8 }} aria-expanded={filtersOpen} aria-controls="tkt-filters" onClick={() => setFiltersOpen(!filtersOpen)}>
+          <span aria-hidden="true">{filtersOpen ? '▾' : '▸'}</span> Filters
+          {nApplied > 0 && <span className="vchip" aria-label={`${nApplied} filter${nApplied === 1 ? '' : 's'} applied`}>{nApplied}</span>}
+        </button>
       </div>
 
-      <section aria-label="Filters" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: 'var(--pad-card)', position: 'relative', zIndex: 5, display: 'grid', gap: 8 }}>
-        {optionsErr && <ErrorNote>Filter options: {optionsErr}</ErrorNote>}
-        <div style={row}>
-          <MultiSelect label="Assignee" options={[{ id: 'unassigned', name: 'Unassigned' }, ...people]} value={filters.assignee} onChange={set('assignee')} />
-          <MultiSelect label="Reported by" options={people} value={filters.reporter} onChange={set('reporter')} />
-          <MultiSelect label="Type" options={opt(options?.types)} value={filters.type} onChange={set('type')} />
-          <MultiSelect label="Priority" options={opt(options?.priorities)} value={filters.priority} onChange={set('priority')} />
-          <MultiSelect label="Status" options={opt(options?.statuses)} value={filters.status} onChange={set('status')} />
-          <MultiSelect label="Label" options={opt(options?.labels)} value={filters.label} onChange={set('label')} />
-          <MultiSelect label="Component" options={opt(options?.components)} value={filters.component} onChange={set('component')} />
-          <MultiSelect label="Fix version" options={opt(options?.versions)} value={filters.version} onChange={set('version')} />
-        </div>
-        <div style={row}>
-          <label className="muted" style={{ ...row, flexWrap: 'nowrap', fontSize: 'var(--fs-xs)' }}>Created from <input type="date" style={ctl} value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
-          <label className="muted" style={{ ...row, flexWrap: 'nowrap', fontSize: 'var(--fs-xs)' }}>to <input type="date" style={ctl} value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
-          <input type="text" aria-label="Search text" placeholder="Search text (summary, description, comments)…" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && apply(filters)} style={{ ...ctl, flex: '1 1 220px', minWidth: 0 }} />
-          <button type="button" className="btn" aria-pressed="true" style={{ height: 34 }} onClick={() => apply(filters)}>Apply filters</button>
-          <button type="button" className="btn" style={{ height: 34 }} onClick={() => apply(EMPTY)} disabled={activeCount(filters) === 0 && nApplied === 0}>Clear</button>
-        </div>
+      <section aria-label="Filters" style={{ display: 'grid', gap: 8 }}>
+        {filtersOpen && (
+          <div id="tkt-filters" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: 'var(--pad-card)', position: 'relative', zIndex: 5, display: 'grid', gap: 8 }}>
+            {optionsErr && <ErrorNote>Filter options: {optionsErr}</ErrorNote>}
+            <div style={row}>
+              <MultiSelect label="Assignee" options={[{ id: 'unassigned', name: 'Unassigned' }, ...people]} value={filters.assignee} onChange={set('assignee')} />
+              <MultiSelect label="Reported by" options={people} value={filters.reporter} onChange={set('reporter')} />
+              <MultiSelect label="Type" options={opt(options?.types)} value={filters.type} onChange={set('type')} />
+              <MultiSelect label="Priority" options={opt(options?.priorities)} value={filters.priority} onChange={set('priority')} />
+              <MultiSelect label="Status" options={opt(options?.statuses)} value={filters.status} onChange={set('status')} />
+              <MultiSelect label="Label" options={opt(options?.labels)} value={filters.label} onChange={set('label')} />
+              <MultiSelect label="Component" options={opt(options?.components)} value={filters.component} onChange={set('component')} />
+              <MultiSelect label="Fix version" options={opt(options?.versions)} value={filters.version} onChange={set('version')} />
+            </div>
+            <div style={row}>
+              <label className="muted" style={{ ...row, flexWrap: 'nowrap', fontSize: 'var(--fs-xs)' }}>Created from <input type="date" style={ctl} value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
+              <label className="muted" style={{ ...row, flexWrap: 'nowrap', fontSize: 'var(--fs-xs)' }}>to <input type="date" style={ctl} value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
+              <input type="text" aria-label="Search text" placeholder="Search text (summary, description, comments)…" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && apply(filters)} style={{ ...ctl, flex: '1 1 220px', minWidth: 0 }} />
+              <button type="button" className="btn" aria-pressed="true" style={b34} onClick={() => apply(filters)}>Apply filters</button>
+              <button type="button" className="btn" style={b34} onClick={() => apply(EMPTY)} disabled={activeCount(filters) === 0 && nApplied === 0}>Clear</button>
+            </div>
+          </div>
+        )}
         <div style={row}>
           <span className="subtle">Quick:</span>
-          <button type="button" className="btn" style={{ height: 34 }} onClick={() => apply({ ...EMPTY, type: ['Bug'] })}>Bugs</button>
-          <button type="button" className="btn" style={{ height: 34 }} onClick={() => apply({ ...EMPTY, assignee: ['unassigned'] })}>Unassigned</button>
-          <button type="button" className="btn" style={{ height: 34 }} onClick={() => apply({ ...EMPTY, from: iso(7) })}>Created last 7d</button>
-          <button type="button" className="btn" style={{ height: 34 }} onClick={() => apply({ ...EMPTY, type: ['Bug'], from: iso(7) })}>New bugs (7d)</button>
-          <button type="button" className="btn" style={{ height: 34 }} onClick={() => apply({ ...EMPTY, type: ['Bug'], priority: ['Highest', 'High'] })}>High-priority bugs</button>
-          {nApplied > 0 && <span className="subtle">· {nApplied} filter{nApplied === 1 ? '' : 's'} applied to every section below (sprint panel and tickets-by-environment are not filtered)</span>}
+          <button type="button" className="btn" style={b34} onClick={() => apply({ ...EMPTY, type: ['Bug'] })}>Bugs</button>
+          <button type="button" className="btn" style={b34} onClick={() => apply({ ...EMPTY, assignee: ['unassigned'] })}>Unassigned</button>
+          <button type="button" className="btn" style={b34} onClick={() => apply({ ...EMPTY, from: iso(7) })}>Created last 7d</button>
+          <button type="button" className="btn" style={b34} onClick={() => apply({ ...EMPTY, type: ['Bug'], from: iso(7) })}>New bugs (7d)</button>
+          <button type="button" className="btn" style={b34} onClick={() => apply({ ...EMPTY, type: ['Bug'], priority: ['Highest', 'High'] })}>High-priority bugs</button>
+          {nApplied > 0 && <button type="button" className="btn" style={b34} onClick={() => apply(EMPTY)}>Clear filters</button>}
+          {nApplied > 0 && <span className="subtle">{nApplied} filter{nApplied === 1 ? '' : 's'} applied to the pulse, stuck, ready-to-ship and explorer (sprint panel, bug charts and tickets-by-environment are not filtered)</span>}
         </div>
       </section>
-
-      {loading && !res && <Skeleton rows={5} />}
 
       {notConfigured && (
         <Card title="Jira is not configured">
@@ -339,90 +479,115 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
         </Card>
       )}
 
-      {res?.stats.error && <ErrorNote>Metrics: {res.stats.error}</ErrorNote>}
-      {stats?.configured && stats.error && <ErrorNote>Metrics: {stats.error}</ErrorNote>}
+      {/* (2) pulse */}
+      {!res && <Skeleton variant="tile" height={150} />}
+      {res?.stats.error && <ErrorNote onRetry={refresh}>Metrics: {res.stats.error}</ErrorNote>}
+      {stats?.configured && stats.error && <ErrorNote onRetry={refresh}>Metrics: {stats.error}</ErrorNote>}
+      {stats?.totals && <Pulse stats={stats} bugs={bugsData || null} days={days} />}
 
-      {t && stats && (
-        <>
-          <div style={autoGrid(150)}>
-            {([['Open', t.open], ['In development', t.inDevelopment], ['Review + QA + passed', t.inQA], ['Open bugs', t.openBugs],
-              ['Created 7d', t.createdLast7d], ['Done 7d', t.doneLast7d], [`Created ${days}d`, t.createdInWindow], [`Done ${days}d`, t.doneInWindow], [`Released to prod ${days}d`, t.releasedInWindow]] as [string, number | undefined][]).map(([l, v]) => (
-              <Tile key={l} label={l} value={v ?? '—'} />
-            ))}
-          </div>
-          <div className="subtle">Counts cover all issues in {stats.projects?.join(', ')}. “Done” = moved into {stats.doneStatuses?.length ? stats.doneStatuses.join(', ') : 'a resolved state'} within the window (override with <code>JIRA_DONE_STATUSES</code>).</div>
+      {/* (3) graph row */}
+      <div className="tkt-graphs">
+        <div className="card tkt-wide">
+          <div className="card-h"><h2>Bugs raised vs resolved</h2>{daysSel}</div>
+          {bugsBlock(bugsData && <BugFlowChart series={bugsData.bugSeries} height={220} />)}
+        </div>
+        <div className="tkt-side">
+          <Card title="Open bugs by priority">{bugsBlock(bugsData && <PriorityBars data={bugsData.open.byPriority} />)}</Card>
+          <Card title="Open bugs by age">{bugsBlock(bugsData && <AgeBuckets data={bugsData.open.byAge} />)}</Card>
+        </div>
+        <div className="tkt-stage">
+        <Card title="Delivery flow">
+          {!res ? <Skeleton rows={4} /> : res.stats.error ? <ErrorNote onRetry={refresh}>Metrics: {res.stats.error}</ErrorNote>
+            : <StageBars stages={(stats?.byStage || []).map((s) => ({ name: s.name, count: s.value }))} />}
+        </Card>
+        </div>
+      </div>
 
-          {(stats.sprints || []).map((sp) => {
-            const left = sp.endDate && now ? Math.ceil((new Date(sp.endDate).getTime() - now) / DAY) : null;
-            return (
-              <Card key={sp.name} title={`Active sprint · ${sp.name} (${sp.boardName})`}>
-                <div className="subtle" style={{ marginBottom: 8 }}>
-                  {sp.startDate && fmtDate(sp.startDate)} → {sp.endDate && fmtDate(sp.endDate)}
-                  {left !== null && ` · ${left >= 0 ? `${left} day${left === 1 ? '' : 's'} left` : `ended ${-left} day(s) ago`}`} · {sp.total} issues
-                  {sp.goal ? ` · Goal: ${sp.goal}` : ''}
-                </div>
-                <div style={autoGrid(280)}>
-                  <div><h3 style={subHead}>By stage</h3><Bars data={sp.byStage} /></div>
-                  <div><h3 style={subHead}>By status</h3><Bars data={sp.byStatus} /></div>
-                </div>
+      {/* (4) what was raised / what is moving */}
+      <div className="tkt-two">
+        <section className="card" aria-label="Recent bugs">
+          <RecentBugs bugs={bugsData?.recent ?? null} loading={!bugs} error={bugs?.error || null} onRetry={() => void loadBugs()} days={bugDays} />
+        </section>
+        <section className="card" aria-label="Activity">
+          <ActivityLog key={tick} days={bugDays} />
+        </section>
+      </div>
+
+      {/* (5) detail disclosures */}
+      <Section id="ready" title="Ready to ship" meta={insights?.readyToShip ? `${insights.readyToShip.total} in ${insights.readyToShip.statuses.join(', ') || 'QA Passed'}` : undefined}>
+        {insightsState ?? (insights?.readyToShip ? (
+          <>
+            <div className="subtle" style={{ marginBottom: 8 }}>Oldest first (showing {insights.readyToShip.shownOldestFirst}). {insights.readyToShip.notInProd} of these have not been seen in a Production deployment. “Idle” = days since the ticket was last updated.</div>
+            <AgedTable items={insights.readyToShip.items} showEnv />
+          </>
+        ) : <Empty>Nothing ready to ship.</Empty>)}
+      </Section>
+
+      <Section id="stuck" title="Stuck tickets" meta={insights?.stuck ? `${insights.stuck.total} idle ≥ ${insights.stuckDays} days` : undefined}>
+        {insightsState ?? (insights?.stuck ? (
+          <>
+            <div className="subtle" style={{ marginBottom: 8 }}>In {insights.stuck.statuses.join(', ')} with no update for {insights.stuckDays}+ days (oldest first, top 40).</div>
+            {insights.stuck.items.length ? <AgedTable items={insights.stuck.items} /> : <Empty>Nothing stuck.</Empty>}
+          </>
+        ) : <Empty>Nothing stuck.</Empty>)}
+      </Section>
+
+      <Section id="trends" title="Bug trends (weekly)">
+        {insightsState ?? (insights?.bugs ? <WeeklyChart weeks={insights.bugs.weekly} /> : <Empty>No bug data.</Empty>)}
+      </Section>
+
+      <Section id="leadtime" title="Lead time">
+        {insightsState ?? (insights?.leadTime ? (
+          <>
+            <div className="subtle" style={{ marginBottom: 8 }}>Tasks/stories/bugs done in the last {insights.leadTime.windowDays} days, {insights.leadTime.sampled} sampled; sub-tasks and epics excluded.</div>
+            <div style={autoGrid(150)}>
+              <LTTile label="Created → done (all)" lt={insights.leadTime.overall} />
+              {Object.entries(insights.leadTime.byType).filter(([, v]) => v.count >= 3).slice(0, 4).map(([k, v]) => <LTTile key={k} label={k} lt={v} />)}
+              <LTTile label="Created → first prod deploy" lt={insights.leadTime.createdToProd} />
+            </div>
+          </>
+        ) : <Empty>No lead-time data.</Empty>)}
+      </Section>
+
+      <Section id="sprint" title="Active sprint" meta={stats?.sprints?.length ? stats.sprints.map((s) => s.name).join(', ') : undefined}>
+        {!res ? <Skeleton rows={3} /> : (
+          <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
+            {(stats?.sprints || []).map((sp) => {
+              const left = sp.endDate && now ? Math.ceil((new Date(sp.endDate).getTime() - now) / DAY) : null;
+              return (
+                <Card key={sp.name} title={`${sp.name} (${sp.boardName})`}>
+                  <div className="subtle" style={{ marginBottom: 8 }}>
+                    {sp.startDate && fmtDate(sp.startDate)} → {sp.endDate && fmtDate(sp.endDate)}
+                    {left !== null && ` · ${left >= 0 ? `${left} day${left === 1 ? '' : 's'} left` : `ended ${-left} day(s) ago`}`} · {sp.total} issues
+                    {sp.goal ? ` · Goal: ${sp.goal}` : ''}
+                  </div>
+                  <div style={autoGrid(280)}>
+                    <div><h3 style={subHead}>By stage</h3><Bars data={sp.byStage} /></div>
+                    <div><h3 style={subHead}>By status</h3><Bars data={sp.byStatus} /></div>
+                  </div>
+                </Card>
+              );
+            })}
+            {stats?.sprintError && <div className="subtle">Sprint data unavailable: {stats.sprintError}</div>}
+            {!stats?.sprints?.length && !stats?.sprintError && <Empty>No active sprint.</Empty>}
+            {stats && (
+              <div style={autoGrid(280)}>
+                <Card title="By status (all)"><Bars data={stats.byStatus || []} /></Card>
+                <Card title={`Open by assignee (latest ${stats.assigneeSampled ?? 0} updated)`}><Bars data={stats.byAssignee || []} /></Card>
+              </div>
+            )}
+            {stats && (
+              <Card title="Open bugs">
+                {stats.openBugs && stats.openBugs.length ? <IssueTable issues={stats.openBugs} /> : <Empty>No open bugs.</Empty>}
               </Card>
-            );
-          })}
-          {stats.sprintError && <div className="subtle">Sprint data unavailable: {stats.sprintError}</div>}
-
-          <div style={autoGrid(280)}>
-            <Card title="By stage (all issues)"><Bars data={stats.byStage || []} /></Card>
-            <Card title="By status (all)"><Bars data={stats.byStatus || []} /></Card>
-            <Card title={`Open by assignee (latest ${stats.assigneeSampled ?? 0} updated)`}><Bars data={stats.byAssignee || []} /></Card>
+            )}
           </div>
+        )}
+      </Section>
 
-          <Card title="Open bugs">
-            {stats.openBugs && stats.openBugs.length ? <IssueTable issues={stats.openBugs} /> : <Empty>No open bugs.</Empty>}
-          </Card>
-        </>
-      )}
-
-      {res?.insights.error && <ErrorNote>Insights: {res.insights.error}</ErrorNote>}
-      {insights?.error && <ErrorNote>Insights: {insights.error}</ErrorNote>}
-
-      {insights?.readyToShip && (
-        <Card title={`Ready to ship · ${insights.readyToShip.total} in ${insights.readyToShip.statuses.join(', ') || 'QA Passed'}`}>
-          <div className="subtle" style={{ marginBottom: 8 }}>Oldest first (showing {insights.readyToShip.shownOldestFirst}). {insights.readyToShip.notInProd} of these have not been seen in a Production deployment. “Idle” = days since the ticket was last updated.</div>
-          <AgedTable items={insights.readyToShip.items} showEnv />
-        </Card>
-      )}
-
-      {insights?.stuck && (
-        <Card title={`Stuck tickets · ${insights.stuck.total} idle ≥ ${insights.stuckDays} days`}>
-          <div className="subtle" style={{ marginBottom: 8 }}>In {insights.stuck.statuses.join(', ')} with no update for {insights.stuckDays}+ days (oldest first, top 40).</div>
-          {insights.stuck.items.length ? <AgedTable items={insights.stuck.items} /> : <Empty>Nothing stuck.</Empty>}
-        </Card>
-      )}
-
-      {insights?.bugs && (
-        <Card title="Bug trends">
-          <WeeklyChart weeks={insights.bugs.weekly} />
-          <div style={{ ...autoGrid(280), marginTop: 14 }}>
-            <div><h3 style={subHead}>Open bugs by priority</h3><Bars data={insights.bugs.byPriority} /></div>
-            <div><h3 style={subHead}>Open bugs by age</h3><Bars data={insights.bugs.byAge} /></div>
-          </div>
-        </Card>
-      )}
-
-      {insights?.leadTime && (
-        <Card title="Lead time">
-          <div className="subtle" style={{ marginBottom: 8 }}>Tasks/stories/bugs done in the last {insights.leadTime.windowDays} days, {insights.leadTime.sampled} sampled; sub-tasks and epics excluded.</div>
-          <div style={autoGrid(150)}>
-            <LTTile label="Created → done (all)" lt={insights.leadTime.overall} />
-            {Object.entries(insights.leadTime.byType).filter(([, v]) => v.count >= 3).slice(0, 4).map(([k, v]) => <LTTile key={k} label={k} lt={v} />)}
-            <LTTile label="Created → first prod deploy" lt={insights.leadTime.createdToProd} />
-          </div>
-        </Card>
-      )}
-
-      <Card title="Release notes">
+      <Section id="notes" title="Release notes" defaultOpen>
         <div className="subtle" style={{ marginBottom: 8 }}>Pick a deployment that references Jira tickets; copy the markdown into release notes or chat.</div>
-        {res?.notes.error && <ErrorNote>Release notes: {res.notes.error}</ErrorNote>}
+        {res?.notes.error && <ErrorNote onRetry={refresh}>Release notes: {res.notes.error}</ErrorNote>}
         <select style={{ ...ctl, maxWidth: '100%' }} aria-label="Deployment" value={notesId} onChange={(e) => void loadNotes(e.target.value)}>
           <option value="">Select a deployment…</option>
           {notesList.map((n) => <option key={n.id} value={n.id}>{n.environment} · {fmtDateTime(n.started_at)} · {n.keys.join(', ')}</option>)}
@@ -431,80 +596,81 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
         {notesMd && (
           <div style={{ marginTop: 8 }}>
             <pre style={{ background: 'var(--panel-2)', padding: 12, borderRadius: 'var(--r-sm)', overflow: 'auto', maxHeight: 360, fontSize: 'var(--fs-xs)', margin: '0 0 8px' }}>{notesMd}</pre>
-            <button type="button" className="btn" style={{ height: 34 }} onClick={() => void copyNotes()}>{copied ? 'Copied ✓' : 'Copy markdown'}</button>
+            <button type="button" className="btn" style={b34} onClick={() => void copyNotes()}>{copied ? 'Copied ✓' : 'Copy markdown'}</button>
           </div>
         )}
         {res && !res.notes.error && notesList.length === 0 && <Empty>No deployments with Jira keys yet. They appear once deploys carry <code>Jira: VID-123</code> in their notes.</Empty>}
-      </Card>
+      </Section>
 
-      {res?.explorer.error && <ErrorNote>Tickets: {res.explorer.error}</ErrorNote>}
-      {explorer && (
-        <Card title="Tickets" action={explorer.total !== undefined ? <Chip>{explorer.total} match{explorer.total === 1 ? '' : 'es'}{explorer.shown < explorer.total ? ` (showing ${explorer.shown})` : ''}</Chip> : undefined}>
-          {explorer.error && <ErrorNote>{explorer.error}</ErrorNote>}
-          <div style={{ ...row, marginBottom: 8 }}>
-            <select style={ctl} value={sort} onChange={(e) => { setLoading(true); setSort(e.target.value); }} aria-label="Sort">
-              <option value="updated">Recently updated</option><option value="created">Newest first</option><option value="oldest">Oldest first</option>
-              <option value="priority">Priority</option><option value="idle">Longest idle</option>
-            </select>
-            <button type="button" className="btn" style={{ height: 34 }} onClick={() => exportCsv(explorer.issues)} disabled={!explorer.issues?.length}>Export CSV</button>
-          </div>
-          {explorer.issues?.length ? (
-            <div style={scroll}>
-              <table style={{ minWidth: 960 }}>
-                <thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Priority</th><th>Assignee</th><th>Reporter</th><th>Labels</th><th>Created</th><th style={{ textAlign: 'center' }}>Idle</th></tr></thead>
-                <tbody>
-                  {explorer.issues.map((i) => (
-                    <tr key={i.key}>
-                      <td><KeyLink i={i} /></td><td>{i.summary}</td><td>{i.type}</td>
-                      <td><StatusText status={i.status} category={i.statusCategory} /></td>
-                      <td>{i.priority || '—'}</td>
-                      <td>{i.assignee || <Faint>Unassigned</Faint>}</td>
-                      <td>{i.reporter || '—'}</td>
-                      <td className="muted">{(i.labels || []).join(', ')}</td>
-                      <td className="muted" style={{ whiteSpace: 'nowrap' }}>{i.created ? fmtDate(i.created) : '—'}</td>
-                      <td className="muted tnum" style={{ textAlign: 'center' }}>{idleDays(i.updated, now) ?? '—'}d</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <Section id="env" title="Tickets by environment">
+        {!res ? <Skeleton rows={3} /> : res.deployed.error ? <ErrorNote onRetry={refresh}>Tickets by environment: {res.deployed.error}</ErrorNote> : deployed && (
+          <>
+            <div className="subtle" style={{ marginBottom: 8 }}>Jira keys found in notes, branches, versions and ticket links of the last 300 successful deployments. ✓ = deployed there.</div>
+            {deployed.error && <ErrorNote>{deployed.error}</ErrorNote>}
+            {deployed.jiraError && <ErrorNote>Jira lookup failed: {deployed.jiraError}</ErrorNote>}
+            {deployed.tickets.length === 0 ? <Empty>No Jira keys found in recent deployments.</Empty> : (
+              <div style={scroll}>
+                <table style={{ minWidth: 640 }}>
+                  <thead><tr><th>Ticket</th><th>Summary</th><th>Status</th>{envs.map((e) => <th key={e} style={{ textAlign: 'center' }}>{e}</th>)}</tr></thead>
+                  <tbody>
+                    {deployed.tickets.map(({ key, environments }) => {
+                      const i = deployed.issues[key];
+                      return (
+                        <tr key={key}>
+                          <td>{i ? <KeyLink i={i} /> : <span className="key">{key}</span>}</td>
+                          <td>{i?.summary || <Faint>—</Faint>}</td>
+                          <td>{i ? <StatusText status={i.status} category={i.statusCategory} /> : '—'}</td>
+                          {envs.map((e) => (
+                            <td key={e} style={{ textAlign: 'center', color: 'var(--ok-text)', fontWeight: 700 }} title={environments[e] ? fmtDateTime(environments[e]) : ''}>
+                              {environments[e] ? <><span aria-hidden="true">✓</span><span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>deployed</span></> : ''}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </Section>
+
+      <Section id="explorer" title="Ticket explorer" defaultOpen meta={explorer && explorer.total !== undefined ? `${explorer.total} match${explorer.total === 1 ? '' : 'es'}${explorer.shown < explorer.total ? ` (showing ${explorer.shown})` : ''}` : undefined}>
+        {!res ? <Skeleton rows={5} /> : res.explorer.error ? <ErrorNote onRetry={refresh}>Tickets: {res.explorer.error}</ErrorNote> : explorer && (
+          <>
+            {explorer.error && <ErrorNote>{explorer.error}</ErrorNote>}
+            <div style={{ ...row, marginBottom: 8 }}>
+              <select style={ctl} value={sort} onChange={(e) => { setLoading(true); setSort(e.target.value); }} aria-label="Sort">
+                <option value="updated">Recently updated</option><option value="created">Newest first</option><option value="oldest">Oldest first</option>
+                <option value="priority">Priority</option><option value="idle">Longest idle</option>
+              </select>
+              <button type="button" className="btn" style={b34} onClick={() => exportCsv(explorer.issues)} disabled={!explorer.issues?.length}>Export CSV</button>
             </div>
-          ) : !explorer.error && <Empty>No tickets match these filters.</Empty>}
-        </Card>
-      )}
-
-      {res?.deployed.error && <ErrorNote>Tickets by environment: {res.deployed.error}</ErrorNote>}
-      {deployed && (
-        <Card title="Tickets by environment">
-          <div className="subtle" style={{ marginBottom: 8 }}>Jira keys found in notes, branches, versions and ticket links of the last 300 successful deployments. ✓ = deployed there.</div>
-          {deployed.error && <ErrorNote>{deployed.error}</ErrorNote>}
-          {deployed.jiraError && <ErrorNote>Jira lookup failed: {deployed.jiraError}</ErrorNote>}
-          {deployed.tickets.length === 0 ? <Empty>No Jira keys found in recent deployments.</Empty> : (
-            <div style={scroll}>
-              <table style={{ minWidth: 640 }}>
-                <thead><tr><th>Ticket</th><th>Summary</th><th>Status</th>{envs.map((e) => <th key={e} style={{ textAlign: 'center' }}>{e}</th>)}</tr></thead>
-                <tbody>
-                  {deployed.tickets.map(({ key, environments }) => {
-                    const i = deployed.issues[key];
-                    return (
-                      <tr key={key}>
-                        <td>{i ? <KeyLink i={i} /> : <span className="key">{key}</span>}</td>
-                        <td>{i?.summary || <Faint>—</Faint>}</td>
-                        <td>{i ? <StatusText status={i.status} category={i.statusCategory} /> : '—'}</td>
-                        {envs.map((e) => (
-                          <td key={e} style={{ textAlign: 'center', color: 'var(--ok-text)', fontWeight: 700 }} title={environments[e] ? fmtDateTime(environments[e]) : ''}>
-                            {environments[e] ? <><span aria-hidden="true">✓</span><span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>deployed</span></> : ''}
-                          </td>
-                        ))}
+            {explorer.issues?.length ? (
+              <div style={scroll}>
+                <table style={{ minWidth: 960 }}>
+                  <thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Priority</th><th>Assignee</th><th>Reporter</th><th>Labels</th><th>Created</th><th style={{ textAlign: 'center' }}>Idle</th></tr></thead>
+                  <tbody>
+                    {explorer.issues.map((i) => (
+                      <tr key={i.key}>
+                        <td><KeyLink i={i} /></td><td>{i.summary}</td><td>{i.type}</td>
+                        <td><StatusText status={i.status} category={i.statusCategory} /></td>
+                        <td>{i.priority || '—'}</td>
+                        <td>{i.assignee || <Faint>Unassigned</Faint>}</td>
+                        <td>{i.reporter || '—'}</td>
+                        <td className="muted">{(i.labels || []).join(', ')}</td>
+                        <td className="muted" style={{ whiteSpace: 'nowrap' }}>{i.created ? fmtDate(i.created) : '—'}</td>
+                        <td className="muted tnum" style={{ textAlign: 'center' }}>{idleDays(i.updated, now) ?? '—'}d</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      )}
-      {!res && !loading && <Pill tone="neutral">No data</Pill>}
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : !explorer.error && <Empty>No tickets match these filters.</Empty>}
+          </>
+        )}
+      </Section>
     </div>
   );
 }
