@@ -161,6 +161,10 @@ function QaWindows() {
           );
         })}
       </ul>
+      <div style={{ margin: '0 0 var(--space-2)' }}>
+        <Pill tone="warn">Gate: mandatory approval</Pill>{' '}
+        <span className="muted" style={{ fontSize: 'var(--fs-sm)', overflowWrap: 'anywhere' }} title="DevOps approval required from Prakash Pawar">@pawarprakash-devops</span>
+      </div>
       <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-sm)' }}>QA deploys only run in these windows or on manual dispatch</p>
     </Card>
   );
@@ -168,7 +172,7 @@ function QaWindows() {
 
 export default function ReleaseRadar() {
   return (
-    <div className="grid g2">
+    <div className="grid g2" style={{ alignItems: 'start' }}>
       <PromotionRadar />
       <QaWindows />
     </div>
