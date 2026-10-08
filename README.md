@@ -6,24 +6,22 @@ Deployment tracking, release-governance and delivery-metrics dashboard for VidAI
 
 ## Pages
 
-| Route | What it is |
-|-------|-----------|
-| `/` | **Landing page (redesigned).** Admin toolbar (Refresh, Export JSON, sign-in; when admin: Deploy release, Targets, Import JSON, Telemetry, Sign out), telemetry tiles and 14-day timeline, environment cards (live probe, FE/BE branch + version, last FE/BE deploy, failure/stale banner), promotion radar and QA release windows (with the approval gate), then the full deployment history: Environment, Status, Branch/Version, Date & Time, Requested/Approved/Tested/Deployed By, and Ticket / Notes (workflow-run link, FE/BE/PR links, notes; no Jira chips), filters, sorting, select-two compare (commits and files via `/api/compare`), and Edit/Delete for admins. Only `/classic` is left as a fallback |
-| `/classic` | The previous main dashboard, unchanged (HUD counters, environment cards, history table, FE/BE compare modal, admin controls) |
-| `/admin` | Fleet telemetry: DORA suite (deployment frequency, lead time, change failure rate incl. prod-only CFR, MTTR), charts by environment/status, recent failures, longest runs, top operators, MTTR incident audit trail |
-| `/classic` (promotion radar) | Above the environment cards (the redesigned `/` has its own radar, same `/api/drift`): commits waiting to be promoted along dev→qa, qa→preprod, qa→demo, preprod→prod_neo and preprod→prod_ank for the backend or frontend repo, click a chip to list them (`/api/drift`). Counted from the last merged promotion PR; recomputed on page load and every 5 min while the tab is visible (no push/alerts) |
-| `/jira` | Jira dashboard (admin login) with a **filter bar** — assignee, reported by, type, priority, status, label, component, fix version, created date range, text search, quick presets; filters apply to every section, are kept in the URL (shareable) and a **ticket explorer** with sort and CSV export: ticket metrics for `JIRA_PROJECT_KEYS` (open / in development / in QA, open bugs, created vs done, by workflow stage / status / assignee), the active sprint,  a **ready-to-ship queue** (tickets in QA Passed, flagged with where they've been deployed), **stuck tickets** (idle ≥ N days), **bug trends** (weekly created vs closed, by priority and age), **lead time** (created → done, created → first prod deploy), **release notes** per deployment (copyable markdown) and a **tickets-by-environment** matrix built from Jira keys found in deployment notes, branches, versions and ticket links |
-| `/health` | Latest-successful-deploy view per environment (backed by `/api/health`) |
-| `/home` | Role-based home (redesign, additive). A **lens** picks the view: Developer (recently deployed tickets, needs attention), QA (ready to test, recently moved past QA), Release (environments, needs attention, promotion radar), Management (deployments by environment, 30 d). The lens is kept in `localStorage` key `tracker-lens` and can be forced with `?as=dev\|qa\|rel\|mgmt` (the param is also saved). A lens changes the view only — it grants no permissions; Jira fields still need an admin session |
-| `/pipeline` | Board of Jira-keyed tickets, one column per environment group (Preview, Demo, QA, Stage, Pre-Prod, Prod · Ankura, Prod · Neotia, Other); a ticket sits in the **furthest** environment it reached. Column header shows last deploy health and last success; filters: text, hotfix only, problems only. Clicking a card opens the ticket drawer (journey across environments, deployments, versions, run links). Data from `GET /api/pipeline`, refreshed every 90 s while the tab is visible |
+Everything is one page with tabs: `/?tab=<id>` (the default, `/`, is Deployments). The tab and the shell (top bar, theme, health dots) are shared; the old URLs redirect (`next.config.ts`): `/classic` → `/`, `/jira` → `?tab=tickets`, `/admin` → `?tab=insights`, `/health` → `?tab=health`, `/home` → `?tab=my-view`, `/pipeline` → `?tab=pipeline`.
 
-`/home` and `/pipeline` share the v2 shell (`app/(v2)/`: top bar with lens switch, theme toggle `tracker-theme`, environment health dots). The legacy pages (`/classic`, `/jira`, `/admin`, `/health`) stay linked in its nav under "Current pages" during migration and are unchanged.
+| Tab | What it is |
+|-----|-----------|
+| **Deployments** (`/`) | Admin toolbar (Refresh, Export JSON, sign-in; when admin: Deploy release, Targets, Import JSON, Sign out), telemetry tiles and 14-day timeline, environment cards (live probe, FE/BE branch + version, last FE/BE deploy, failure/stale banner), promotion radar and QA release windows (approval gate), then the full deployment history: filters, sorting, select-two compare (commits and files via `/api/compare`), detail drawer, Edit/Delete for admins; the Ticket / Notes column shows the workflow-run link, FE/BE/PR links and notes |
+| **Pipeline** | Board of tickets by furthest environment with a ticket drawer (journey stepper, per-env state) from `GET /api/pipeline` |
+| **My view** | Role lenses (Developer, QA, Release, Management); the lens is kept in `localStorage` `tracker-lens` and `?as=dev\|qa\|rel\|mgmt`. A lens changes the view only, it grants no permissions |
+| **Tickets** | The Jira dashboard (admin sign-in): filter bar, KPI tiles, sprint, bugs, ready-to-ship, stuck tickets, bug trends, lead time, release notes, ticket explorer with CSV export, tickets-by-environment. Needs `JIRA_*` env vars |
+| **Insights** | Delivery metrics (admin sign-in): headline tiles, DORA suite, by environment / status, recent failures, longest runs, operator leaderboard, recovery audit trail (`GET /api/admin/stats`) |
+| **Health** | Per-environment live probe (`/api/cluster-health`), freshness and last successful deploy (`/api/health`) |
 
-UI: dark theme by default with a light toggle (stored in `localStorage` key `tracker-theme`), VidAI brand palette. The page polls every **90 s, only while the tab is visible**, and refreshes immediately when the tab regains focus. API responses carry ETags and edge `Cache-Control` headers to stay under Neon/Vercel limits.
+Sections inside a tab are standalone components that talk through window events: `tracker:data-changed`, `tracker:refresh`, `tracker:compare`, `tracker:edit-deployment`, `tracker:delete-deployment`, `tracker:auth-changed`. `AdminGate` shows a sign-in card on Tickets and Insights for non-admins.
 
 ## Environments and ordering
 
-Environments are rows in the `environments` table and are **auto-created by the webhook** on first sight. The UI orders cards by `PROMOTION_ORDER` in `app/page.tsx`:
+Environments are rows in the `environments` table and are **auto-created by the webhook** on first sight. The UI orders cards by `display_order`:
 
 `Preview (1)` → `Demo-Preview (1.5)` → `QA (2)` → `Stage / Stage EUW2 (3)` → `Pre-Prod (4)` → `Pre-Prod USW (5)` → `Production (Ankura) (6)` → `Production (Neotia/Babyjoy) (7)` → `Production (8)` → `LMS (9)`.
 
@@ -71,7 +69,7 @@ Jira stays off in this setup (see Known limits), so tickets appear with keys onl
 | `DATABASE_URL` | all DB routes | Neon pooled connection string. **Never commit it.** |
 | `WEBHOOK_SECRET` | `POST /api/webhook` | Expected as `Authorization: Bearer <secret>`. **If unset, the code falls back to a publicly known default** — always set it. |
 | `ADMIN_TOKEN` | `middleware.ts`, `/api/auth` | Admin password. **If unset, falls back to a publicly known default** — always set it. |
-| `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | `/api/jira/*` | Jira Cloud site URL and an Atlassian API token (Basic auth, server-side only). Unset → `/jira` shows setup instructions |
+| `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | `/api/jira/*` | Jira Cloud site URL and an Atlassian API token (Basic auth, server-side only). Unset → the Tickets tab shows setup instructions |
 | `JIRA_DONE_STATUSES` | `/api/jira/stats` | Optional, comma-separated status names to treat as shipped/done (in addition to Jira's Done category and names like Done/Closed/Released/Deployed) |
 | `JIRA_PROJECT_KEYS` | `/api/jira/stats`, key detection | Comma-separated project keys (e.g. `CORE,EMR`); required for metrics, and limits which `ABC-123` patterns count as tickets |
 | `GCHAT_ALERT_WEBHOOK_URL` | `lib/alerts.ts` | Optional Google Chat webhook: alerts on failed **production** deployments and on production recovery with time-to-restore vs target (lower environments never alert) |
@@ -102,7 +100,7 @@ All `GET`s are public. `POST/PUT/PATCH/DELETE` need admin auth (see `AUTHENTICAT
 | `GET /api/jira/insights?stuckDays=` · `GET /api/jira/release-notes[?id=]` | Ready-to-ship / stuck / bug trends / lead time; release-notes picker and per-deployment markdown (admin) |
 | `GET /api/jira/issues?keys=` · `GET /api/jira/stats?days=` · `GET /api/jira/deployed` | Jira data (**admin session or `Bearer ADMIN_TOKEN` required** — unlike other GETs, because summaries/assignees are internal). `issues` resolves up to 100 keys; `stats` returns exact counts over all issues of `JIRA_PROJECT_KEYS` (Jira's approximate-count API), counts per workflow stage, open bugs, and the active sprint(s) from the Agile API (assignee breakdown samples the 500 most recently updated open issues); `deployed` maps keys → environments from the last 300 successful deployments. Uses Jira's `POST /rest/api/3/search/jql` |
 | `GET /api/pipeline?sinceDays=` | Tickets grouped by furthest environment for `/home` and `/pipeline`. `sinceDays` 1–90 (default 30) bounds the non-success rows; successes are always the latest 300 non-tracker deployments. Ticket keys come from notes, branches, versions and ticket link (`JIRA_PROJECT_KEYS` filter). `Rerun - Success` counts as success; cancelled rows are ignored. Response: `generatedAt`, `configured`, `jiraAuthorised`, `jiraError`, `window {deployments, oldest, truncated}`, `columns[]` (id, name, environments, rank, isProduction, `health`, `activeDeploy`, `ticketCount`), `tickets[]` (max 150, newest first: `key`, `column`, `reached`, per-environment `environments` entries with state/first/last time/versions/deployer/run URL, `ageInStageDays`, `badges` hotfix/rolled_back/failed/stuck, plus Jira fields), `unlinked.deployments`, `notInJira`, `truncated`. **Deployment data is public; Jira fields** (`summary`, `type`, `priority`, `status`, `stage`, `assignee`, `url`) **are filled only for an admin session and only when `JIRA_*` is configured** — otherwise they are `null`. `Cache-Control`: `public, s-maxage=30, stale-while-revalidate=60` for anonymous, `private, max-age=30` for admin |
-| `GET /api/admin/stats` | Aggregates + DORA metrics for `/admin` (admin session required) |
+| `GET /api/admin/stats` | Aggregates + DORA metrics for the Insights tab (admin session required) |
 | `GET/POST /api/migrate` | One-off schema/data maintenance (adds FE/BE columns, widens columns to TEXT, renames `Demo`→`Demo-Preview`, dedupes superseded failed rows). Idempotent; both POST and GET need admin |
 | `POST /api/auth`, `DELETE /api/auth`, `GET /api/auth/session` | Admin login / logout / role check |
 
@@ -119,21 +117,19 @@ One-off importers/backfills: `import-history.js` (GH Actions runs, `--since`, `-
 
 ```
 app/
-  DriftRibbon.tsx     # promotion radar
-  page.tsx            # main dashboard (cards, history, compare, QA cadence, admin controls)
-  admin/page.tsx      # DORA + telemetry
-  health/page.tsx     # latest-success view
-  jira/page.tsx       # Jira dashboard
-  (v2)/               # role-based redesign (route group; URLs are /home and /pipeline)
-    layout.tsx        # wraps pages in ShellProvider + AppShell, loads tokens.css / shell.css
-    AppShell.tsx      # top bar (lens switch, theme, env health dots), nav incl. legacy links
-    ctx.tsx           # lens state (localStorage `tracker-lens`, `?as=`), shared pipeline data, open ticket
-    ui.tsx            # usePipeline() (polls /api/pipeline every 90 s) + shared components
-    TicketDrawer.tsx  # ticket journey / deployments drawer
-    DevLens.tsx QaLens.tsx RelLens.tsx MgmtLens.tsx   # the four /home lenses
-    home/page.tsx     # renders the active lens
-    pipeline/page.tsx # ticket board
-    tokens.css shell.css   # design tokens and shell styles, scoped to the v2 shell
+  (v2)/               # the whole UI (route group; one page, tabs via /?tab=)
+    layout.tsx        # ShellProvider + AppShell (Suspense), loads tokens.css / shell.css
+    page.tsx          # picks the tab from ?tab=
+    tabs.ts           # tab ids, labels and hrefs
+    AppShell.tsx      # top bar (theme, env health dots, role switch on My view), tab nav
+    ctx.tsx ui.tsx    # lens + pipeline state; shared components and usePipeline()
+    AdminGate.tsx     # sign-in card for Tickets and Insights
+    DeploymentsTab.tsx  # ReleaseAdmin, ReleaseStats, ReleaseEnvs, ReleaseRadar, ReleaseHistory, ReleaseCompare
+    PipelineTab.tsx  MyViewTab.tsx (DevLens QaLens RelLens MgmtLens)  TicketDrawer.tsx
+    TicketsTab.tsx    # Jira dashboard
+    InsightsTab.tsx InsightsLists.tsx   # DORA + telemetry
+    HealthTab.tsx     # live probes + freshness
+    tokens.css shell.css   # design tokens and shell styles, scoped to .v2
   api/{deployments,environments,webhook,health,cluster-health,compare,admin/stats,jira,migrate,auth}/
   api/pipeline/route.ts   # GET /api/pipeline
 lib/pipeline.ts       # buildPipeline(): deployments -> tickets/columns, optional Jira enrichment

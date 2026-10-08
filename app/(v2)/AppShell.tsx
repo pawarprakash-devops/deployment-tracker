@@ -1,27 +1,17 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { LENSES, useShell } from './ctx';
 import TicketDrawer from './TicketDrawer';
+import { TABS, isTab, tabHref } from './tabs';
 import { EnvDot, type Tone } from './ui';
-
-const NAV = [
-  { href: '/', label: 'Deployments' },
-  { href: '/home', label: 'My view' },
-  { href: '/pipeline', label: 'Pipeline' },
-];
-const LEGACY = [
-  { href: '/classic', label: 'Classic tracker' },
-  { href: '/jira', label: 'Tickets (Jira)' },
-  { href: '/admin', label: 'Insights' },
-  { href: '/health', label: 'Health' },
-];
 
 type ThemeMode = 'light' | 'dark' | null;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const path = usePathname();
+  const rawTab = useSearchParams().get('tab');
+  const tab = isTab(rawTab) ? rawTab : 'deployments';
   const { lens, setLens, pipeline, updatedAt } = useShell();
   const [theme, setTheme] = useState<ThemeMode>(null);
   const searchRef = useRef<HTMLButtonElement>(null);
@@ -59,7 +49,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="app">
         <header className="topbar">
           <span className="logo"><b>Vid</b>AI Delivery</span>
-          {path === '/home' && (
+          {tab === 'my-view' && (
             <div className="lens" role="group" aria-label="Role lens">
               {LENSES.map((l) => (
                 <button key={l.id} aria-pressed={lens === l.id} onClick={() => setLens(l.id)}>{l.label}</button>
@@ -75,9 +65,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle light or dark theme">Theme</button>
         </header>
         <nav className="nav" aria-label="Main">
-          {NAV.map((n) => <Link key={n.href} href={n.href} aria-current={path === n.href ? 'page' : undefined}>{n.label}</Link>)}
-          <small>Current pages</small>
-          {LEGACY.map((n) => <Link key={n.href} href={n.href} className="ext">{n.label}</Link>)}
+          {TABS.map((t) => <Link key={t.id} href={tabHref(t.id)} aria-current={tab === t.id ? 'page' : undefined}>{t.label}</Link>)}
         </nav>
         <main className="main" id="main">{children}</main>
       </div>

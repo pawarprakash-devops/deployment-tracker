@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import './tokens.css';
 import './shell.css';
 import AppShell from './AppShell';
@@ -12,7 +13,9 @@ export const metadata: Metadata = {
 export default function V2Layout({ children }: { children: React.ReactNode }) {
   return (
     <ShellProvider>
-      <AppShell>{children}</AppShell>
+      <Suspense fallback={null}>
+        <AppShell>{children}</AppShell>
+      </Suspense>
     </ShellProvider>
   );
 }

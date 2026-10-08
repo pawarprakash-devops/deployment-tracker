@@ -1,32 +1,27 @@
 'use client';
-import ReleaseAdmin from './ReleaseAdmin';
-import ReleaseCompare from './ReleaseCompare';
-import ReleaseEnvs from './ReleaseEnvs';
-import ReleaseHistory from './ReleaseHistory';
-import ReleaseRadar from './ReleaseRadar';
-import ReleaseStats from './ReleaseStats';
+import { useSearchParams } from 'next/navigation';
+import DeploymentsTab from './DeploymentsTab';
+import HealthTab from './HealthTab';
+import InsightsTab from './InsightsTab';
+import MyViewTab from './MyViewTab';
+import PipelineTab from './PipelineTab';
+import TicketsTab from './TicketsTab';
+import { isTab } from './tabs';
 
-// Landing page of vidai-deployments.vercel.app: environment status first, then what is waiting
-// to ship, then the full deployment history. Sections talk through window events
-// (tracker:data-changed, tracker:refresh, tracker:compare, tracker:edit-deployment,
-// tracker:delete-deployment, tracker:auth-changed) so each one stays a standalone component.
-export default function ReleasesPage() {
+// One page, six tabs: /?tab=<id>. The default (no param) is Deployments, which is what
+// vidai-deployments.vercel.app opens on. Old URLs (/jira, /admin, /health, /classic, /home,
+// /pipeline) redirect here via next.config.ts.
+export default function Page() {
+  const raw = useSearchParams().get('tab');
+  const tab = isTab(raw) ? raw : 'deployments';
   return (
     <>
-      <div className="page-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h1>Deployments</h1>
-          <p>What is running where, what is waiting to ship, and what just changed.</p>
-        </div>
-        <ReleaseAdmin />
-      </div>
-      <div className="stack" style={{ marginTop: 0 }}>
-        <ReleaseStats />
-        <ReleaseEnvs />
-        <ReleaseRadar />
-        <ReleaseHistory />
-      </div>
-      <ReleaseCompare />
+      {tab === 'deployments' && <DeploymentsTab />}
+      {tab === 'pipeline' && <PipelineTab />}
+      {tab === 'my-view' && <MyViewTab />}
+      {tab === 'tickets' && <TicketsTab />}
+      {tab === 'insights' && <InsightsTab />}
+      {tab === 'health' && <HealthTab />}
     </>
   );
 }
