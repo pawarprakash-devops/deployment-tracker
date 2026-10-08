@@ -54,6 +54,7 @@ function hostOf(p?: Probe): string | null {
   try { return new URL(p.url).hostname; } catch { return null; }
 }
 
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 const ts = (d: Dep) => new Date(d.started_at).getTime() || 0;
 
 function derive(deps: Dep[]): Derived {
@@ -111,42 +112,36 @@ function buildLink(edge: { fromEnv: string; toEnv: string } | undefined, drift: 
   };
 }
 
-const LINE_VARS: Record<Link['state'], string> = {
-  sync: '--rl-c:var(--ok);--rl-s:solid', behind: '--rl-c:var(--warn);--rl-s:dashed',
-  unknown: '--rl-c:var(--border-bright);--rl-s:dotted', none: '--rl-c:var(--border);--rl-s:solid',
-};
 const srOnly = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const;
 
-function LinkMark({ link }: { link: Link }) {
-  if (link.state === 'none') return null;
+/** One outgoing promotion pair, rendered in normal flow inside the card footer. */
+function PairRow({ link }: { link: Link }) {
+  let mark: React.ReactNode;
   if (link.state === 'behind') {
     const n = link.label.replace(/^.*?: /, '');
-    return (
+    mark = (
       <button
         type="button"
-        className="rl-pill mono"
+        className="re-pill mono"
         aria-label={`Show ${n.replace(' commits waiting', '')} commits waiting from ${link.fromEnv} to ${link.toEnv}`}
         title={link.label}
         onClick={() => { if (link.detail) window.dispatchEvent(new CustomEvent('tracker:open-drift', { detail: link.detail })); }}
       >
-        <span aria-hidden="true">▸ </span>{link.text}
+        {link.text}
       </button>
+    );
+  } else {
+    mark = (
+      <span style={{ fontSize: 12, whiteSpace: 'nowrap', color: link.state === 'sync' ? 'var(--ok-text)' : 'var(--muted)' }}>
+        <span style={srOnly}>{link.label}</span>
+        <span aria-hidden="true">{link.state === 'sync' ? '✓ ' : '— '}{link.text}</span>
+      </span>
     );
   }
   return (
-    <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap', color: link.state === 'sync' ? 'var(--ok-text)' : 'var(--muted)' }}>
-      <span style={srOnly}>{link.label}</span>
-      <span aria-hidden="true">{link.state === 'sync' ? '✓ ' : '— '}{link.text}</span>
-    </span>
-  );
-}
-
-/** Short vertical connector used for Demo (under QA) and each production target. */
-function BranchLink({ link }: { link: Link }) {
-  return (
-    <div className="rl-link-v" data-state={link.state} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 28, paddingLeft: 12, ...Object.fromEntries(LINE_VARS[link.state].split(';').map((kv) => kv.split(':') as [string, string])) }}>
-      <span className="rl-vline" aria-hidden="true" />
-      <LinkMark link={link} />
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px 8px', minWidth: 0 }}>
+      <span className="muted" style={{ fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}><span aria-hidden="true">→ </span>{link.toEnv}</span>
+      {mark}
     </div>
   );
 }
@@ -167,7 +162,7 @@ function CompRow({ label, c }: { label: 'FE' | 'BE'; c: Comp | undefined }) {
   );
 }
 
-function Node({ r, p, col, dv, probed }: { r: HealthRow; p: Probe | undefined; col: Col | undefined; dv: Derived | undefined; probed: boolean }) {
+function Node({ r, step, p, col, dv, probed, pairs }: { r: HealthRow; step: number; p: Probe | undefined; col: Col | undefined; dv: Derived | undefined; probed: boolean; pairs: Link[] }) {
   const failed = !!(col?.health.latest && /fail/i.test(col.health.latest.status));
   const d = dur(r.duration_seconds);
   const special = r.deployment_type && /hotfix|rollback/i.test(r.deployment_type);
@@ -188,8 +183,9 @@ function Node({ r, p, col, dv, probed }: { r: HealthRow; p: Probe | undefined; c
   );
   const stripe = failed || p?.status === 'OFFLINE' ? 'bad' : p?.status === 'DEGRADED' ? 'warn' : p ? 'ok' : 'border-bright';
   return (
-    <article className="rail-node fade-in" aria-label={r.environment} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', minWidth: 0, overflow: 'hidden', background: 'var(--surface, transparent)', border: '1px solid var(--border)', borderRadius: 'var(--r-md, 8px)', boxShadow: `inset 3px 0 0 var(--${stripe})` }}>
+    <article id={`env-${slug(r.environment)}`} className="re-card fade-in" aria-label={r.environment} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', minWidth: 0, height: '100%', overflow: 'hidden', background: 'var(--surface, transparent)', border: '1px solid var(--border)', borderRadius: 'var(--r-md, 8px)', boxShadow: `inset 3px 0 0 var(--${stripe})` }}>
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, minWidth: 0 }}>
+        <span className="muted tnum" aria-hidden="true" style={{ flex: 'none', width: 22, height: 22, borderRadius: '50%', border: '1px solid var(--border-bright, var(--border))', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{step}</span>
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 110px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }} title={r.environment}>{r.environment}</h3>
@@ -210,7 +206,7 @@ function Node({ r, p, col, dv, probed }: { r: HealthRow; p: Probe | undefined; c
       {r.version || fe || be ? (
         <>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
-            <span className="mono tnum" style={{ ...trunc, fontFamily: MONO, fontSize: 19, lineHeight: 1.2, fontWeight: 600 }} title={headline}>{headline}</span>
+            <span className="mono tnum" style={{ ...trunc, fontFamily: MONO, fontSize: 20, lineHeight: 1.2, fontWeight: 600 }} title={headline}>{headline}</span>
             {r.branch && r.branch !== headline && <span className="muted" style={{ ...trunc, fontSize: 11, padding: '0 6px', borderRadius: 'var(--r-xs)', border: '1px solid var(--border)', flex: '0 1 auto' }} title={r.branch}>{r.branch}</span>}
           </div>
           {pills}
@@ -230,48 +226,30 @@ function Node({ r, p, col, dv, probed }: { r: HealthRow; p: Probe | undefined; c
           <p className="empty">No deployments yet</p>
         </>
       )}
+      {pairs.length > 0 && (
+        <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {pairs.map((l) => <PairRow key={l.toEnv} link={l} />)}
+        </div>
+      )}
     </article>
   );
 }
 
 /* ---------- layout model ---------- */
-interface Slot { key: string; rows: HealthRow[]; demo: HealthRow[]; branch: boolean }
-const SLOT_DEFS: { key: string; test: RegExp; branch?: boolean }[] = [
-  { key: 'preview', test: /^preview\b/i }, { key: 'qa', test: /^qa\b/i }, { key: 'stage', test: /^stage\b/i },
-  { key: 'preprod', test: /^pre-?prod\b/i }, { key: 'prod', test: /^(production|lms)/i, branch: true },
-];
+// Promotion order: Preview, QA, Demo, Stage*, Pre-Prod*, Production*, LMS, anything else (display_order breaks ties).
+const RANK: RegExp[] = [/^preview\b/i, /^qa\b/i, /^demo/i, /^stage\b/i, /^pre-?prod\b/i, /^production/i, /^lms/i];
+const rankOf = (env: string) => { const i = RANK.findIndex((t) => t.test(env)); return i < 0 ? RANK.length : i; };
 
-function buildSlots(rows: HealthRow[]): Slot[] {
-  const slots = SLOT_DEFS.map((d) => ({ key: d.key, rows: [] as HealthRow[], demo: [] as HealthRow[], branch: !!d.branch }));
-  const extra: HealthRow[] = [];
-  const hasQa = rows.some((r) => SLOT_DEFS[1].test.test(r.environment));
-  for (const r of rows) {
-    const i = SLOT_DEFS.findIndex((d) => d.test.test(r.environment));
-    if (i >= 0) slots[i].rows.push(r);
-    else if (hasQa && /^demo/i.test(r.environment)) slots[1].demo.push(r);
-    else extra.push(r);
-  }
-  return [...slots.filter((s) => s.rows.length), ...extra.map((r) => ({ key: `x-${r.environment}`, rows: [r], demo: [], branch: false }))];
-}
-
-const RAIL_CSS = `
-.rl-rail{display:flex;align-items:stretch;list-style:none;margin:0;padding:0;width:100%}
-.rl-slot{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:8px}
-.rl-stack{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.rl-stack>li{min-width:0}
-.rl-link{flex:0 0 84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:0 4px;min-width:0}
-.rl-line{display:block;width:100%;border-top:2px var(--rl-s,solid) var(--rl-c,var(--border))}
-.rl-vline{display:block;width:0;height:20px;border-left:2px var(--rl-s,solid) var(--rl-c,var(--border));flex:none}
-.rl-pill{font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;padding:2px 9px;border-radius:999px;border:1px solid var(--warn);background:var(--warn-bg);color:var(--warn-text);line-height:1.5}
-.rl-pill:hover{filter:brightness(1.08)}
-.rl-pill:focus-visible{outline:2px solid var(--accent,currentColor);outline-offset:2px}
-.rl-branch{border-left:2px solid var(--border);padding-left:10px!important}
-@media (max-width:899px){
-  .rl-rail{flex-direction:column}
-  .rl-link{flex:0 0 auto;flex-direction:row;justify-content:flex-start;min-height:40px;padding:4px 0 4px 18px;gap:10px}
-  .rl-line{width:0;height:22px;border-top:0;border-left:2px var(--rl-s,solid) var(--rl-c,var(--border))}
-}
-@media (prefers-reduced-motion:reduce){.is-live{animation:none!important}}
+const GRID_CSS = `
+.re-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:12px;align-items:stretch;list-style:none;margin:0;padding:0;width:100%}
+.re-grid>li{min-width:0;display:flex;flex-direction:column}
+.re-grid>li>article{flex:1 1 auto}
+.re-card{transition:border-color .15s}
+.re-card:hover{border-color:var(--border-bright,var(--border))!important}
+.re-pill{font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;padding:2px 9px;border-radius:999px;border:1px dashed var(--warn);background:var(--warn-bg);color:var(--warn-text);line-height:1.5}
+.re-pill:hover{filter:brightness(1.08)}
+.re-pill:focus-visible{outline:2px solid var(--accent,currentColor);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.is-live{animation:none!important}.re-card{transition:none}}
 `;
 
 export default function ReleaseEnvs() {
@@ -330,7 +308,7 @@ export default function ReleaseEnvs() {
   }, [probes]);
 
   const sorted = useMemo(() => (rows ?? []).slice().sort((a, b) => a.display_order - b.display_order), [rows]);
-  const slots = useMemo(() => buildSlots(sorted), [sorted]);
+  const ordered = useMemo(() => sorted.map((r, i) => ({ r, i })).sort((a, b) => rankOf(a.r.environment) - rankOf(b.r.environment) || a.i - b.i).map((x) => x.r), [sorted]);
   const derived = useMemo(() => {
     const by = new Map<string, Dep[]>();
     deps.forEach((d) => { const a = by.get(d.environment); if (a) a.push(d); else by.set(d.environment, [d]); });
@@ -339,58 +317,27 @@ export default function ReleaseEnvs() {
     return m;
   }, [deps]);
   const colFor = (env: string) => pipeline?.columns.find((c) => c.environments.includes(env));
-  const edgeInto = (toEnv: string) => EDGES.find((e) => e.toEnv === toEnv);
-  const linkInto = (toEnv: string) => buildLink(edgeInto(toEnv), drift, driftLoaded);
-
-  const node = (r: HealthRow) => (
-    <Node r={r} p={probeMap.get(r.environment)} col={colFor(r.environment)} dv={derived.get(r.environment)} probed={!!probes} />
-  );
+  const pairsFrom = (env: string) => EDGES.filter((e) => e.fromEnv === env).map((e) => buildLink(e, drift, driftLoaded));
 
   return (
     <section aria-labelledby="release-envs-h" style={{ minWidth: 0 }}>
-      <style>{RAIL_CSS}</style>
+      <style>{GRID_CSS}</style>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)', flexWrap: 'wrap', marginBottom: 'var(--space-3, 12px)' }}>
         <h2 id="release-envs-h" className="section-h" style={{ fontSize: 'var(--fs-xs)', fontVariant: 'small-caps', textTransform: 'lowercase', letterSpacing: '.08em', color: 'var(--muted)', fontWeight: 600 }}>Environments</h2>
         <span className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
           {probedAt ? `live probes updated ${new Date(probedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'live probes pending'}
         </span>
-        <span className="muted" style={{ fontSize: 'var(--fs-xs)', marginLeft: 'auto' }}>dashed = commits waiting to be promoted</span>
+        <span className="muted" style={{ fontSize: 'var(--fs-xs)', marginLeft: 'auto' }}>Cards are in promotion order; the chip at the bottom of a card shows commits waiting to move to the next environment</span>
       </div>
       {err && !rows ? <ErrorNote>Could not load environments ({err}).</ErrorNote>
         : !rows ? <Skeleton rows={3} />
         : (
-          <ul className="rl-rail" style={{ width: '100%' }}>
-            {slots.flatMap((s, i) => {
-              const out: React.ReactNode[] = [];
-              if (i > 0) {
-                const link = s.branch ? buildLink(undefined, drift, driftLoaded) : linkInto(s.rows[0].environment);
-                out.push(
-                  <li key={`l-${s.key}`} className="rl-link" data-state={link.state} style={Object.fromEntries(LINE_VARS[link.state].split(';').map((kv) => kv.split(':') as [string, string]))}>
-                    <LinkMark link={link} />
-                    <span className="rl-line" aria-hidden="true" />
-                  </li>,
-                );
-              }
-              out.push(
-                <li key={s.key} className="rl-slot">
-                  <ul className={`rl-stack${s.branch ? ' rl-branch' : ''}`}>
-                    {s.rows.map((r) => (
-                      <li key={r.environment}>
-                        {s.branch && <BranchLink link={linkInto(r.environment)} />}
-                        {node(r)}
-                      </li>
-                    ))}
-                    {s.demo.map((r) => (
-                      <li key={r.environment}>
-                        <BranchLink link={linkInto(r.environment)} />
-                        {node(r)}
-                      </li>
-                    ))}
-                  </ul>
-                </li>,
-              );
-              return out;
-            })}
+          <ul className="re-grid">
+            {ordered.map((r, i) => (
+              <li key={r.environment}>
+                <Node r={r} step={i + 1} p={probeMap.get(r.environment)} col={colFor(r.environment)} dv={derived.get(r.environment)} probed={!!probes} pairs={pairsFrom(r.environment)} />
+              </li>
+            ))}
           </ul>
         )}
     </section>
