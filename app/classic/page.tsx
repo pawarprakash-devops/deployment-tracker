@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import DriftRibbon from './DriftRibbon';
+import DriftRibbon from '../DriftRibbon';
 
 interface Deployment {
   id: string;
