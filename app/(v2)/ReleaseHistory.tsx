@@ -59,6 +59,21 @@ function dur(sec?: number | null): string {
 }
 const abs = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
 const dash = <span className="muted">—</span>;
+const RH_CSS = `
+.rh-wrap{overflow-x:auto}
+.rh-t{border-collapse:separate;border-spacing:0;width:100%}
+.rh-t thead th{position:sticky;top:0;z-index:1;background:var(--panel);text-transform:uppercase;font-size:12px;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid var(--border-bright)}
+.rh-t thead th button{text-transform:uppercase;letter-spacing:.04em}
+.rh-t tbody td{padding:6px 10px;font-size:13.5px;line-height:20px;vertical-align:middle;border-bottom:1px solid var(--border)}
+.rh-t tbody tr{height:46px}
+.rh-t tbody tr:hover{background:rgba(127,127,127,.09)}
+.rh-t tbody tr.rh-sel,.rh-t tbody tr.rh-sel:hover{background:rgba(var(--accent-rgb),.12)}
+.rh-ell{display:inline-block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+.rh-ver{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.rh-ver .rh-ell{max-width:220px}
+.rh-tag{flex:none;font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:0 5px;border-radius:4px;line-height:16px;border:1px solid currentColor}
+.rh-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+`;
 
 function Linkified({ text }: { text: string }) {
   return <>{text.split(/(https?:\/\/[^\s<>"')]+)/g).map((p, i) =>
@@ -67,13 +82,13 @@ function Linkified({ text }: { text: string }) {
 
 function Notes({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  const long = text.length > 140 || text.split('\n').length > 3;
+  const long = text.length > 100 || text.split('\n').length > 2;
   const clamp = !open && long;
   return (
-    <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted)', marginTop: 4, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxWidth: 320 }}>
-      <div style={clamp ? { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : undefined}><Linkified text={text} /></div>
+    <div style={{ fontSize: 13, lineHeight: '18px', color: 'var(--muted)', marginTop: 4, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxWidth: 420 }}>
+      <div style={clamp ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : undefined}><Linkified text={text} /></div>
       {long && <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-        style={{ background: 'none', border: 0, padding: 0, color: 'var(--accent-text)', fontSize: 'var(--fs-xs)' }}>{open ? 'less' : 'more'}</button>}
+        style={{ background: 'none', border: 0, padding: 0, color: 'var(--accent-text)', fontSize: 13 }}>{open ? 'less' : 'more'}</button>}
     </div>
   );
 }
@@ -85,7 +100,7 @@ function PRChips({ prs }: { prs: PR[] }) {
   ))}</>;
 }
 
-const person = (v?: string | null) => (v ? <span style={{ whiteSpace: 'nowrap' }}>{v}</span> : dash);
+const person = (v?: string | null) => (v ? <span className="rh-ell" title={v} style={{ fontSize: 13 }}>{v}</span> : dash);
 const plain = { background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit', cursor: 'pointer' } as const;
 
 export default function ReleaseHistory() {
@@ -208,10 +223,10 @@ export default function ReleaseHistory() {
     emit('tracker:compare', { a, b });
   };
 
-  const selectStyle = { fontSize: 'var(--fs-sm)', minHeight: 32, border: '1px solid var(--border-bright)', background: 'var(--panel)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '4px 8px' } as const;
+  const selectStyle = { fontSize: 'var(--fs-sm)', minHeight: 34, border: '1px solid var(--border-bright)', background: 'var(--panel)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '4px 8px' } as const;
   const th = (label: string, key: SortKey) => (
     <th scope="col" aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-      <button type="button" onClick={() => toggleSort(key)} style={{ ...plain, fontWeight: 600, color: 'var(--muted)', fontSize: 'var(--fs-xs)' }}>
+      <button type="button" onClick={() => toggleSort(key)} style={{ ...plain, fontWeight: 600, color: 'var(--muted)', fontSize: 12 }}>
         {label}<span aria-hidden="true"> {sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
       </button>
     </th>
@@ -223,8 +238,9 @@ export default function ReleaseHistory() {
 
   return (
     <Card title="Deployment history">
-      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
-        <input type="search" aria-label="Search deployments" placeholder="Search branch, version, ticket, person, notes" value={q}
+      <style>{RH_CSS}</style>
+      <div className="rh-bar">
+        <input type="search" aria-label="Search deployments" placeholder="Search branch, version, ticket, person, notes" value={q} style={{ height: 34, flex: '1 1 240px', maxWidth: 340, minWidth: 0 }}
           onChange={(e) => { setQ(e.target.value); reset(); }} />
         <select aria-label="Filter by environment" style={selectStyle} value={env} onChange={(e) => { setEnv(e.target.value); reset(); }}>
           <option value="">All environments</option>
@@ -244,11 +260,11 @@ export default function ReleaseHistory() {
         </>}
         <button type="button" className="btn" aria-pressed={prodOnly} aria-label="Production only" onClick={() => { setProdOnly((v) => !v); reset(); }}>Production only</button>
         <button type="button" className="btn" aria-label="Clear filters" disabled={!filtersActive} onClick={clearAll}>Clear</button>
-        {rows && <span className="muted" role="status" style={{ fontSize: 'var(--fs-sm)' }}>Showing {filtered.length} of {rows.length}</span>}
+        {rows && <span className="muted" role="status" style={{ fontSize: 13, marginLeft: 'auto', whiteSpace: 'nowrap' }}>Showing {filtered.length} of {rows.length}</span>}
       </div>
 
       {picked.length > 0 && (
-        <div role="region" aria-label="Compare deployments" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-3)', padding: '6px 10px', background: 'rgba(var(--accent-rgb), .10)', border: '1px solid var(--accent)', borderRadius: 'var(--r-sm)' }}>
+        <div role="region" aria-label="Compare deployments" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-2)', padding: '3px 10px', background: 'rgba(var(--accent-rgb), .10)', border: '1px solid var(--accent)', borderRadius: 'var(--r-sm)' }}>
           <strong className="tnum" style={{ fontSize: 'var(--fs-sm)' }}>{picked.length}/2 selected</strong>
           <button type="button" className="btn" disabled={picked.length !== 2} onClick={compare}>Compare</button>
           <button type="button" className="btn" onClick={() => setPicked([])}>Clear</button>
@@ -259,7 +275,7 @@ export default function ReleaseHistory() {
       {!rows && !error && <Skeleton rows={6} />}
       {rows && filtered.length === 0 && <Empty>No deployments match these filters.</Empty>}
       {shown.length > 0 && (
-        <table style={{ minWidth: 1200 }}>
+        <div className="rh-wrap"><table className="rh-t" style={{ minWidth: 1200 }}>
           <thead><tr>
             <th scope="col"><span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Select</span></th>
             {th('Environment', 'env')}{th('Status', 'status')}
@@ -273,30 +289,30 @@ export default function ReleaseHistory() {
               const prs = extractPRs(r.notes, r.ticket_link);
               const checked = picked.includes(r.id);
               return (
-                <tr key={r.id} style={checked ? { background: 'rgba(var(--accent-rgb), .08)' } : undefined}>
+                <tr key={r.id} className={checked ? 'rh-sel' : undefined}>
                   <td><input type="checkbox" checked={checked} onChange={() => togglePick(r.id)} aria-label={`Select ${r.environment} deployment, ${abs(r.started_at)}, for comparison`} /></td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{r.environment} {isProd(r.environment) && <Chip>PROD</Chip>}</td>
+                  <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}>{r.environment} {isProd(r.environment) && <Chip>PROD</Chip>}</td>
                   <td style={{ whiteSpace: 'nowrap' }}><StatusPill status={baseStatus(r.status)} /> {isRerun(r.status) && <Chip>rerun</Chip>}</td>
-                  <td style={{ fontSize: 'var(--fs-xs)' }}>
+                  <td>
                     {r.frontend_branch || r.backend_branch || r.frontend_version || r.backend_version ? (
                       <>
-                        {(r.frontend_branch || r.frontend_version) && <div><b style={{ color: 'var(--accent-text)' }}>FE:</b> {r.frontend_branch || r.frontend_version}</div>}
-                        {(r.backend_branch || r.backend_version) && <div><b style={{ color: 'var(--ok-text)' }}>BE:</b> {r.backend_branch || r.backend_version}</div>}
+                        {(r.frontend_branch || r.frontend_version) && <div className="rh-ver"><b className="rh-tag" style={{ color: 'var(--accent-text)' }}>FE</b><span className="rh-ell" title={r.frontend_branch || r.frontend_version || undefined}>{r.frontend_branch || r.frontend_version}</span></div>}
+                        {(r.backend_branch || r.backend_version) && <div className="rh-ver"><b className="rh-tag" style={{ color: 'var(--ok-text)' }}>BE</b><span className="rh-ell" title={r.backend_branch || r.backend_version || undefined}>{r.backend_branch || r.backend_version}</span></div>}
                       </>
                     ) : (
                       <>
-                        <div>{r.branch || '—'}</div>
-                        {r.version && <div className="muted">{r.version}</div>}
+                        <div className="rh-ver"><span className="rh-ell" title={r.branch || undefined}>{r.branch || '—'}</span></div>
+                        {r.version && <div className="rh-ver"><span className="rh-ell muted" title={r.version}>{r.version}</span></div>}
                       </>
                     )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <button type="button" aria-label={`Open details for ${r.environment} deployment, ${abs(r.started_at)}`} style={plain}
+                    <button type="button" aria-label={`Open details for ${r.environment} deployment, ${abs(r.started_at)}`} style={{ ...plain, fontSize: 13 }}
                       onClick={(e) => open(r, e.currentTarget)}>{abs(r.started_at)}</button>
-                    <div className="muted" style={{ fontSize: 'var(--fs-xs)' }}>{ago(r.started_at)}{r.duration_seconds != null && <> · <span className="tnum">{dur(r.duration_seconds)}</span></>}</div>
+                    <div className="muted" style={{ fontSize: 12.5 }}>{ago(r.started_at)}{r.duration_seconds != null && <> · <span className="tnum">{dur(r.duration_seconds)}</span></>}</div>
                   </td>
                   <td>{person(r.requested_by)}</td><td>{person(r.approved_by)}</td><td>{person(r.tested_by)}</td><td>{person(r.deployed_by)}</td>
-                  <td style={{ minWidth: 220 }}>
+                  <td style={{ minWidth: 220, maxWidth: 420 }}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                       {r.ticket_link && (isUrl(r.ticket_link)
                         ? <a href={r.ticket_link} target="_blank" rel="noopener noreferrer" className="key" title={r.ticket_link}>🔗 {ticketText(r.ticket_link)}</a>
@@ -315,7 +331,7 @@ export default function ReleaseHistory() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       )}
       {filtered.length > shown.length && (
         <div style={{ marginTop: 'var(--space-3)' }}>
