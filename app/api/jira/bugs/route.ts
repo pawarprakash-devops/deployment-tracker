@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cached, isAdminRequest, jiraConfigured, jiraSearch, stageOf, JIRA_PROJECTS, type JiraIssue } from '@/lib/jira';
+import { cached, canReadJira, jiraConfigured, jiraSearch, stageOf, JIRA_PROJECTS, type JiraIssue } from '@/lib/jira';
 import { ageBucket, AGE_BUCKETS, bucketByDay, priorityRank } from '@/lib/jira-activity';
 import type { BugRow, BugsResponse } from '@/lib/tickets-types';
 
@@ -20,7 +20,7 @@ function toRow(i: JiraIssue, now: number): BugRow {
 
 // GET /api/jira/bugs?days=30  (admin session required)
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
+  if (!canReadJira(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
   const sp = new URL(request.url).searchParams;
   const days = Math.min(Math.max(parseInt(sp.get('days') || '30', 10) || 30, 7), 90);
   const now = Date.now();

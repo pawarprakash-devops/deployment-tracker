@@ -293,7 +293,7 @@ function Pulse({ stats, bugs, days }: { stats: Stats; bugs: BugsResponse | null;
 
 // ---- main -------------------------------------------------------------------------------------------
 export default function TicketsTab() {
-  return <AdminGate title="Tickets (Jira)"><Tickets /></AdminGate>;
+  return <AdminGate title="Tickets (Jira)" publicUrl="/api/jira/access"><Tickets /></AdminGate>;
 }
 
 function Tickets() {

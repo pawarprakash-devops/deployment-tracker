@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { isAdminRequest, jiraConfigured, jiraIssuesByKeys, ticketDeploys } from '@/lib/jira';
+import { canReadJira, jiraConfigured, jiraIssuesByKeys, ticketDeploys } from '@/lib/jira';
 
 export const dynamic = 'force-dynamic';
 
 // GET /api/jira/deployed  (admin session required)
 // Which Jira tickets reached which environment (keys parsed from the last 300 successful deployments).
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
+  if (!canReadJira(request)) return NextResponse.json({ error: 'Admin login required' }, { status: 401 });
   try {
     const seen = await ticketDeploys(pool);
     const keys = Object.keys(seen);
