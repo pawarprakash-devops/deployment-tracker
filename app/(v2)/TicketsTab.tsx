@@ -6,6 +6,7 @@ import { Card, Tile, Skeleton, Empty, ErrorNote, fmtDate, fmtDateTime } from './
 import { BugFlowChart, PriorityBars, AgeBuckets, StageBars, Sparkline, Delta } from './tickets/Charts';
 import RecentBugs from './tickets/RecentBugs';
 import ActivityLog from './tickets/ActivityLog';
+import QualityPanel from './tickets/QualityPanel';
 import type { BugsResponse, DayPoint } from '@/lib/tickets-types';
 
 // ---- types (mirror lib/jira.ts + app/api/jira/* response shapes) ------------------------------------
@@ -508,6 +509,9 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
         </Card>
         </div>
       </div>
+
+      {/* (3b) quality: time to resolve and reopened bugs */}
+      <QualityPanel />
 
       {/* (4) what was raised / what is moving */}
       <div className="tkt-two">
