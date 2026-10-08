@@ -84,10 +84,12 @@ export const FULL_HISTORY_CAP = 30;
 // Fetch complete histories (GET /issue/{key}/changelog, paginated) for resolved-stage issues whose embedded changelog may
 // be cut off, replacing `issue.changelog.histories` in place. Returns the keys that could not be completed (beyond the cap
 // or failed): their resolution date is unknown, so callers must exclude them rather than guess.
-export async function completeChangelogs(issues: any[], cap = FULL_HISTORY_CAP): Promise<Set<string>> {
+// Optional `opts.all`: complete ANY issue whose history reached the page size, not only resolved-stage ones (default false;
+// existing callers are unaffected).
+export async function completeChangelogs(issues: any[], cap = FULL_HISTORY_CAP, opts?: { all?: boolean }): Promise<Set<string>> {
   const unknown = new Set<string>();
   const need = issues.filter((i) => {
-    if (!isResolvedStatus(i.fields?.status?.name || '', i.fields?.status?.statusCategory?.key)) return false;
+    if (!opts?.all && !isResolvedStatus(i.fields?.status?.name || '', i.fields?.status?.statusCategory?.key)) return false;
     const n = Math.max(Number(i.changelog?.total) || 0, i.changelog?.histories?.length || 0);
     return n >= CHANGELOG_PAGE;
   });
