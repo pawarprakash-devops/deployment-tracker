@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Chip, Empty, ErrorNote, Skeleton, StatusPill, ago, fmtDateTime } from './ui';
+import { Chip, ErrorNote, StatusPill, ago, fmtDateTime } from './ui';
 
 interface Row {
   id: string; environment: string; status: string; deployment_type?: string | null;
@@ -13,15 +13,19 @@ interface Row {
 }
 type SortKey = 'when' | 'env' | 'status';
 type DatePreset = '' | 'today' | '7d' | '30d' | 'custom';
+type Density = 'comfortable' | 'compact';
 
 const STATUSES = ['Success', 'In Progress', 'Failed', 'Rolled Back', 'Cancelled'];
 const PAGE = 25;
+const API_LIMIT = 1000;
 const DAY = 86_400_000;
+const DENSITY_KEY = 'tracker-density';
 
 const isRerun = (s: string) => /^rerun\s*-/i.test(s);
 const baseStatus = (s: string) => s.replace(/^rerun\s*-\s*/i, '').trim();
 const isProd = (e: string) => /^production/i.test(e);
 const isUrl = (s?: string | null): s is string => !!s && /^https?:\/\//i.test(s);
+const abs = (iso?: string | null) => fmtDateTime(iso);
 
 interface PR { type: 'FE' | 'BE' | 'PR'; url: string; label: string }
 function extractPRs(notes?: string | null, link?: string | null): PR[] {
@@ -57,22 +61,67 @@ function dur(sec?: number | null): string {
   if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
   return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
 }
-const abs = (iso?: string | null) => fmtDateTime(iso);
-const dash = <span className="muted">—</span>;
+
+/** Version cell content: up to two lines of {tag, text}. */
+interface VerLine { tag?: 'FE' | 'BE'; text: string }
+function versionLines(r: Row): VerLine[] {
+  const fe = r.frontend_branch || r.frontend_version;
+  const be = r.backend_branch || r.backend_version;
+  if (fe || be) {
+    const out: VerLine[] = [];
+    if (fe) out.push({ tag: 'FE', text: fe });
+    if (be) out.push({ tag: 'BE', text: be });
+    return out;
+  }
+  const out: VerLine[] = [{ text: r.branch || r.version || '—' }];
+  if (r.branch && r.version) out.push({ text: r.version });
+  return out;
+}
+
+function peopleLine(r: Row): string {
+  return ([['Requested', r.requested_by], ['Approved', r.approved_by], ['Tested', r.tested_by], ['Deployed', r.deployed_by]] as const)
+    .filter(([, v]) => !!v).map(([k, v]) => `${k} by ${v}`).join(' · ');
+}
+
 const RH_CSS = `
-.rh-wrap{overflow-x:auto}
+.rh-bar{position:sticky;top:var(--topbar-h,52px);z-index:3;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 0;margin-bottom:4px;background:var(--bg);border-bottom:1px solid var(--border)}
 .rh-t{border-collapse:separate;border-spacing:0;width:100%}
-.rh-t thead th{position:sticky;top:0;z-index:1;background:var(--panel);text-transform:uppercase;font-size:12px;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid var(--border-bright)}
+.rh-t thead th{position:sticky;top:calc(var(--topbar-h,52px) + var(--rh-bar-h,0px));z-index:2;background:var(--bg);text-transform:uppercase;font-size:12px;letter-spacing:.04em;padding:8px 10px;text-align:left;border-bottom:1px solid var(--border-bright)}
 .rh-t thead th button{text-transform:uppercase;letter-spacing:.04em}
-.rh-t tbody td{padding:6px 10px;font-size:13.5px;line-height:20px;vertical-align:middle;border-bottom:1px solid var(--border)}
-.rh-t tbody tr{height:46px}
+.rh-t tbody td{padding:var(--pad-cell-y,8px) 10px;font-size:13.5px;line-height:19px;vertical-align:top;border-bottom:1px solid var(--border)}
+.rh-t tbody tr{min-height:var(--row-h,56px)}
 .rh-t tbody tr:hover{background:rgba(127,127,127,.09)}
 .rh-t tbody tr.rh-sel,.rh-t tbody tr.rh-sel:hover{background:rgba(var(--accent-rgb),.12)}
-.rh-ell{display:inline-block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
-.rh-ver{display:flex;align-items:center;gap:6px;white-space:nowrap}
-.rh-ver .rh-ell{max-width:220px}
-.rh-tag{flex:none;font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:0 5px;border-radius:4px;line-height:16px;border:1px solid currentColor}
-.rh-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.rh-t button:focus-visible,.rh-t a:focus-visible,.rh-bar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.rh-c-det{width:100%;max-width:0}
+.rh-c-sel,.rh-c-act{white-space:nowrap}
+.rh-l1,.rh-l2{display:flex;align-items:center;gap:6px;min-width:0}
+.rh-l2{margin-top:2px;font-size:13px;color:var(--muted)}
+.rh-l1{flex-wrap:nowrap;white-space:nowrap}
+.rh-trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.rh-ver{max-width:240px}
+.rh-tag{flex:none;font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:0 5px;border-radius:4px;line-height:16px;border:1px solid var(--border-bright)}
+.rh-mono{font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12.5px}
+.rh-more{background:none;border:0;padding:0;color:var(--accent-text);font-size:13px;cursor:pointer;flex:none}
+.rh-wrap[data-density='compact'] .rh-l2,.rh-wrap[data-density='compact'] .rh-notes{display:none}
+.rh-wrap[data-density='compact'] .rh-t tbody td{padding-top:var(--pad-cell-y,4px);padding-bottom:var(--pad-cell-y,4px);vertical-align:middle}
+.rh-sk{display:grid;grid-template-columns:24px 1.2fr 1fr 1.4fr 1.2fr 2fr;gap:14px;padding:12px 10px;border-bottom:1px solid var(--border)}
+.rh-sk span{display:block;height:14px;border-radius:4px}
+.rh-state{padding:28px 12px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
+@media (max-width:700px){
+  .rh-bar>input[type=search]{flex-basis:100%;max-width:none!important}
+  .rh-t,.rh-t tbody{display:block}
+  .rh-t thead{display:flex;gap:12px;padding:6px 0;position:static}
+  .rh-t thead tr{display:flex;gap:12px}
+  .rh-t thead th{position:static;display:none;padding:2px 0;border:0}
+  .rh-t thead th.rh-sort-m{display:block}
+  .rh-t tbody tr{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:'sel env status' 'ver ver when' 'det det det' 'act act act';gap:4px 10px;padding:10px;margin-bottom:8px;border:1px solid var(--border);border-radius:var(--r-sm,6px)}
+  .rh-t tbody td{display:block;padding:0;border:0;min-width:0}
+  .rh-c-sel{grid-area:sel}.rh-c-env{grid-area:env}.rh-c-st{grid-area:status}.rh-c-ver{grid-area:ver}.rh-c-when{grid-area:when;text-align:right}.rh-c-det{grid-area:det;width:auto;max-width:none}.rh-c-act{grid-area:act}
+  .rh-wrap[data-density='compact'] .rh-l2{display:none}
+  .rh-l1{flex-wrap:wrap;white-space:normal}
+  .rh-ver{max-width:none}
+}
 `;
 
 function Linkified({ text }: { text: string }) {
@@ -80,15 +129,16 @@ function Linkified({ text }: { text: string }) {
     i % 2 ? <a key={i} href={p} target="_blank" rel="noopener noreferrer" className="key" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{p}</a> : p)}</>;
 }
 
+/** One-line clamped notes with an inline more/less toggle. */
 function Notes({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  const long = text.length > 100 || text.split('\n').length > 2;
-  const clamp = !open && long;
+  const long = text.length > 80 || text.includes('\n');
   return (
-    <div style={{ fontSize: 13, lineHeight: '18px', color: 'var(--muted)', marginTop: 4, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxWidth: 420 }}>
-      <div style={clamp ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : undefined}><Linkified text={text} /></div>
-      {long && <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-        style={{ background: 'none', border: 0, padding: 0, color: 'var(--accent-text)', fontSize: 13 }}>{open ? 'less' : 'more'}</button>}
+    <div className="rh-notes" style={{ display: 'flex', gap: 6, alignItems: open ? 'flex-start' : 'baseline', fontSize: 13, lineHeight: '18px', color: 'var(--muted)', marginTop: 2 }}>
+      <div className={open ? undefined : 'rh-trunc'} style={open ? { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', minWidth: 0 } : { flex: '0 1 auto' }}>
+        {open ? <Linkified text={text} /> : text.split('\n')[0]}
+      </div>
+      {long && <button type="button" className="rh-more" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? 'less' : 'more'}</button>}
     </div>
   );
 }
@@ -100,7 +150,64 @@ function PRChips({ prs }: { prs: PR[] }) {
   ))}</>;
 }
 
-const person = (v?: string | null) => (v ? <span className="rh-ell" title={v} style={{ fontSize: 13 }}>{v}</span> : dash);
+function VersionTag({ tag }: { tag: 'FE' | 'BE' }) {
+  return <b className="rh-tag" style={{ color: tag === 'FE' ? 'var(--fe-text, var(--muted))' : 'var(--be-text, var(--muted))' }}>{tag}</b>;
+}
+
+function VersionCell({ r }: { r: Row }) {
+  const lines = versionLines(r);
+  return <>{lines.map((l, i) => (
+    <div key={i} className={i === 0 ? 'rh-l1' : 'rh-l2'}>
+      {l.tag && <VersionTag tag={l.tag} />}
+      <span className="rh-mono rh-trunc rh-ver" title={l.text}>{l.text}</span>
+    </div>
+  ))}</>;
+}
+
+function RunLink({ link }: { link: string }) {
+  return isUrl(link)
+    ? <a href={link} target="_blank" rel="noopener noreferrer" className="key" title={link}>🔗 {ticketText(link)}</a>
+    : <span className="rh-trunc" title={link}>{link}</span>;
+}
+
+function DetailsCell({ r, prs }: { r: Row; prs: PR[] }) {
+  const people = peopleLine(r);
+  const tip = [people, r.notes].filter(Boolean).join('\n') || undefined;
+  return (
+    <>
+      <div className="rh-l1" title={tip}>
+        {r.ticket_link && <RunLink link={r.ticket_link} />}
+        <PRChips prs={prs} />
+        {!r.ticket_link && prs.length === 0 && <span className="muted">—</span>}
+      </div>
+      {people && <div className="rh-l2" title={people}><span className="rh-trunc">{people}</span></div>}
+      {r.notes && <Notes text={r.notes} />}
+    </>
+  );
+}
+
+function SkeletonRows({ n = 6 }: { n?: number }) {
+  return (
+    <div aria-busy="true" aria-label="Loading deployments" role="status">
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className="rh-sk" aria-hidden="true">
+          {[0, 1, 2, 3, 4, 5].map((c) => <span key={c} className="skeleton" style={{ width: c === 0 ? 16 : `${88 - ((i + c) % 4) * 14}%` }} />)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DensityToggle({ value, onChange }: { value: Density; onChange: (d: Density) => void }) {
+  return (
+    <div className="density-toggle" role="group" aria-label="Row density">
+      {(['comfortable', 'compact'] as const).map((d) => (
+        <button key={d} type="button" aria-pressed={value === d} onClick={() => onChange(d)}>{d === 'comfortable' ? 'Comfortable' : 'Compact'}</button>
+      ))}
+    </div>
+  );
+}
+
 const plain = { background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit', cursor: 'pointer' } as const;
 
 export default function ReleaseHistory() {
@@ -118,16 +225,44 @@ export default function ReleaseHistory() {
   const [limit, setLimit] = useState(PAGE);
   const [picked, setPicked] = useState<string[]>([]);
   const [sel, setSel] = useState<Row | null>(null);
+  const [density, setDensityState] = useState<Density>('comfortable');
+  const [flash, setFlash] = useState<Set<string>>(new Set());
   const closeRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const prevIds = useRef<Set<string> | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(DENSITY_KEY);
+      if (v === 'compact' || v === 'comfortable') setDensityState(v);
+    } catch { /* storage unavailable */ }
+  }, []);
+  const setDensity = (d: Density) => {
+    setDensityState(d);
+    try { localStorage.setItem(DENSITY_KEY, d); } catch { /* ignore */ }
+  };
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch('/api/deployments?limit=1000', { cache: 'no-store' });
+      const r = await fetch(`/api/deployments?limit=${API_LIMIT}`, { cache: 'no-store' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = (await r.json()) as Row[];
-      setRows(Array.isArray(j) ? j : []);
+      const list = Array.isArray(j) ? j : [];
+      const prev = prevIds.current;
+      if (prev) {
+        const fresh = list.filter((x) => !prev.has(x.id)).map((x) => x.id);
+        if (fresh.length) {
+          setFlash(new Set(fresh));
+          clearTimeout(flashTimer.current);
+          flashTimer.current = setTimeout(() => setFlash(new Set()), 2000);
+        }
+      }
+      prevIds.current = new Set(list.map((x) => x.id));
+      setRows(list);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
@@ -152,11 +287,21 @@ export default function ReleaseHistory() {
     window.addEventListener('tracker:auth-changed', onAuth);
     return () => {
       clearInterval(t);
+      clearTimeout(flashTimer.current);
       window.removeEventListener('tracker:data-changed', onData);
       window.removeEventListener('tracker:refresh', onData);
       window.removeEventListener('tracker:auth-changed', onAuth);
     };
   }, [load, loadAuth]);
+
+  // Keep the sticky table header just below the (variable-height) sticky toolbar.
+  useEffect(() => {
+    const bar = barRef.current, sec = sectionRef.current;
+    if (!bar || !sec || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => sec.style.setProperty('--rh-bar-h', `${bar.offsetHeight}px`));
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, []);
 
   const envs = useMemo(() => [...new Set((rows ?? []).map((r) => r.environment))].sort(), [rows]);
   const filtered = useMemo(() => {
@@ -178,7 +323,7 @@ export default function ReleaseHistory() {
       const t = new Date(r.started_at).getTime();
       if (t < lo || t > hi) return false;
       if (!n) return true;
-      return [r.branch, r.version, r.ticket_link, r.requested_by, r.deployed_by, r.notes, r.frontend_branch, r.backend_branch]
+      return [r.branch, r.version, r.ticket_link, r.requested_by, r.approved_by, r.tested_by, r.deployed_by, r.notes, r.frontend_branch, r.backend_branch, r.frontend_version, r.backend_version]
         .some((f) => f?.toLowerCase().includes(n));
     });
     const m = sort.dir === 'asc' ? 1 : -1;
@@ -225,7 +370,7 @@ export default function ReleaseHistory() {
 
   const selectStyle = { fontSize: 'var(--fs-sm)', minHeight: 34, border: '1px solid var(--border-bright)', background: 'var(--panel)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '4px 8px' } as const;
   const th = (label: string, key: SortKey) => (
-    <th scope="col" aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+    <th scope="col" className="rh-sort-m" aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
       <button type="button" onClick={() => toggleSort(key)} style={{ ...plain, fontWeight: 600, color: 'var(--muted)', fontSize: 12 }}>
         {label}<span aria-hidden="true"> {sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
       </button>
@@ -235,11 +380,18 @@ export default function ReleaseHistory() {
     <tr><td className="muted">{label}</td><td style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{v || '—'}</td></tr>
   );
   const selPrs = sel ? extractPRs(sel.notes, sel.ticket_link) : [];
+  const capped = !!rows && rows.length >= API_LIMIT;
+  const meta = rows ? `Showing ${filtered.length} of ${rows.length}${capped ? ` (latest ${API_LIMIT} loaded)` : ''}` : '';
 
   return (
-    <Card title="Deployment history">
+    <section ref={sectionRef} className="panel-quiet fade-in" aria-label="Deployment history">
       <style>{RH_CSS}</style>
-      <div className="rh-bar">
+      <div className="section-h" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: 'var(--fs-md)' }}>Deployment history</h2>
+        {meta && <span className="muted" style={{ fontSize: 13 }}>{meta}</span>}
+      </div>
+
+      <div ref={barRef} className="rh-bar">
         <input type="search" aria-label="Search deployments" placeholder="Search branch, version, ticket, person, notes" value={q} style={{ height: 34, flex: '1 1 240px', maxWidth: 340, minWidth: 0 }}
           onChange={(e) => { setQ(e.target.value); reset(); }} />
         <select aria-label="Filter by environment" style={selectStyle} value={env} onChange={(e) => { setEnv(e.target.value); reset(); }}>
@@ -260,78 +412,87 @@ export default function ReleaseHistory() {
         </>}
         <button type="button" className="btn" aria-pressed={prodOnly} aria-label="Production only" onClick={() => { setProdOnly((v) => !v); reset(); }}>Production only</button>
         <button type="button" className="btn" aria-label="Clear filters" disabled={!filtersActive} onClick={clearAll}>Clear</button>
-        {rows && <span className="muted" role="status" style={{ fontSize: 13, marginLeft: 'auto', whiteSpace: 'nowrap' }}>Showing {filtered.length} of {rows.length}</span>}
+        {rows && <span className="muted tnum" role="status" style={{ fontSize: 13, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{filtered.length} of {rows.length}</span>}
+        <DensityToggle value={density} onChange={setDensity} />
       </div>
 
       {picked.length > 0 && (
-        <div role="region" aria-label="Compare deployments" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-2)', padding: '3px 10px', background: 'rgba(var(--accent-rgb), .10)', border: '1px solid var(--accent)', borderRadius: 'var(--r-sm)' }}>
+        <div role="region" aria-label="Compare deployments" style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', margin: 'var(--space-2) 0', padding: '3px 10px', background: 'rgba(var(--accent-rgb), .10)', border: '1px solid var(--accent)', borderRadius: 'var(--r-sm)' }}>
           <strong className="tnum" style={{ fontSize: 'var(--fs-sm)' }}>{picked.length}/2 selected</strong>
           <button type="button" className="btn" disabled={picked.length !== 2} onClick={compare}>Compare</button>
           <button type="button" className="btn" onClick={() => setPicked([])}>Clear</button>
         </div>
       )}
 
-      {error && <ErrorNote>Could not load deployment history ({error}).{rows ? ' Showing last loaded data.' : ''}</ErrorNote>}
-      {!rows && !error && <Skeleton rows={6} />}
-      {rows && filtered.length === 0 && <Empty>No deployments match these filters.</Empty>}
+      {error && (
+        <ErrorNote>
+          <span>Could not load deployment history ({error}).{rows ? ' Showing last loaded data.' : ''}</span>{' '}
+          <button type="button" className="btn" onClick={() => { load(); }}>Retry</button>
+        </ErrorNote>
+      )}
+      {!rows && !error && <SkeletonRows />}
+      {rows && filtered.length === 0 && (
+        <div className="rh-state empty">
+          <p style={{ margin: 0 }}>{filtersActive ? 'No deployments match these filters' : 'No deployments recorded yet'}</p>
+          {filtersActive && <button type="button" className="btn" onClick={clearAll}>Clear filters</button>}
+        </div>
+      )}
       {shown.length > 0 && (
-        <div className="rh-wrap"><table className="rh-t" style={{ minWidth: 1200 }}>
-          <thead><tr>
-            <th scope="col"><span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Select</span></th>
-            {th('Environment', 'env')}{th('Status', 'status')}
-            <th scope="col">Branch / Version</th>{th('Date & Time', 'when')}
-            <th scope="col">Requested By</th><th scope="col">Approved By</th><th scope="col">Tested By</th><th scope="col">Deployed By</th>
-            <th scope="col">Ticket / Notes</th>
-            {admin && <th scope="col">Actions</th>}
-          </tr></thead>
-          <tbody>
-            {shown.map((r) => {
-              const prs = extractPRs(r.notes, r.ticket_link);
-              const checked = picked.includes(r.id);
-              return (
-                <tr key={r.id} className={checked ? 'rh-sel' : undefined}>
-                  <td><input type="checkbox" checked={checked} onChange={() => togglePick(r.id)} aria-label={`Select ${r.environment} deployment, ${abs(r.started_at)}, for comparison`} /></td>
-                  <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}>{r.environment} {isProd(r.environment) && <Chip>PROD</Chip>}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}><StatusPill status={baseStatus(r.status)} /> {isRerun(r.status) && <Chip>rerun</Chip>}</td>
-                  <td>
-                    {r.frontend_branch || r.backend_branch || r.frontend_version || r.backend_version ? (
-                      <>
-                        {(r.frontend_branch || r.frontend_version) && <div className="rh-ver"><b className="rh-tag" style={{ color: 'var(--accent-text)' }}>FE</b><span className="rh-ell" title={r.frontend_branch || r.frontend_version || undefined}>{r.frontend_branch || r.frontend_version}</span></div>}
-                        {(r.backend_branch || r.backend_version) && <div className="rh-ver"><b className="rh-tag" style={{ color: 'var(--ok-text)' }}>BE</b><span className="rh-ell" title={r.backend_branch || r.backend_version || undefined}>{r.backend_branch || r.backend_version}</span></div>}
-                      </>
-                    ) : (
-                      <>
-                        <div className="rh-ver"><span className="rh-ell" title={r.branch || undefined}>{r.branch || '—'}</span></div>
-                        {r.version && <div className="rh-ver"><span className="rh-ell muted" title={r.version}>{r.version}</span></div>}
-                      </>
-                    )}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button type="button" aria-label={`Open details for ${r.environment} deployment, ${abs(r.started_at)}`} style={{ ...plain, fontSize: 13 }}
-                      onClick={(e) => open(r, e.currentTarget)}>{abs(r.started_at)}</button>
-                    <div className="muted" style={{ fontSize: 12.5 }}>{ago(r.started_at)}{r.duration_seconds != null && <> · <span className="tnum">{dur(r.duration_seconds)}</span></>}</div>
-                  </td>
-                  <td>{person(r.requested_by)}</td><td>{person(r.approved_by)}</td><td>{person(r.tested_by)}</td><td>{person(r.deployed_by)}</td>
-                  <td style={{ minWidth: 220, maxWidth: 420 }}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {r.ticket_link && (isUrl(r.ticket_link)
-                        ? <a href={r.ticket_link} target="_blank" rel="noopener noreferrer" className="key" title={r.ticket_link}>🔗 {ticketText(r.ticket_link)}</a>
-                        : <span title={r.ticket_link} style={{ overflowWrap: 'anywhere' }}>{r.ticket_link}</span>)}
-                      <PRChips prs={prs} />
-                    </div>
-                    {r.notes && <Notes text={r.notes} />}
-                  </td>
-                  {admin && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button type="button" className="btn" onClick={() => emit('tracker:edit-deployment', r)} aria-label={`Edit ${r.environment} deployment, ${abs(r.started_at)}`}>Edit</button>{' '}
-                      <button type="button" className="btn" style={{ color: 'var(--bad-text)' }} onClick={() => emit('tracker:delete-deployment', r)} aria-label={`Delete ${r.environment} deployment, ${abs(r.started_at)}`}>Delete</button>
+        <div className="rh-wrap" data-density={density}>
+          <table className="rh-t">
+            <thead><tr>
+              <th scope="col"><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Select</span></th>
+              <th scope="col" aria-sort={sort.key === 'env' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'} className="rh-sort-m">
+                <button type="button" onClick={() => toggleSort('env')} style={{ ...plain, fontWeight: 600, color: 'var(--muted)', fontSize: 12 }}>
+                  Environment<span aria-hidden="true"> {sort.key === 'env' ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                </button>
+              </th>
+              {th('Status', 'status')}
+              <th scope="col">Version</th>
+              {th('When', 'when')}
+              <th scope="col">Details</th>
+              {admin && <th scope="col">Actions</th>}
+            </tr></thead>
+            <tbody>
+              {shown.map((r) => {
+                const prs = extractPRs(r.notes, r.ticket_link);
+                const checked = picked.includes(r.id);
+                const type = r.deployment_type && !/^standard$/i.test(r.deployment_type) ? r.deployment_type : '';
+                const rerun = isRerun(r.status);
+                const cls = [checked ? 'rh-sel' : '', flash.has(r.id) ? 'flash-new' : ''].filter(Boolean).join(' ') || undefined;
+                const tip = [type, rerun ? 'rerun' : '', dur(r.duration_seconds)].filter(Boolean).join(' · ') || undefined;
+                return (
+                  <tr key={r.id} className={cls}>
+                    <td className="rh-c-sel"><input type="checkbox" checked={checked} onChange={() => togglePick(r.id)} aria-label={`Select ${r.environment} deployment, ${abs(r.started_at)}, for comparison`} /></td>
+                    <td className="rh-c-env" title={tip}>
+                      <div className="rh-l1" style={{ fontWeight: 500 }}>{r.environment} {isProd(r.environment) && <Chip>PROD</Chip>}</div>
+                      {(type || rerun) && <div className="rh-l2">{type && <span className="rh-trunc">{type}</span>}{rerun && <Chip>rerun</Chip>}</div>}
                     </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table></div>
+                    <td className="rh-c-st" title={tip}>
+                      <div className="rh-l1"><StatusPill status={baseStatus(r.status)} /></div>
+                      {r.duration_seconds != null && <div className="rh-l2 rh-mono">{dur(r.duration_seconds)}</div>}
+                    </td>
+                    <td className="rh-c-ver"><VersionCell r={r} /></td>
+                    <td className="rh-c-when">
+                      <div className="rh-l1">
+                        <button type="button" className="rh-mono" aria-label={`Open details for ${r.environment} deployment, ${abs(r.started_at)}`} style={{ ...plain, fontFamily: 'inherit', fontSize: 12.5 }}
+                          onClick={(e) => open(r, e.currentTarget)}>{abs(r.started_at)}</button>
+                      </div>
+                      <div className="rh-l2">{ago(r.started_at)}</div>
+                    </td>
+                    <td className="rh-c-det"><DetailsCell r={r} prs={prs} /></td>
+                    {admin && (
+                      <td className="rh-c-act">
+                        <button type="button" className="btn" onClick={() => emit('tracker:edit-deployment', r)} aria-label={`Edit ${r.environment} deployment, ${abs(r.started_at)}`}>Edit</button>{' '}
+                        <button type="button" className="btn" style={{ color: 'var(--bad-text)' }} onClick={() => emit('tracker:delete-deployment', r)} aria-label={`Delete ${r.environment} deployment, ${abs(r.started_at)}`}>Delete</button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
       {filtered.length > shown.length && (
         <div style={{ marginTop: 'var(--space-3)' }}>
@@ -373,6 +534,6 @@ export default function ReleaseHistory() {
           </aside>
         </>
       )}
-    </Card>
+    </section>
   );
 }

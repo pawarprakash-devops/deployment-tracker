@@ -1,61 +1,78 @@
 /*
- * VidAI Deployment Tracker - redesign design tokens (proposal, not wired into the app).
- * Source of truth for docs/redesign/03-DESIGN-SYSTEM.md. Contrast ratios: see section 2 of that doc.
+ * VidAI Deployment Tracker - design tokens. Calm, dark-first control room: neutral ramp + ONE accent (coral) used
+ * only for focus, active nav, primary buttons and links; semantic colours only for state. Scoped to .v2.
  *
- * Theme resolution (matches today's localStorage key 'tracker-theme' = 'light' | 'dark'):
- *   1. <html data-theme="light|dark"> set from localStorage before first paint (inline script in layout.tsx).
- *   2. If no data-theme attribute, follow prefers-color-scheme.
- *   3. Default (no JS, no preference) = light tokens in .v2. Today's app defaults to dark; to keep that,
- *      the inline script should set data-theme="dark" when nothing is stored (decision in doc section 2.4).
- * Legacy aliases (--bg, --panel, --ok, --warn, --bad, --neutral, --prod, --accent-rgb ...) keep today's names so
- * existing components keep working during migration.
+ * Theme resolution (localStorage 'tracker-theme' = 'light' | 'dark'): <html data-theme> wins; else prefers-color-scheme;
+ * else light. The two dark blocks below (OS preference / explicit data-theme) MUST stay identical.
+ * Legacy aliases (--bg, --panel, --ok, --warn, --bad, --neutral, --prod, --accent-rgb ...) are kept; never rename.
  *
- * Scoped to the .v2 wrapper so legacy pages keep their own look.
+ * CONTRAST (WCAG 2.x, python-verified; status tint = state colour at 10% light / 14% dark over --panel)
+ * pair                          light panel/bg/p2/p3        dark panel/bg/p2/p3
+ * --text                        16.9 / 16.1 / 15.1 / 13.7   15.2 / 16.4 / 13.9 / 12.4
+ * --muted                        7.5 /  7.1 /  6.7 /  6.0    8.9 /  9.7 /  8.2 /  7.3
+ * --faint                        6.0 /  5.7 /  5.4 /  4.9    5.9 /  6.4 /  5.4 /  4.8
+ * --accent-text (links, nav)     7.1 /  6.7 /  6.3 /  5.7    8.8 /  9.6 /  8.1 /  7.2
+ * --fe-text                      6.7 /  6.4 /  6.0 /  5.4    9.5 / 10.3 /  8.7 /  7.8
+ * --be-text                      6.3 /  6.0 /  5.6 /  5.1    9.6 / 10.4 /  8.8 /  7.8
+ * state text on own tint:  ok 6.1|8.7  warn 6.3|9.1  bad 5.4|7.6  info 5.7|7.7  neutral 6.5|9.3  (light|dark)
+ * state text on panel:     ok 7.0|11.5 warn 7.2|12.1 bad 6.3|9.2  info 6.5|9.7  neutral 7.4|11.8
+ * --on-accent on --accent (primary button)  5.6 light | 6.0 dark
+ * UI (>= 3:1): --accent focus ring on panel 5.5|6.1;  --border-ctl (inputs) on panel 3.7|3.2, on p2 3.3|3.0
+ * Decorative hairlines (--border, --border-bright) are intentionally low contrast and never carry meaning alone.
+ * All text pairs >= 4.5:1 in both themes; --muted >= 6.0 everywhere.
  */
 
 .v2 {
   color-scheme: light;
-  --bg: #f6f8fb;
-  --panel: #ffffff;
-  --panel-2: #eef2f7;
-  --panel-3: #e4eaf2;
-  --border: rgba(23, 32, 51, 0.12);
-  --border-bright: rgba(23, 32, 51, 0.22);
-  --text: #172033;
-  --muted: #4b5a70;
-  --faint: #5b6a80;
-  --accent: #c2512f;
-  --accent-text: #a63f22;
-  --accent-glow: rgba(194, 81, 47, 0.22);
+  /* light: warm white surfaces, subtle warm borders, soft shadows */
+  --bg: #f7f6f3;
+  --panel: #fdfcfb;
+  --panel-2: #f1efeb;
+  --panel-3: #e7e4de;
+  --border: rgba(40, 30, 15, 0.11);
+  --border-bright: rgba(40, 30, 15, 0.20);
+  --border-ctl: #8a8378;
+  --text: #1c1a17;
+  --muted: #57534c;
+  --faint: #65615a;
+  --accent: #b4431f;
+  --accent-text: #9a3516;
+  --accent-glow: rgba(180, 67, 31, 0.18);
   --brand: #e17e61;
   --on-brand: #151c28;
-  --accent-rgb: 194, 81, 47;
-  --focus-ring: #c2512f;
-  --scrim: rgba(21, 28, 40, 0.45);
-  --elev-1: 0 1px 2px rgba(23, 32, 51, 0.08);
-  --elev-2: 0 8px 24px rgba(23, 32, 51, 0.16);
-  --skeleton-a: #e6ebf2;
-  --skeleton-b: #f1f4f8;
+  --on-accent: #ffffff;
+  --accent-rgb: 180, 67, 31;
+  --focus-ring: #b4431f;
+  --scrim: rgba(28, 26, 23, 0.40);
+  --elev-1: 0 1px 2px rgba(60, 40, 10, 0.06);
+  --elev-2: 0 10px 28px rgba(60, 40, 10, 0.12);
+  --skeleton-a: #ebe8e2;
+  --skeleton-b: #f5f3ef;
 
-  --ok: #15803d;      --ok-text: #166534;      --ok-bg: #e3f0e8;      --ok-border: rgba(21, 128, 61, 0.35);
-  --warn: #b45309;    --warn-text: #8a4204;    --warn-bg: #f6eae1;    --warn-border: rgba(180, 83, 9, 0.35);
-  --bad: #dc2626;     --bad-text: #b91c1c;     --bad-bg: #fbe5e5;     --bad-border: rgba(220, 38, 38, 0.35);
-  --info: #2563eb;    --info-text: #1d4ed8;    --info-bg: #e5ecfd;    --info-border: rgba(37, 99, 235, 0.35);
-  --neutral: #64748b; --neutral-text: #475569; --neutral-bg: #eceef1; --neutral-border: rgba(100, 116, 139, 0.35);
-  --prod: #c2512f;
+  --ok: #15803d;      --ok-text: #166534;      --ok-bg: #e6f0e8;      --ok-border: rgba(21, 128, 61, 0.32);
+  --warn: #b45309;    --warn-text: #8a4204;    --warn-bg: #f6ebe3;    --warn-border: rgba(180, 83, 9, 0.32);
+  --bad: #dc2626;     --bad-text: #b91c1c;     --bad-bg: #fae7e6;     --bad-border: rgba(220, 38, 38, 0.32);
+  --info: #2563eb;    --info-text: #1d4ed8;    --info-bg: #e7edf9;    --info-border: rgba(37, 99, 235, 0.32);
+  --neutral: #64748b; --neutral-text: #4b5563; --neutral-bg: #eeeef0; --neutral-border: rgba(100, 116, 139, 0.32);
+  --prod: #b4431f;
+  /* FE / BE tags: quiet, never compete with state colours */
+  --fe-text: #1e55b8; --fe-bg: #e9eff9; --fe-border: rgba(30, 85, 184, 0.28);
+  --be-text: #0f6a62; --be-bg: #e5f1ef; --be-border: rgba(15, 106, 98, 0.28);
 
   /* ---- theme-independent tokens ---- */
-  --font-ui: 'Montserrat', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-code: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-code: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-data: var(--font-code);
 
-  --fs-2xs: 12px;  --lh-2xs: 17px;
-  --fs-xs: 12.5px; --lh-xs: 18px;
-  --fs-sm: 14px;   --lh-sm: 22px;   /* data / table / chip default */
-  --fs-base: 15px; --lh-base: 24px; /* body */
-  --fs-md: 16px;   --lh-md: 24px;
-  --fs-lg: 18px;   --lh-lg: 26px;
-  --fs-xl: 22px;   --lh-xl: 28px;
-  --fs-2xl: 28px;  --lh-2xl: 34px;  /* stat tile value */
+  /* modular scale ~1.2 around 15px */
+  --fs-2xs: 12px;   --lh-2xs: 17px;
+  --fs-xs: 12.5px;  --lh-xs: 18px;   /* labels */
+  --fs-sm: 13.5px;  --lh-sm: 20px;   /* data / table / chip */
+  --fs-base: 15px;  --lh-base: 22.5px; /* body, 1.5 */
+  --fs-md: 16px;    --lh-md: 24px;
+  --fs-lg: 18px;    --lh-lg: 22px;   /* 1.2 */
+  --fs-xl: 24px;    --lh-xl: 29px;   /* h1 */
+  --fs-2xl: 28px;   --lh-2xl: 34px;  /* stat tile value */
 
   --space-0: 0;
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
@@ -64,7 +81,7 @@
   --r-xs: 4px;   /* version chip, kbd */
   --r-sm: 6px;   /* inputs, buttons */
   --r-md: 12px;  /* cards, tiles */
-  --r-lg: 14px;  /* drawer (leading corners), modals */
+  --r-lg: 14px;  /* drawer, modals */
   --r-pill: 999px;
 
   --z-nav: 20; --z-drawer: 40; --z-palette: 50; --z-toast: 60;
@@ -81,9 +98,9 @@
   --pad-cell-x: 12px;
 }
 
-/* Compact density: <html data-density="compact"> (persisted as 'tracker-density') */
-.v2[data-density='compact'] {
-  --row-h: 32px;
+/* Compact density: <html data-density="compact"> or .v2[data-density] (persisted as 'tracker-density') */
+.v2[data-density='compact'], [data-density='compact'] .v2 {
+  --row-h: 34px;
   --ctl-h: 28px;
   --pad-card: 10px;
   --gap-stack: 8px;
@@ -93,43 +110,36 @@
 
 /* Touch targets never shrink below 44px on coarse pointers, even in compact */
 @media (pointer: coarse) {
-  .v2[data-density='compact'] { --row-h: 44px; --ctl-h: 44px; }
+  .v2[data-density='compact'], [data-density='compact'] .v2 { --row-h: 44px; --ctl-h: 44px; }
 }
 
-/*
- * DARK THEME - the two dark blocks below (OS preference / explicit data-theme) MUST stay identical.
- * Contrast (WCAG, computed with python; tints = status colour at 14% over --panel):
- *   text  #eef2f8 on panel 15.5 | panel-2 14.2 | panel-3 13.0 | bg 16.7
- *   muted #b3bfd1 on panel  9.4 | panel-2  8.6 | panel-3  7.8 | bg 10.1   (>= 7 everywhere)
- *   faint #8d9bb0 on panel  6.2 | panel-2  5.7 | panel-3  5.2             (>= 4.5)
- *   accent-text #f4a58f on panel 8.8 | panel-2 8.1;  accent #e17e61 on panel 6.1
- *   ok #6ee7b7 8.7 | warn #fcd34d 9.0 | bad #fca5a5 7.6 | info #93c5fd 7.7 | neutral #cbd5e1 9.3  (on tint/panel; >= 6.9 on panel-2)
- * Light theme: muted 7.0, faint 5.5, text 16.3 on #fff - unchanged.
- */
+/* DARK THEME - OS preference (no explicit light) */
 @media (prefers-color-scheme: dark) {
   .v2:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #0b1119;
-    --panel: #121a29;
-    --panel-2: #182235;
-    --panel-3: #1d2940;
+    --bg: #0c1118;
+    --panel: #131a25;
+    --panel-2: #19222f;
+    --panel-3: #202b3b;
     --border: rgba(255, 255, 255, 0.08);
     --border-bright: rgba(255, 255, 255, 0.16);
-    --text: #eef2f8;
-    --muted: #b3bfd1;
-    --faint: #8d9bb0;
+    --border-ctl: #67748a;
+    --text: #eceff4;
+    --muted: #b0bacb;
+    --faint: #8a97ab;
     --accent: #e17e61;
     --accent-text: #f4a58f;
-    --accent-glow: rgba(225, 126, 97, 0.35);
+    --accent-glow: rgba(225, 126, 97, 0.30);
     --brand: #e17e61;
     --on-brand: #151c28;
+    --on-accent: #151c28;
     --accent-rgb: 225, 126, 97;
     --focus-ring: #e17e61;
     --scrim: rgba(0, 0, 0, 0.62);
     --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     --elev-2: 0 8px 24px rgba(0, 0, 0, 0.5);
-    --skeleton-a: #182235;
-    --skeleton-b: #223049;
+    --skeleton-a: #19222f;
+    --skeleton-b: #243248;
 
     --ok: #34d399;      --ok-text: #6ee7b7;      --ok-bg: rgba(52, 211, 153, 0.14);   --ok-border: rgba(52, 211, 153, 0.35);
     --warn: #fbbf24;    --warn-text: #fcd34d;    --warn-bg: rgba(251, 191, 36, 0.14);  --warn-border: rgba(251, 191, 36, 0.35);
@@ -137,32 +147,37 @@
     --info: #60a5fa;    --info-text: #93c5fd;    --info-bg: rgba(96, 165, 250, 0.14);  --info-border: rgba(96, 165, 250, 0.35);
     --neutral: #94a3b8; --neutral-text: #cbd5e1; --neutral-bg: rgba(148, 163, 184, 0.14); --neutral-border: rgba(148, 163, 184, 0.35);
     --prod: #e17e61;
+    --fe-text: #9cc2f5; --fe-bg: rgba(156, 194, 245, 0.12); --fe-border: rgba(156, 194, 245, 0.30);
+    --be-text: #6fd0c3; --be-bg: rgba(111, 208, 195, 0.12); --be-border: rgba(111, 208, 195, 0.30);
   }
 }
 
+/* DARK THEME - explicit */
 .v2[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0b1119;
-  --panel: #121a29;
-  --panel-2: #182235;
-  --panel-3: #1d2940;
+  --bg: #0c1118;
+  --panel: #131a25;
+  --panel-2: #19222f;
+  --panel-3: #202b3b;
   --border: rgba(255, 255, 255, 0.08);
   --border-bright: rgba(255, 255, 255, 0.16);
-  --text: #eef2f8;
-  --muted: #b3bfd1;
-  --faint: #8d9bb0;
+  --border-ctl: #67748a;
+  --text: #eceff4;
+  --muted: #b0bacb;
+  --faint: #8a97ab;
   --accent: #e17e61;
   --accent-text: #f4a58f;
-  --accent-glow: rgba(225, 126, 97, 0.35);
+  --accent-glow: rgba(225, 126, 97, 0.30);
   --brand: #e17e61;
   --on-brand: #151c28;
+  --on-accent: #151c28;
   --accent-rgb: 225, 126, 97;
   --focus-ring: #e17e61;
   --scrim: rgba(0, 0, 0, 0.62);
   --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --elev-2: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --skeleton-a: #182235;
-  --skeleton-b: #223049;
+  --skeleton-a: #19222f;
+  --skeleton-b: #243248;
 
   --ok: #34d399;      --ok-text: #6ee7b7;      --ok-bg: rgba(52, 211, 153, 0.14);   --ok-border: rgba(52, 211, 153, 0.35);
   --warn: #fbbf24;    --warn-text: #fcd34d;    --warn-bg: rgba(251, 191, 36, 0.14);  --warn-border: rgba(251, 191, 36, 0.35);
@@ -170,23 +185,38 @@
   --info: #60a5fa;    --info-text: #93c5fd;    --info-bg: rgba(96, 165, 250, 0.14);  --info-border: rgba(96, 165, 250, 0.35);
   --neutral: #94a3b8; --neutral-text: #cbd5e1; --neutral-bg: rgba(148, 163, 184, 0.14); --neutral-border: rgba(148, 163, 184, 0.35);
   --prod: #e17e61;
+  --fe-text: #9cc2f5; --fe-bg: rgba(156, 194, 245, 0.12); --fe-border: rgba(156, 194, 245, 0.30);
+  --be-text: #6fd0c3; --be-bg: rgba(111, 208, 195, 0.12); --be-border: rgba(111, 208, 195, 0.30);
 }
 
-/* ---- Tailwind 4 mapping: generates utilities bg-panel, text-muted, border-border, text-ok-text, bg-bad-bg, rounded-md ... ---- */
-
 /* ---- base + shared behaviours ---- */
-.v2 { background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: var(--fs-base); line-height: var(--lh-base);  min-height: 100vh; }
+.v2 { background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: var(--fs-base); line-height: 1.5; min-height: 100vh; }
+.v2 h1, .v2 h2, .v2 h3 { line-height: 1.2; }
 .v2 .tnum { font-variant-numeric: tabular-nums; }
-.v2 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; box-shadow: 0 0 0 4px var(--accent-glow); }
+.v2 .mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.v2 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.v2 ::selection { background: rgba(var(--accent-rgb), .28); }
 
 @keyframes tracker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 @keyframes tracker-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes live-pulse {
+  0%   { opacity: 1;   box-shadow: 0 0 0 0 currentColor; }
+  70%  { opacity: .85; box-shadow: 0 0 0 6px transparent; }
+  100% { opacity: 1;   box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes flash-new { from { background-color: rgba(var(--accent-rgb), .22); } to { background-color: transparent; } }
+@keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
 .v2 .skeleton { background: linear-gradient(90deg, var(--skeleton-a), var(--skeleton-b), var(--skeleton-a)); background-size: 200% 100%; animation: tracker-shimmer 1.4s linear infinite; border-radius: var(--r-sm); }
 .v2 .pulse { animation: tracker-pulse 1.6s ease-in-out infinite; }
+.v2 .is-live { color: var(--ok); border-radius: 50%; animation: live-pulse 1.6s ease-out infinite; }
+.v2 .flash-new, .v2 .flash-new > td { animation: flash-new 1.8s ease-out 1; }
+.v2 .fade-in { animation: fade-in 180ms ease-out both; }
 
 @media (prefers-reduced-motion: reduce) {
   .v2 *, .v2 *::before, .v2 *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   .v2 .skeleton { background: var(--skeleton-a); }
+  .v2 .is-live, .v2 .pulse, .v2 .flash-new, .v2 .flash-new > td, .v2 .fade-in { animation: none !important; }
 }
 
 @media (forced-colors: active) {

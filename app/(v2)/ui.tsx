@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { PipelineResponse } from '@/lib/pipeline-types';
 
 // ---- shared data hook ----------------------------------------------------------------------------
@@ -7,23 +8,37 @@ export function usePipeline() {
   const [data, setData] = useState<PipelineResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const r = await fetch('/api/pipeline', { cache: 'no-store' });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const j = (await r.json()) as PipelineResponse;
-        if (alive) { setData(j); setError(null); setUpdatedAt(Date.now()); }
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : 'Failed to load');
-      }
-    };
-    load();
-    const t = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 90_000);
-    return () => { alive = false; clearInterval(t); };
+  const alive = useRef(true);
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch('/api/pipeline', { cache: 'no-store' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = (await r.json()) as PipelineResponse;
+      if (alive.current) { setData(j); setError(null); setUpdatedAt(Date.now()); }
+    } catch (e) {
+      if (alive.current) setError(e instanceof Error ? e.message : 'Failed to load');
+    }
   }, []);
-  return { data, error, updatedAt };
+  useEffect(() => {
+    alive.current = true;
+    const first = setTimeout(() => { void load(); }, 0);
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 90_000);
+    return () => { alive.current = false; clearTimeout(first); clearInterval(t); };
+  }, [load]);
+  const refresh = useCallback(() => { void load(); }, [load]);
+  return { data, error, updatedAt, refresh };
+}
+
+// Ticking clock for components that need "now" without calling Date.now() during render.
+// Returns null until mounted, then the current timestamp, refreshed every `intervalMs`.
+export function useNow(intervalMs = 30000): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const first = setTimeout(() => setNow(Date.now()), 0);
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [intervalMs]);
+  return now;
 }
 
 // ---- formatting ----------------------------------------------------------------------------------
@@ -52,10 +67,27 @@ export function fmtDateTime(v: string | number | Date | null | undefined): strin
 export type Tone = 'ok' | 'warn' | 'bad' | 'info' | 'neutral';
 const ICON: Record<Tone, string> = { ok: '✓', warn: '!', bad: '✕', info: '●', neutral: '○' };
 
-export function Pill({ tone = 'neutral', children, icon = true }: { tone?: Tone; children: React.ReactNode; icon?: boolean }) {
+const SR_ONLY: React.CSSProperties = { position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 };
+
+// 8px status dot; the `.is-live` class (shell.css) adds the pulse. Label is read by screen readers only.
+export function LiveDot({ tone = 'info', label }: { tone?: Tone; label?: string }) {
+  return (
+    <span className="is-live" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', flex: 'none', background: `var(--${tone})` }}>
+      {label && <span style={SR_ONLY}>{label}</span>}
+    </span>
+  );
+}
+
+export function Kbd({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="mono" style={{ display: 'inline-block', padding: '1px 5px', minWidth: 18, textAlign: 'center', fontSize: 11, lineHeight: '16px', color: 'var(--muted, inherit)', background: 'var(--surface-2, transparent)', border: '1px solid var(--border, currentColor)', borderRadius: 4 }}>{children}</kbd>
+  );
+}
+
+export function Pill({ tone = 'neutral', children, icon = true, live = false }: { tone?: Tone; children: React.ReactNode; icon?: boolean; live?: boolean }) {
   return (
     <span className="pill" style={{ color: `var(--${tone}-text)`, background: `var(--${tone}-bg)`, border: `1px solid var(--${tone}-border)` }}>
-      {icon && <span aria-hidden="true">{ICON[tone]}</span>}
+      {live ? <span aria-hidden="true" style={{ display: 'inline-flex' }}><LiveDot tone={tone} /></span> : icon && <span aria-hidden="true">{ICON[tone]}</span>}
       {children}
     </span>
   );
@@ -64,7 +96,7 @@ export function Pill({ tone = 'neutral', children, icon = true }: { tone?: Tone;
 export function StatusPill({ status }: { status: string }) {
   const s = status.toLowerCase();
   const tone: Tone = /success/.test(s) ? 'ok' : /progress/.test(s) ? 'info' : /fail/.test(s) ? 'bad' : /roll|cancel/.test(s) ? 'warn' : 'neutral';
-  return <Pill tone={tone}>{status}</Pill>;
+  return <Pill tone={tone} live={/progress/.test(s)}>{status}</Pill>;
 }
 
 export function EnvDot({ tone, label }: { tone: Tone; label: string }) {
@@ -108,16 +140,43 @@ export function Card({ title, action, children }: { title?: string; action?: Rea
   );
 }
 
-export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="empty">{children}</p>;
+export function Empty({ children, icon, title, action }: { children: React.ReactNode; icon?: ReactNode; title?: string; action?: { label: string; onClick: () => void } }) {
+  if (icon == null && !title && !action) return <p className="empty">{children}</p>;
+  return (
+    <div className="empty fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6, textAlign: 'left' }}>
+      {icon != null && <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1, opacity: 0.8 }}>{icon}</span>}
+      {title && <strong style={{ fontSize: 14, color: 'var(--text, inherit)' }}>{title}</strong>}
+      <p style={{ margin: 0 }}>{children}</p>
+      {action && <button type="button" className="btn" onClick={action.onClick} style={{ marginTop: 4 }}>{action.label}</button>}
+    </div>
+  );
 }
 
-export function Skeleton({ rows = 3 }: { rows?: number }) {
-  return <div aria-busy="true" aria-label="Loading">{Array.from({ length: rows }, (_, i) => <div key={i} className="skeleton" style={{ height: 18, margin: '10px 0', width: `${90 - i * 12}%` }} />)}</div>;
+export function Skeleton({ rows = 3, variant = 'lines', height }: { rows?: number; variant?: 'lines' | 'rows' | 'tile'; height?: number }) {
+  if (variant === 'tile') {
+    return <div aria-busy="true" aria-label="Loading"><div className="skeleton" style={{ height: height ?? 88, borderRadius: 8 }} /></div>;
+  }
+  if (variant === 'rows') {
+    return (
+      <div aria-busy="true" aria-label="Loading">
+        {Array.from({ length: rows }, (_, i) => <div key={i} className="skeleton" style={{ height: height ?? 40, margin: '8px 0', width: '100%', borderRadius: 6 }} />)}
+      </div>
+    );
+  }
+  return <div aria-busy="true" aria-label="Loading">{Array.from({ length: rows }, (_, i) => <div key={i} className="skeleton" style={{ height: height ?? 18, margin: '10px 0', width: `${90 - i * 12}%` }} />)}</div>;
 }
 
-export function ErrorNote({ children }: { children: React.ReactNode }) {
-  return <div className="banner" role="alert">{children}</div>;
+export function ErrorNote({ children, onRetry, detail }: { children: React.ReactNode; onRetry?: () => void; detail?: string }) {
+  if (!onRetry && !detail) return <div className="banner" role="alert">{children}</div>;
+  return (
+    <div className="banner" role="alert" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <div>
+        <div>{children}</div>
+        {detail && <div style={{ marginTop: 2, fontSize: 12, opacity: 0.8 }}>{detail}</div>}
+      </div>
+      {onRetry && <button type="button" className="btn" onClick={onRetry}>Try again</button>}
+    </div>
+  );
 }
 
 export function JiraNote({ configured }: { configured: boolean }) {
