@@ -105,6 +105,33 @@ const RH_CSS = `
 .rh-more{background:none;border:0;padding:0;color:var(--accent-text);font-size:13px;cursor:pointer;flex:none}
 .rh-wrap[data-density='compact'] .rh-l2,.rh-wrap[data-density='compact'] .rh-notes{display:none}
 .rh-wrap[data-density='compact'] .rh-t tbody td{padding-top:var(--pad-cell-y,4px);padding-bottom:var(--pad-cell-y,4px);vertical-align:middle}
+/* Wide-screen column set: extra cells always rendered, toggled by media queries. */
+.rh-t .rh-wide{display:none}
+.rh-people{display:block}
+.rh-runs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
+.rh-wn{display:flex;gap:6px;align-items:baseline;color:var(--muted);font-size:13px;line-height:18px;min-width:0}
+.rh-wn>div{flex:1 1 auto;min-width:0}
+.rh-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.rh-wrap[data-density='compact'] .rh-clamp{-webkit-line-clamp:1}
+.rh-t{--rh-pw:110px;--rh-vw:190px}
+@media (min-width:1950px){
+  .rh-t{table-layout:fixed}
+  .rh-t th.rh-wide,.rh-t td.rh-wide{display:table-cell}
+  .rh-t .rh-narrow-only{display:none}
+  .rh-t thead th,.rh-t tbody td{padding-left:8px;padding-right:8px;box-sizing:border-box}
+  .rh-t tbody td{overflow:hidden}
+  .rh-t th.rh-h-sel{width:34px}
+  .rh-t th.rh-h-env{width:130px}
+  .rh-t th.rh-h-st{width:105px}
+  .rh-t th.rh-h-ver{width:var(--rh-vw)}
+  .rh-t th.rh-h-when{width:150px}
+  .rh-t th.rh-h-pp{width:var(--rh-pw)}
+  .rh-t th.rh-h-run{width:130px}
+  .rh-t th.rh-h-act{width:140px}
+  .rh-ver{max-width:none}
+}
+@media (min-width:2300px){.rh-t{--rh-pw:150px;--rh-vw:210px}.rh-t th.rh-h-run{width:170px}}
+@media (min-width:3000px){.rh-t{--rh-pw:200px;--rh-vw:260px}.rh-t th.rh-h-run{width:220px}.rh-t th.rh-h-env{width:170px}}
 .rh-sk{display:grid;grid-template-columns:24px 1.2fr 1fr 1.4fr 1.2fr 2fr;gap:14px;padding:12px 10px;border-bottom:1px solid var(--border)}
 .rh-sk span{display:block;height:14px;border-radius:4px}
 .rh-state{padding:28px 12px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
@@ -183,6 +210,43 @@ function DetailsCell({ r, prs }: { r: Row; prs: PR[] }) {
       {people && <div className="rh-l2" title={people}><span className="rh-trunc">{people}</span></div>}
       {r.notes && <Notes text={r.notes} />}
     </>
+  );
+}
+
+function PersonCell({ v }: { v?: string | null }) {
+  return (
+    <td className="rh-wide rh-c-pp">
+      {v ? <span className="rh-trunc rh-people" title={v}>{v}</span> : <span className="muted">—</span>}
+    </td>
+  );
+}
+
+function RunsCell({ r, prs }: { r: Row; prs: PR[] }) {
+  return (
+    <td className="rh-wide rh-c-run">
+      <div className="rh-runs">
+        {r.ticket_link && <RunLink link={r.ticket_link} />}
+        <PRChips prs={prs} />
+        {!r.ticket_link && prs.length === 0 && <span className="muted">—</span>}
+      </div>
+    </td>
+  );
+}
+
+/** Wide-mode notes: clamped to 2 lines (1 in compact) with more/less. */
+function NotesCell({ text }: { text?: string | null }) {
+  const [open, setOpen] = useState(false);
+  if (!text) return <td className="rh-wide rh-c-notes"><span className="muted">—</span></td>;
+  const long = text.length > 110 || text.includes('\n');
+  return (
+    <td className="rh-wide rh-c-notes">
+      <div className="rh-wn">
+        <div className={open ? undefined : 'rh-clamp'} title={open ? undefined : text} style={open ? { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } : undefined}>
+          {open ? <Linkified text={text} /> : text}
+        </div>
+        {long && <button type="button" className="rh-more" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? 'less' : 'more'}</button>}
+      </div>
+    </td>
   );
 }
 
@@ -369,8 +433,8 @@ export default function ReleaseHistory() {
   };
 
   const selectStyle = { fontSize: 'var(--fs-sm)', minHeight: 34, border: '1px solid var(--border-bright)', background: 'var(--panel)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '4px 8px' } as const;
-  const th = (label: string, key: SortKey) => (
-    <th scope="col" className="rh-sort-m" aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+  const th = (label: string, key: SortKey, cls: string) => (
+    <th scope="col" className={`rh-sort-m ${cls}`} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
       <button type="button" onClick={() => toggleSort(key)} style={{ ...plain, fontWeight: 600, color: 'var(--muted)', fontSize: 12 }}>
         {label}<span aria-hidden="true"> {sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
       </button>
@@ -441,17 +505,23 @@ export default function ReleaseHistory() {
         <div className="rh-wrap" data-density={density}>
           <table className="rh-t">
             <thead><tr>
-              <th scope="col"><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Select</span></th>
-              <th scope="col" aria-sort={sort.key === 'env' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'} className="rh-sort-m">
+              <th scope="col" className="rh-h-sel"><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Select</span></th>
+              <th scope="col" aria-sort={sort.key === 'env' ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'} className="rh-sort-m rh-h-env">
                 <button type="button" onClick={() => toggleSort('env')} style={{ ...plain, fontWeight: 600, color: 'var(--muted)', fontSize: 12 }}>
                   Environment<span aria-hidden="true"> {sort.key === 'env' ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
                 </button>
               </th>
-              {th('Status', 'status')}
-              <th scope="col">Version</th>
-              {th('When', 'when')}
-              <th scope="col">Details</th>
-              {admin && <th scope="col">Actions</th>}
+              {th('Status', 'status', 'rh-h-st')}
+              <th scope="col" className="rh-h-ver">Version</th>
+              {th('When', 'when', 'rh-h-when')}
+              <th scope="col" className="rh-narrow-only">Details</th>
+              <th scope="col" className="rh-wide rh-h-pp">Requested By</th>
+              <th scope="col" className="rh-wide rh-h-pp">Approved By</th>
+              <th scope="col" className="rh-wide rh-h-pp">Tested By</th>
+              <th scope="col" className="rh-wide rh-h-pp">Deployed By</th>
+              <th scope="col" className="rh-wide rh-h-run">Run / PRs</th>
+              <th scope="col" className="rh-wide rh-h-notes">Notes</th>
+              {admin && <th scope="col" className="rh-h-act">Actions</th>}
             </tr></thead>
             <tbody>
               {shown.map((r) => {
@@ -480,7 +550,13 @@ export default function ReleaseHistory() {
                       </div>
                       <div className="rh-l2">{ago(r.started_at)}</div>
                     </td>
-                    <td className="rh-c-det"><DetailsCell r={r} prs={prs} /></td>
+                    <td className="rh-c-det rh-narrow-only"><DetailsCell r={r} prs={prs} /></td>
+                    <PersonCell v={r.requested_by} />
+                    <PersonCell v={r.approved_by} />
+                    <PersonCell v={r.tested_by} />
+                    <PersonCell v={r.deployed_by} />
+                    <RunsCell r={r} prs={prs} />
+                    <NotesCell text={r.notes} />
                     {admin && (
                       <td className="rh-c-act">
                         <button type="button" className="btn" onClick={() => emit('tracker:edit-deployment', r)} aria-label={`Edit ${r.environment} deployment, ${abs(r.started_at)}`}>Edit</button>{' '}
