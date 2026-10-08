@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import type { PipelineColumn, PipelineEnvEntry, PipelineTicket } from '@/lib/pipeline-types';
 import { useShell } from './ctx';
-import { Chip, Empty, EnvDot, ErrorNote, JiraNote, Pill, Skeleton, ago, type Tone } from './ui';
+import { Chip, Empty, EnvDot, ErrorNote, JiraNote, Pill, Skeleton, ago, fmtDate, type Tone } from './ui';
 
 const STATUS_TONE: [RegExp, Tone][] = [[/success/, 'ok'], [/fail/, 'bad'], [/progress/, 'info']];
 
@@ -105,7 +105,7 @@ export default function PipelineTab() {
           </div>
           <p className="muted">
             {pipeline.unlinked.deployments} deployments in the window have no Jira key. Showing the last {pipeline.window.deployments} deployments
-            {pipeline.window.oldest ? ` back to ${new Date(pipeline.window.oldest).toLocaleDateString()}` : ''}.
+            {pipeline.window.oldest ? ` back to ${fmtDate(pipeline.window.oldest)}` : ''}.
           </p>
         </>
       )}

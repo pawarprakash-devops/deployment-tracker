@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Chip, Empty, ErrorNote, Pill, Skeleton } from './ui';
+import { Chip, Empty, ErrorNote, Pill, Skeleton, fmtDateTime } from './ui';
 
 type Row = Record<string, string | number | null | undefined>;
 type Repo = 'FE' | 'BE';
@@ -36,7 +36,7 @@ function fmtDur(s: number): string {
 function cell(field: string, r: Row): string {
   const v = r[field];
   if (v === null || v === undefined || v === '') return '—';
-  if (field === 'started_at') return new Date(String(v)).toLocaleString();
+  if (field === 'started_at') return fmtDateTime(String(v));
   if (field === 'duration_seconds') return fmtDur(Number(v));
   return String(v);
 }
@@ -224,7 +224,7 @@ export default function ReleaseCompare() {
                       <li key={c.sha} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 10px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6 }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ overflowWrap: 'anywhere' }}>{c.message.split('\n')[0]}</div>
-                          <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted)' }}>{c.author_login || c.author} · {new Date(c.date).toLocaleString()}</div>
+                          <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted)' }}>{c.author_login || c.author} · {fmtDateTime(c.date)}</div>
                         </div>
                         <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ ...mono, fontSize: 'var(--fs-xs)', color: 'var(--accent-text)', whiteSpace: 'nowrap' }} aria-label={`Commit ${c.short_sha} on GitHub`}>{c.short_sha}</a>
                       </li>

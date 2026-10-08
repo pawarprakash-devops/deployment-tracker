@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { Card, Chip, EnvDot, Empty, ErrorNote, Pill, Skeleton, ago, type Tone } from './ui';
+import { Card, Chip, EnvDot, Empty, ErrorNote, Pill, Skeleton, ago, fmtDateTime, type Tone } from './ui';
 
 interface EnvHealth {
   id: string;
@@ -130,7 +130,7 @@ export default function HealthTab() {
                           <span className="tnum">{p.latencyMs} ms</span>
                           {p.statusCode != null && <> · <span className="tnum">HTTP {p.statusCode}</span></>}
                           <div className="subtle" style={{ overflowWrap: 'anywhere' }}>{p.message}</div>
-                          <div className="subtle" title={p.url}>{hostOf(p.url)} · checked <span title={new Date(p.checkedAt).toLocaleString()}>{ago(p.checkedAt)}</span></div>
+                          <div className="subtle" title={p.url}>{hostOf(p.url)} · checked <span title={fmtDateTime(p.checkedAt)}>{ago(p.checkedAt)}</span></div>
                         </>
                       ) : <span className="muted">{probes ? 'Not probed' : '—'}</span>}
                     </td>
@@ -146,7 +146,7 @@ export default function HealthTab() {
                             {e.deployment_type && <Pill tone={e.deployment_type === 'hotfix' ? 'bad' : e.deployment_type === 'rollback' ? 'warn' : 'neutral'} icon={false}>{e.deployment_type}</Pill>}
                           </span>
                           <div className="subtle">{e.branch ?? '—'} · {duration(e.duration_seconds)}</div>
-                          <div className="subtle" title={new Date(e.last_deployed_at).toLocaleString()}>{ago(e.last_deployed_at)}</div>
+                          <div className="subtle" title={fmtDateTime(e.last_deployed_at)}>{ago(e.last_deployed_at)}</div>
                         </>
                       ) : <span className="muted">Never deployed</span>}
                     </td>
