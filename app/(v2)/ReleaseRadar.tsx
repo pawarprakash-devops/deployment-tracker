@@ -9,6 +9,7 @@ interface Pair { baseRef?: string; from: string; to: string; fromEnv: string; to
 interface Detail { loading: boolean; error?: string; commits: Commit[]; total: number; truncated: boolean; compareUrl?: string }
 
 const SHOWN = 30;
+const RR_CSS = '.rr-item:hover > .rr-row{background:rgba(127,127,127,.09)}.rr-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:4px}';
 const WINDOWS = [{ label: '1:30 PM', start: 13.5 * 3600 }, { label: '4:00 PM', start: 16 * 3600 }];
 const OPEN_SECS = 15 * 60; // a window stays open for 15 minutes (matches the legacy countdown)
 
@@ -62,40 +63,43 @@ function PromotionRadar() {
 
   return (
     <Card title="Promotion radar" action={toggles}>
-      <p className="muted" style={{ margin: '0 0 var(--space-3)', fontSize: 'var(--fs-sm)' }}>+N commits since the last merged promotion PR; ~N means no promotion PR was found so it can over-count.</p>
+      <style>{RR_CSS}</style>
+      <p className="muted" style={{ margin: '0 0 var(--space-3)', fontSize: 13 }}>+N commits since the last merged promotion PR; ~N means no promotion PR was found so it can over-count.</p>
       {failed && <Empty>Promotion drift is unavailable (needs GH_TOKEN)</Empty>}
       {!failed && !pairs && <Skeleton rows={3} />}
       {!failed && pairs && pairs.length === 0 && <Empty>No promotion pairs configured.</Empty>}
       {!failed && pairs && (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 'var(--space-2)' }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--border)' }}>
           {pairs.map((p) => {
             const k = `${p.from}>${p.to}`;
             const isOpen = open === k;
             const pending = p.pending ?? 0;
             const shown = detail?.commits.filter((c) => !filter || `${c.message} ${c.author ?? ''}`.toLowerCase().includes(filter.toLowerCase())).slice(0, SHOWN) ?? [];
-            const label = <span className="tnum" style={{ fontWeight: 600 }}>{p.fromEnv} → {p.toEnv}</span>;
+            const label = <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>{p.fromEnv} → {p.toEnv}</span>;
+            const mutedAge = { fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap' } as const;
             return (
-              <li key={k} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)' }}>
+              <li key={k} className="rr-item" style={{ borderBottom: '1px solid var(--border)' }}>
                 {p.error ? (
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', flexWrap: 'wrap' }} title={p.error}>
-                    {label}<span className="muted">unavailable</span>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', minHeight: 40, padding: '0 8px', flexWrap: 'wrap' }} title={p.error}>
+                    {label}<span className="muted" style={{ fontSize: 13 }}>unavailable</span>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => toggle(p)} aria-expanded={isOpen} style={{ all: 'unset', boxSizing: 'border-box', width: '100%', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', flexWrap: 'wrap' }}>
-                    {label}
-                    <Pill tone={pending === 0 ? 'ok' : 'warn'}>{pending === 0 ? 'in sync' : `${p.basis === 'branch-compare' ? '~' : '+'}${pending}`}</Pill>
-                    <span className="muted" style={{ marginLeft: 'auto', fontSize: 'var(--fs-sm)' }}>
-                      {p.promotion ? `PR #${p.promotion.number} · ${ago(p.promotion.mergedAt)}` : 'no promotion PR'} {isOpen ? '▴' : '▾'}
-                    </span>
-                  </button>
-                )}
-                {!p.error && p.promotion && (
-                  <div style={{ padding: '0 12px 8px', fontSize: 'var(--fs-sm)' }}>
-                    <a href={p.promotion.url} target="_blank" rel="noopener noreferrer">Last promotion PR #{p.promotion.number} ↗</a>
+                  <div className="rr-row" style={{ display: 'flex', alignItems: 'center', minHeight: 40, padding: '0 8px', columnGap: 10, flexWrap: 'wrap' }}>
+                    <button type="button" className="rr-btn" onClick={() => toggle(p)} aria-expanded={isOpen} style={{ all: 'unset', boxSizing: 'border-box', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center', minHeight: 40 }}>
+                      {label}
+                      <Pill tone={pending === 0 ? 'ok' : 'warn'}>{pending === 0 ? 'in sync' : `${p.basis === 'branch-compare' ? '~' : '+'}${pending}`}</Pill>
+                    </button>
+                    {p.promotion && (
+                      <a href={p.promotion.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>Last promotion PR #{p.promotion.number} ↗</a>
+                    )}
+                    <button type="button" tabIndex={-1} aria-hidden="true" onClick={() => toggle(p)} style={{ all: 'unset', boxSizing: 'border-box', cursor: 'pointer', flex: '1 1 0', minWidth: 60, minHeight: 40, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', ...mutedAge }}>
+                      <span>{p.promotion ? `· ${ago(p.promotion.mergedAt)}` : 'no promotion PR'}</span>
+                      <span style={{ fontSize: 12 }}>{isOpen ? '▴' : '▾'}</span>
+                    </button>
                   </div>
                 )}
                 {isOpen && detail && (
-                  <div style={{ padding: '0 12px 12px' }}>
+                  <div style={{ padding: '0 8px 12px' }}>
                     {detail.loading && <Skeleton rows={3} />}
                     {detail.error && <Empty>Could not load commits ({detail.error}).</Empty>}
                     {!detail.loading && !detail.error && detail.commits.length === 0 && <Empty>No pending commits.</Empty>}
@@ -149,23 +153,26 @@ function QaWindows() {
 
   return (
     <Card title="QA release windows">
-      <div className="tnum" style={{ fontSize: 'var(--fs-lg, 1.125rem)', fontWeight: 600, minHeight: 28 }} aria-live="polite">{headline ?? <span className="muted">Calculating…</span>}</div>
-      <ul style={{ listStyle: 'none', margin: 'var(--space-3) 0', padding: 0, display: 'grid', gap: 'var(--space-2)' }}>
+      <div className="tnum" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 20, lineHeight: '28px', fontWeight: 600, minHeight: 28 }} aria-live="polite">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none', color: 'var(--muted)' }}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+        <span>{headline ?? <span className="muted">Calculating…</span>}</span>
+      </div>
+      <ul style={{ listStyle: 'none', margin: 'var(--space-3) 0', padding: 0, borderTop: '1px solid var(--border)' }}>
         {WINDOWS.map((w) => {
           const s = state(w);
           return (
-            <li key={w.label} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span className="tnum" style={{ minWidth: 90 }}>{w.label} IST</span>
+            <li key={w.label} style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', minHeight: 38, borderBottom: '1px solid var(--border)' }}>
+              <span className="tnum" style={{ fontSize: 14 }}>{w.label} IST</span>
               {secs !== null && <Pill tone={s === 'done' ? 'neutral' : s === 'open' ? 'info' : 'warn'}>{s === 'done' ? 'done' : s === 'open' ? 'open now' : 'upcoming'}</Pill>}
             </li>
           );
         })}
       </ul>
-      <div style={{ margin: '0 0 var(--space-2)' }}>
-        <Pill tone="warn">Gate: mandatory approval</Pill>{' '}
-        <span className="muted" style={{ fontSize: 'var(--fs-sm)', overflowWrap: 'anywhere' }} title="DevOps approval required from Prakash Pawar">@pawarprakash-devops</span>
+      <div style={{ margin: '0 0 var(--space-2)', padding: '8px 12px', borderLeft: '3px solid var(--warn)', background: 'var(--warn-bg)', borderRadius: '0 var(--r-sm) var(--r-sm) 0', fontSize: 13, display: 'flex', flexWrap: 'wrap', columnGap: 8, alignItems: 'baseline' }}>
+        <strong style={{ color: 'var(--warn-text)' }}>Gate: mandatory approval</strong>
+        <span className="muted" style={{ overflowWrap: 'anywhere' }} title="DevOps approval required from Prakash Pawar">@pawarprakash-devops</span>
       </div>
-      <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-sm)' }}>QA deploys only run in these windows or on manual dispatch</p>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>QA deploys only run in these windows or on manual dispatch</p>
     </Card>
   );
 }

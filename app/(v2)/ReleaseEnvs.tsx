@@ -121,10 +121,25 @@ export default function ReleaseEnvs() {
   }, [deps]);
   const colFor = (env: string) => pipeline?.columns.find((c) => c.environments.includes(env));
 
+  const trunc = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 } as const;
+  const stripe = (p: Probe | undefined, failed: boolean | undefined) => `var(--${failed || p?.status === 'OFFLINE' ? 'bad' : p?.status === 'DEGRADED' ? 'warn' : p ? 'ok' : 'border-bright'})`;
+  const compRow = (label: string, c: Comp | undefined) => {
+    const refs = c ? [c.branch, c.version && c.version !== c.branch ? c.version : null].filter(Boolean) as string[] : [];
+    if (!refs.length) return null;
+    return (
+      <>
+        <span className="muted" style={{ fontSize: 12 }}>{label}</span>
+        <span className="tnum" style={{ ...trunc, fontSize: 13 }} title={refs.join(' · ')}>{refs[0]}{refs.length > 1 ? ` +${refs.length - 1}` : ''}</span>
+        <span className="muted tnum" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{c?.at ? ago(c.at) : ''}</span>
+      </>
+    );
+  };
+
   return (
-    <section aria-labelledby="release-envs-h">
+    <section className="card" aria-labelledby="release-envs-h">
+      <style>{'.env-card{transition:border-color .15s}.env-card:hover{border-color:var(--border-bright)}'}</style>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)', flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
-        <h2 id="release-envs-h" style={{ fontSize: 'var(--fs-xs)', textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--muted)', fontWeight: 600 }}>Environments</h2>
+        <h2 id="release-envs-h" style={{ fontSize: 'var(--fs-xs)', fontVariant: 'small-caps', textTransform: 'lowercase', letterSpacing: '.08em', color: 'var(--muted)', fontWeight: 600 }}>Environments</h2>
         <span className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
           {probedAt ? `live probes updated ${new Date(probedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'live probes pending'}
         </span>
@@ -132,7 +147,7 @@ export default function ReleaseEnvs() {
       {err && !rows ? <ErrorNote>Could not load environments ({err}).</ErrorNote>
         : !rows ? <Skeleton rows={3} />
         : (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))', gap: 12, alignItems: 'stretch' }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(250px, 100%), 1fr))', gap: 12, alignItems: 'start' }}>
             {sorted.map((r) => {
               const p = probeMap.get(r.environment);
               const col = colFor(r.environment);
@@ -143,40 +158,66 @@ export default function ReleaseEnvs() {
               const fe = dv?.fe, be = dv?.be;
               const headline = realVersion(r.version) ?? realVersion(fe?.version) ?? realVersion(be?.version) ?? r.branch ?? r.version ?? 'unknown';
               const host = hostOf(p);
-              const feText = fe && (fe.branch || fe.version) ? [fe.branch, fe.version && fe.version !== fe.branch ? fe.version : null].filter(Boolean).join(' · ') : null;
-              const beText = be && (be.branch || be.version) ? [be.branch, be.version && be.version !== be.branch ? be.version : null].filter(Boolean).join(' · ') : null;
-              const wrap = { overflowWrap: 'anywhere' as const, minWidth: 0 };
+              const hasComp = !!(fe && (fe.branch || fe.version)) || !!(be && (be.branch || be.version));
+              const bn = dv?.banner;
+              const bt = bn ? (bn.tone === 'neutral' ? 'info' : bn.tone) : null;
+              const sep = bn ? bn.text.indexOf(':') : -1;
+              const hasPills = !!(col?.activeDeploy || failed || special);
               return (
-                <li key={r.environment} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', overflow: 'hidden', minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <h3 style={{ fontSize: 'var(--fs-base)', fontWeight: 600, overflowWrap: 'anywhere' }}>{r.environment}</h3>
-                    {r.is_production && <Chip title="Production environment">PROD</Chip>}
+                <li key={r.environment} className="card env-card" style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', minWidth: 0, boxShadow: `inset 3px 0 0 ${stripe(p, !!failed)}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, minWidth: 0 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 150px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <h3 style={{ fontSize: 14.5, fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }} title={r.environment}>{r.environment}</h3>
+                        {r.is_production && <Chip title="Production environment">PROD</Chip>}
+                      </div>
+                      {host && <span className="muted" style={{ ...trunc, fontSize: 12 }} title={p?.url ?? host}>{regionOf(host)}</span>}
+                    </div>
+                    <div style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
+                      {p ? <Pill tone={PROBE_TONE[p.status]}>{p.status[0] + p.status.slice(1).toLowerCase()} <span className="tnum">{Math.round(p.latencyMs)} ms</span></Pill>
+                        : <Pill tone="neutral">{probes ? 'No probe' : 'Probing…'}</Pill>}
+                    </div>
                   </div>
-                  {host && <div className="muted" style={{ fontSize: 'var(--fs-xs)', ...wrap }} title={p?.url}>{regionOf(host)} · {host}</div>}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minHeight: 22 }}>
-                    {p ? <Pill tone={PROBE_TONE[p.status]}>{p.status[0] + p.status.slice(1).toLowerCase()} · <span className="tnum">{Math.round(p.latencyMs)} ms</span></Pill>
-                      : <Pill tone="neutral">{probes ? 'No probe' : 'Probing…'}</Pill>}
-                    {col?.activeDeploy && <Pill tone="info">In progress</Pill>}
-                    {failed && <Pill tone="bad">Last deploy failed</Pill>}
-                    {special && <Pill tone="warn">{r.deployment_type}</Pill>}
-                  </div>
-                  {dv?.banner && <div role="status" style={{ fontSize: 'var(--fs-xs)', ...wrap, padding: '4px 8px', borderRadius: 'var(--r-sm)', color: `var(--${dv.banner.tone}-text)`, background: `var(--${dv.banner.tone}-bg)`, border: `1px solid var(--${dv.banner.tone}-border)` }}>{dv.banner.text}</div>}
+                  {bn && bt && (
+                    <div role="status" style={{ fontSize: 12.5, padding: '4px 8px', borderLeft: `3px solid var(--${bt})`, background: `var(--${bt}-bg)`, color: `var(--${bt}-text)`, borderRadius: '0 var(--r-sm) var(--r-sm) 0', overflowWrap: 'anywhere' }}>
+                      {sep > 0 ? <><strong>{bn.text.slice(0, sep)}</strong>{bn.text.slice(sep)}</> : bn.text}
+                    </div>
+                  )}
                   {r.version || fe || be ? (
                     <>
-                      <div className="tnum" style={{ fontSize: 'var(--fs-xl)', lineHeight: 'var(--lh-xl)', fontWeight: 600, ...wrap }}>{headline}</div>
-                      {(feText || beText) ? (
-                        <div className="tnum" style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 8, rowGap: 2, fontSize: 'var(--fs-xs)' }}>
-                          {feText && <><span className="muted">FE</span><span style={wrap}>{feText}</span></>}
-                          {beText && <><span className="muted">BE</span><span style={wrap}>{beText}</span></>}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+                        <span className="tnum" style={{ ...trunc, fontSize: 20, lineHeight: 1.2, fontWeight: 600 }} title={headline}>{headline}</span>
+                        {r.branch && r.branch !== headline && <span className="muted" style={{ ...trunc, fontSize: 11.5, padding: '1px 6px', borderRadius: 'var(--r-xs)', border: '1px solid var(--border)', flex: '0 1 auto' }} title={r.branch}>{r.branch}</span>}
+                      </div>
+                      {hasPills && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {col?.activeDeploy && <Pill tone="info">In progress</Pill>}
+                          {failed && <Pill tone="bad">Last deploy failed</Pill>}
+                          {special && <Pill tone="warn">{r.deployment_type}</Pill>}
                         </div>
-                      ) : <div className="muted" style={{ fontSize: 'var(--fs-xs)', ...wrap }}>{r.branch ?? 'unknown branch'}</div>}
-                      <div className="muted" style={{ fontSize: 'var(--fs-xs)', ...wrap, marginTop: 'auto' }}>
+                      )}
+                      {hasComp && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr) auto', columnGap: 8, rowGap: 2, alignItems: 'baseline' }}>
+                          {compRow('FE', fe)}
+                          {compRow('BE', be)}
+                        </div>
+                      )}
+                      <div className="muted" style={{ ...trunc, fontSize: 12.5 }} title={`deployed ${ago(r.last_deployed_at)}${r.deployed_by ? ` by ${r.deployed_by}` : ''}${d ? ` · ${d}` : ''}`}>
                         deployed {ago(r.last_deployed_at)}{r.deployed_by ? ` by ${r.deployed_by}` : ''}{d ? ` · ${d}` : ''}
-                        {fe?.at && <><br />last FE deploy {ago(fe.at)}</>}
-                        {be?.at && <><br />last BE deploy {ago(be.at)}</>}
                       </div>
                     </>
-                  ) : <p className="empty">No deployments yet</p>}
+                  ) : (
+                    <>
+                      {hasPills && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {col?.activeDeploy && <Pill tone="info">In progress</Pill>}
+                          {failed && <Pill tone="bad">Last deploy failed</Pill>}
+                          {special && <Pill tone="warn">{r.deployment_type}</Pill>}
+                        </div>
+                      )}
+                      <p className="empty">No deployments yet</p>
+                    </>
+                  )}
                 </li>
               );
             })}
