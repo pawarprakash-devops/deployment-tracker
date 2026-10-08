@@ -1,6 +1,6 @@
 'use client';
 import type { CSSProperties } from 'react';
-import { Card, Chip, Empty, Pill, ago, type Tone } from './ui';
+import { Card, Chip, Empty, Pill, ago, fmtDate, fmtDateTime, type Tone } from './ui';
 
 // Element types mirror the arrays built in app/api/admin/stats/route.ts.
 export interface FailureRecord {
@@ -64,7 +64,7 @@ function mttrTone(min: number): Tone {
 
 function stamp(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+  return Number.isNaN(d.getTime()) ? '—' : fmtDateTime(d);
 }
 
 const th: CSSProperties = {
@@ -137,7 +137,7 @@ export default function InsightsLists({ stats }: { stats: ListsStats }) {
                   </div>
                   <div style={{ ...small, ...wrap, marginTop: 'var(--space-1)' }}>
                     <span className="tnum">git:{d.branch || '—'}</span>
-                    <span> · {new Date(d.started_at).toLocaleDateString()}</span>
+                    <span> · {fmtDate(d.started_at)}</span>
                   </div>
                 </li>
               ))}

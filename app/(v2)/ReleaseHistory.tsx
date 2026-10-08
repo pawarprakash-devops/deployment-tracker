@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Chip, Empty, ErrorNote, Skeleton, StatusPill, ago } from './ui';
+import { Card, Chip, Empty, ErrorNote, Skeleton, StatusPill, ago, fmtDateTime } from './ui';
 
 interface Row {
   id: string; environment: string; status: string; deployment_type?: string | null;
@@ -57,7 +57,7 @@ function dur(sec?: number | null): string {
   if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
   return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
 }
-const abs = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
+const abs = (iso?: string | null) => fmtDateTime(iso);
 const dash = <span className="muted">—</span>;
 const RH_CSS = `
 .rh-wrap{overflow-x:auto}

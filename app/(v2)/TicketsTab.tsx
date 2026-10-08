@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import AdminGate from './AdminGate';
-import { Card, Tile, Pill, Chip, Skeleton, Empty, ErrorNote } from './ui';
+import { Card, Tile, Pill, Chip, Skeleton, Empty, ErrorNote, fmtDate, fmtDateTime } from './ui';
 
 // ---- types (mirror lib/jira.ts + app/api/jira/* response shapes) ------------------------------------
 interface Issue { key: string; summary: string; status: string; statusCategory: string; type: string; priority: string | null; assignee: string | null; reporter?: string | null; labels?: string[]; created?: string; updated?: string; url: string }
@@ -357,7 +357,7 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
             return (
               <Card key={sp.name} title={`Active sprint · ${sp.name} (${sp.boardName})`}>
                 <div className="subtle" style={{ marginBottom: 8 }}>
-                  {sp.startDate && new Date(sp.startDate).toLocaleDateString()} → {sp.endDate && new Date(sp.endDate).toLocaleDateString()}
+                  {sp.startDate && fmtDate(sp.startDate)} → {sp.endDate && fmtDate(sp.endDate)}
                   {left !== null && ` · ${left >= 0 ? `${left} day${left === 1 ? '' : 's'} left` : `ended ${-left} day(s) ago`}`} · {sp.total} issues
                   {sp.goal ? ` · Goal: ${sp.goal}` : ''}
                 </div>
@@ -425,7 +425,7 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
         {res?.notes.error && <ErrorNote>Release notes: {res.notes.error}</ErrorNote>}
         <select style={{ ...ctl, maxWidth: '100%' }} aria-label="Deployment" value={notesId} onChange={(e) => void loadNotes(e.target.value)}>
           <option value="">Select a deployment…</option>
-          {notesList.map((n) => <option key={n.id} value={n.id}>{n.environment} · {new Date(n.started_at).toLocaleString()} · {n.keys.join(', ')}</option>)}
+          {notesList.map((n) => <option key={n.id} value={n.id}>{n.environment} · {fmtDateTime(n.started_at)} · {n.keys.join(', ')}</option>)}
         </select>
         {notesErr && <div style={{ marginTop: 8 }}><ErrorNote>{notesErr}</ErrorNote></div>}
         {notesMd && (
@@ -461,7 +461,7 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
                       <td>{i.assignee || <Faint>Unassigned</Faint>}</td>
                       <td>{i.reporter || '—'}</td>
                       <td className="muted">{(i.labels || []).join(', ')}</td>
-                      <td className="muted" style={{ whiteSpace: 'nowrap' }}>{i.created ? new Date(i.created).toLocaleDateString() : '—'}</td>
+                      <td className="muted" style={{ whiteSpace: 'nowrap' }}>{i.created ? fmtDate(i.created) : '—'}</td>
                       <td className="muted tnum" style={{ textAlign: 'center' }}>{idleDays(i.updated, now) ?? '—'}d</td>
                     </tr>
                   ))}
@@ -491,7 +491,7 @@ JIRA_PROJECT_KEYS=CORE,EMR   # comma separated`}</pre>
                         <td>{i?.summary || <Faint>—</Faint>}</td>
                         <td>{i ? <StatusText status={i.status} category={i.statusCategory} /> : '—'}</td>
                         {envs.map((e) => (
-                          <td key={e} style={{ textAlign: 'center', color: 'var(--ok-text)', fontWeight: 700 }} title={environments[e] ? new Date(environments[e]).toLocaleString() : ''}>
+                          <td key={e} style={{ textAlign: 'center', color: 'var(--ok-text)', fontWeight: 700 }} title={environments[e] ? fmtDateTime(environments[e]) : ''}>
                             {environments[e] ? <><span aria-hidden="true">✓</span><span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>deployed</span></> : ''}
                           </td>
                         ))}

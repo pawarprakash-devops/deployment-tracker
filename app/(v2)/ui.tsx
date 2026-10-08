@@ -36,6 +36,18 @@ export function ago(iso: string | null | undefined): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+// Dates are shown as dd/mm/yyyy (and "dd/mm/yyyy, h:mm:ss am" with a time), in the viewer's time zone.
+export function fmtDate(v: string | number | Date | null | undefined): string {
+  if (v == null || v === '') return '—';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+export function fmtDateTime(v: string | number | Date | null | undefined): string {
+  if (v == null || v === '') return '—';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+}
+
 // ---- components ----------------------------------------------------------------------------------
 export type Tone = 'ok' | 'warn' | 'bad' | 'info' | 'neutral';
 const ICON: Record<Tone, string> = { ok: '✓', warn: '!', bad: '✕', info: '●', neutral: '○' };
