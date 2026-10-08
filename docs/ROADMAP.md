@@ -3,6 +3,7 @@
 **Date:** 2026-09-07 (code-synced 2026-10-07)  
 **Author:** Prakash Pawar (DevOps)  
 **Status:** Approved Architecture & Roadmap — implementation status below reflects the code on `main` (`bc7249a`)  
+**UI update (2026-10-08):** the tracker is now one page with tabs (`/?tab=deployments|pipeline|my-view|tickets|insights|health`). `/classic` and the separate `/jira`, `/admin` and `/health` pages were removed and redirect to the matching tab; role-based views (My view), the Pipeline board and `GET /api/pipeline` were added. See `README.md` (Pages) and `docs/REDESIGN-PROPOSAL-ROLE-BASED-UX.md`. Page and file names in the sections below that mention `/admin`, `/jira` or `app/page.tsx` refer to the earlier layout and were updated where possible.
 **Applicable Repositories:**  
 - `vidaisolutions/vidai-backend` (Django Core / ECS Fargate & EC2)  
 - `vidaisolutions/vidai-react` (React Web / S3 + CloudFront)  
@@ -136,7 +137,7 @@ On every successful deployment to `prod_ank` or `prod_neo`:
 
 ## 3. Deployment Tracker Enhancements
 
-The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already been upgraded with the **DevOps Cyber Cockpit** theme on both `/` and `/admin`. The following architectural enhancements will transform it into an end-to-end mission control system.
+The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already been upgraded with the **DevOps Cyber Cockpit** theme on the Deployments and Insights tabs (formerly `/` and `/admin`). The following architectural enhancements will transform it into an end-to-end mission control system.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -156,7 +157,7 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
 
 ### 3.1 Environment Promotion Drift Matrix (Ahead / Behind Delta)
 
-* **Status:** ✅ **Implemented** as the **Promotion Radar** strip above the environment cards on `/` (`app/DriftRibbon.tsx`, `GET /api/drift`).
+* **Status:** ✅ **Implemented** as the **Promotion Radar** strip above the environment cards on `/` (`app/(v2)/ReleaseRadar.tsx`, `GET /api/drift`).
 * For the backend or frontend repo (toggle) it checks the active promotion flow — `dev→qa`, `qa→preprod` (QA promotes straight to preprod; `stage` is not on the path), `qa→demo` (Demo-Preview), `preprod→prod_neo`, `preprod→prod_ank` — and shows `IN SYNC` or `+N pending`, counted from the last merged promotion PR into the downstream branch (a plain branch compare over-counts after squash/merge-commit/cherry-pick promotions, so pairs without a promotion PR show `~N`); clicking a chip lists the pending commits (sha, message, author, link). Results are edge-cached for 120 s and need `GH_TOKEN` on the server. It is computed live from GitHub (no stored state, nothing to maintain): on page load, then automatically every 5 min while the tab is visible. It does not push notifications.
 * The older two-deployment **compare modal** (`GET /api/compare`) remains for diffing arbitrary refs.
 
@@ -184,9 +185,9 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
 
 ---
 
-### 3.3 Full DORA Metrics Suite on `/admin`
+### 3.3 Full DORA Metrics Suite on the Insights tab
 
-* **Status:** ✅ **Implemented & Verified** (Live on `/admin` at `vidai-deployments.vercel.app/admin`).
+* **Status:** ✅ **Implemented & Verified** (Live on the Insights tab at `vidai-deployments.vercel.app/?tab=insights`; `/admin` redirects there).
 * **Implementation Summary:**
   - Automated continuous measurement of delivery velocity and system recovery stability based on real database records.
   - Dedicated production CFR (`prodCfrRate`) alongside fleet-wide CFR.
@@ -224,7 +225,7 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
 
 * **Status:** ❌ **Not implemented — deliberately paused.** A design exists (admin-only `POST /api/rollback` dispatching the `rollback` action of the vidai-devops workflows with typed confirmation, a code-only/no-DB-revert acknowledgement for prod, and a `GH_DISPATCH_TOKEN` with Actions write on vidai-devops), but it was not built because it lets the tracker trigger production workflows; decide first who may do that. Today the tracker only *records* rollbacks (`deployment_type = rollback`, status `Rolled Back`, and a "ROLLBACK AUDIT" HUD counter on `/`); it cannot dispatch a workflow.
 
-* **Operator Convenience:** In the `/admin` dashboard or directly on Environment Cards, authenticated operators have a **Rollback** button.
+* **Operator Convenience:** In the Insights tab or directly on Environment Cards, authenticated operators have a **Rollback** button.
 * **Safety Controls:**
   - Requires Admin token authentication.
   - Confirmation modal showing: `"Target: vidai-prod | Reverting to: commit a1b2c3d (v2.14.2)"`.
@@ -242,13 +243,13 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
   - **Live Countdown Timer:** Displays on the QA card (e.g., `⏱ Next QA Release in 1h 24m · 01:30 PM IST` ticking live).
   - **Window Status Badges:** Transitions dynamically through `COUNTDOWN` ➔ `CLOSING IN` (within 30m) ➔ `WINDOW ACTIVE` (during 15m deployment window).
   - **Approval Gate Indicator:** Visual badge displaying `GATE: MANDATORY APPROVAL (@pawarprakash-devops)`.
-  - Windows are hardcoded in `app/page.tsx` (`W1` = 13:30, `W2` = 16:00 IST, 15-minute window each); keep in sync with `QA-DEPLOY-SCHEDULE-AND-AUTO-DEPLOY-REMOVAL-2026-10-06.md`.
+  - Windows are hardcoded in `app/(v2)/ReleaseRadar.tsx` (`W1` = 13:30, `W2` = 16:00 IST, 15-minute window each); keep in sync with `QA-DEPLOY-SCHEDULE-AND-AUTO-DEPLOY-REMOVAL-2026-10-06.md`.
 
 ---
 
 ### 3.7 Dynamic Cluster & Multi-Region Auto-Discovery
 
-* **Status:** ✅ **Implemented & Verified** (Live in `/api/webhook`, `app/page.tsx`, and `app/admin/page.tsx`).
+* **Status:** ✅ **Implemented & Verified** (Live in `/api/webhook`, `app/(v2)/ReleaseHistory.tsx`, and `app/(v2)/InsightsTab.tsx`).
 * **The Problem:**
   - Deployments to newly spun-up clusters or non-standard environments (e.g., `stage-euw2`, dynamic preview clusters) previously fell into the `Other` category because cluster names were hardcoded in static maps.
 * **The Solution:**
@@ -271,11 +272,11 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
 
 ---
 
-### 3.10 Jira Dashboard (`/jira`)
+### 3.10 Jira Dashboard (Tickets tab, formerly `/jira`)
 
 * **Status:** ✅ **Implemented** (needs `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEYS` in Vercel).
 * Ticket chips (`🎫 CORE-123`) appear in the deployment history table for any Jira-style key in notes/branches/ticket link; admins also see status and a link to Jira.
-* `/jira` (admin only): exact counts over all issues of `JIRA_PROJECT_KEYS` — open, in development, in QA/QA passed, open bugs, created vs done (7 d and window) — plus breakdowns by **workflow stage** (Backlog → In Development → Review/QA → QA Passed → Stage/Pre-Prod → Released to Prod → Done, mapped from the VID status names in `stageOf()`; e.g. `STAGE & QA DEPLOYED` / `*PRE-PROD DEPLOYED` = Stage/Pre-Prod, `*PRODUCTION DEPLOYED` = Released to Prod, `PREVIEW DEPLOYED` = pre-QA; Jira itself puts the deployed statuses in its Done category), by status and by assignee (sampled), the open-bug list, the **active sprint** (Agile API: dates, goal, progress by stage/status) and a **tickets × environments** matrix ("is VID-123 in Pre-Prod yet?").
+* Tickets tab, `/?tab=tickets` (admin only; `/jira` redirects): exact counts over all issues of `JIRA_PROJECT_KEYS` — open, in development, in QA/QA passed, open bugs, created vs done (7 d and window) — plus breakdowns by **workflow stage** (Backlog → In Development → Review/QA → QA Passed → Stage/Pre-Prod → Released to Prod → Done, mapped from the VID status names in `stageOf()`; e.g. `STAGE & QA DEPLOYED` / `*PRE-PROD DEPLOYED` = Stage/Pre-Prod, `*PRODUCTION DEPLOYED` = Released to Prod, `PREVIEW DEPLOYED` = pre-QA; Jira itself puts the deployed statuses in its Done category), by status and by assignee (sampled), the open-bug list, the **active sprint** (Agile API: dates, goal, progress by stage/status) and a **tickets × environments** matrix ("is VID-123 in Pre-Prod yet?").
 * **Filters:** a filter bar (assignee incl. unassigned, reported by, type, priority, status, label, component, fix version, created from/to, free text, quick presets) drives every section via JQL built server-side from validated values; applied filters live in the URL so a view can be shared. A **ticket explorer** lists matches (sortable, CSV export). The sprint panel and tickets-by-environment matrix are not filtered.
 * **Insights:** ready-to-ship queue (QA Passed, flagged with environments seen), stuck tickets (idle ≥ N days in dev/review/QA statuses), weekly bug created-vs-closed (8 weeks), open bugs by priority and age, lead time (created → done via `statuscategorychangedate`, sub-tasks and epics excluded; created → first prod deploy), and per-deployment release notes (markdown).
 * "Done" = moved into a Done-category status or a status named Done/Closed/Resolved/Released/Deployed (override with `JIRA_DONE_STATUSES`).
@@ -308,7 +309,7 @@ PHASE 1: Core Automation & Attributions (Completed)
 PHASE 2: Active Telemetry & Observability (Completed)
 ├── [x] Live Cluster Health Check API & visual status pills (/api/cluster-health)
 ├── [x] On-demand telemetry probing (🔄 PROBE NOW)
-└── [x] Full DORA Metrics Suite & MTTR Recovery Audit Trail on /admin
+└── [x] Full DORA Metrics Suite & MTTR Recovery Audit Trail on the Insights tab
 
 PHASE 3: Release Governance & Flow Control (Active)
 ├── [x] Environment Promotion Drift Matrix (Promotion Radar)
