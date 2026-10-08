@@ -417,7 +417,7 @@ setInterval(tick,30000);
 function isDark(){var a=document.documentElement.getAttribute('data-theme');if(a)return a==='dark';return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);store('vt-theme',t);renderChrome();}
 function setLens(id,fromUser){state.lens=id;store('vt-lens',id);try{var u=new URL(location.href);u.searchParams.set('as',id);history.replaceState(null,'',u);}catch(e){}renderChrome();renderMain(false);if(fromUser){var b=$('[data-lens="'+id+'"]');if(b)b.focus();}}
-function route(first){var h=(location.hash||'').replace(/^#\/?/,'');if(!VIEWS[h])h='home';state.route=h;renderChrome();renderMain(!first);document.title='Deployment Tracker Redesign Mockup - '+TITLES[h];}
+function route(first,name){var h=name||(location.hash||'').replace(/^#\/?/,'');if(!VIEWS[h])h='home';state.route=h;renderChrome();renderMain(!first);document.title='Deployment Tracker Redesign Mockup - '+TITLES[h];}
 window.addEventListener('hashchange',function(){route(false);});
 
 /* ---------- drawer ---------- */
@@ -458,6 +458,7 @@ function runSearch(){
 /* ---------- events ---------- */
 document.addEventListener('click',function(e){
  var el=e.target.closest?e.target.closest('button,a'):null;if(!el)return;
+ if(el.closest&&el.closest('#nav')&&el.tagName==='A'){e.preventDefault();var nm=el.getAttribute('href').replace(/^#\/?/,'');try{history.replaceState(null,'','#/'+nm);}catch(x){}route(false,nm);return;}
  if(el.dataset.ticket){var fs=el.dataset.fromsearch;if(fs){$('#results').hidden=true;$('#q').setAttribute('aria-expanded','false');openDrawer(el.dataset.ticket,$('#q'));}else openDrawer(el.dataset.ticket,el);return;}
  if(el.dataset.lens){setLens(el.dataset.lens,true);return;}
  if(el.dataset.toast){toast(el.dataset.toast);return;}
