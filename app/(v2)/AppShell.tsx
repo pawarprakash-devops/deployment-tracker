@@ -7,12 +7,13 @@ import TicketDrawer from './TicketDrawer';
 import { EnvDot, type Tone } from './ui';
 
 const NAV = [
-  { href: '/home', label: 'Home' },
+  { href: '/', label: 'Deployments' },
+  { href: '/home', label: 'My view' },
   { href: '/pipeline', label: 'Pipeline' },
 ];
 const LEGACY = [
+  { href: '/classic', label: 'Classic tracker' },
   { href: '/jira', label: 'Tickets (Jira)' },
-  { href: '/', label: 'Releases' },
   { href: '/admin', label: 'Insights' },
   { href: '/health', label: 'Health' },
 ];
@@ -58,11 +59,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="app">
         <header className="topbar">
           <span className="logo"><b>Vid</b>AI Delivery</span>
-          <div className="lens" role="group" aria-label="Role lens">
-            {LENSES.map((l) => (
-              <button key={l.id} aria-pressed={lens === l.id} onClick={() => setLens(l.id)}>{l.label}</button>
-            ))}
-          </div>
+          {path === '/home' && (
+            <div className="lens" role="group" aria-label="Role lens">
+              {LENSES.map((l) => (
+                <button key={l.id} aria-pressed={lens === l.id} onClick={() => setLens(l.id)}>{l.label}</button>
+              ))}
+            </div>
+          )}
           <span className="spacer" />
           <button className="search" ref={searchRef} aria-label="Search tickets, versions, branches (coming soon)">Search ticket, version…<kbd>⌘K</kbd></button>
           <div className="dots" aria-label="Environment health">{dots.map((d) => <EnvDot key={d.id} tone={d.tone} label={d.label} />)}</div>
