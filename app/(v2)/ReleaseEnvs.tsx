@@ -128,8 +128,8 @@ export default function ReleaseEnvs() {
     if (!refs.length) return null;
     return (
       <>
-        <span className="muted" style={{ fontSize: 12 }}>{label}</span>
-        <span className="tnum" style={{ ...trunc, fontSize: 13 }} title={refs.join(' · ')}>{refs[0]}{refs.length > 1 ? ` +${refs.length - 1}` : ''}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: label === 'FE' ? 'var(--accent-text)' : 'var(--ok-text)' }}>{label}</span>
+        <span className="tnum" style={{ ...trunc, fontSize: 13, color: 'var(--text)' }} title={refs.join(' · ')}>{refs[0]}{refs.length > 1 ? ` +${refs.length - 1}` : ''}</span>
         <span className="muted tnum" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{c?.at ? ago(c.at) : ''}</span>
       </>
     );
@@ -147,7 +147,7 @@ export default function ReleaseEnvs() {
       {err && !rows ? <ErrorNote>Could not load environments ({err}).</ErrorNote>
         : !rows ? <Skeleton rows={3} />
         : (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(250px, 100%), 1fr))', gap: 12, alignItems: 'start' }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(230px, 100%), 1fr))', gap: 12, alignItems: 'start' }}>
             {sorted.map((r) => {
               const p = probeMap.get(r.environment);
               const col = colFor(r.environment);
@@ -171,7 +171,7 @@ export default function ReleaseEnvs() {
                         <h3 style={{ fontSize: 14.5, fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }} title={r.environment}>{r.environment}</h3>
                         {r.is_production && <Chip title="Production environment">PROD</Chip>}
                       </div>
-                      {host && <span className="muted" style={{ ...trunc, fontSize: 12 }} title={p?.url ?? host}>{regionOf(host)}</span>}
+                      {host && <span style={{ ...trunc, fontSize: 12, color: 'var(--faint)' }} title={p?.url ?? host}>{regionOf(host)}</span>}
                     </div>
                     <div style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
                       {p ? <Pill tone={PROBE_TONE[p.status]}>{p.status[0] + p.status.slice(1).toLowerCase()} <span className="tnum">{Math.round(p.latencyMs)} ms</span></Pill>
@@ -202,8 +202,8 @@ export default function ReleaseEnvs() {
                           {compRow('BE', be)}
                         </div>
                       )}
-                      <div className="muted" style={{ ...trunc, fontSize: 12.5 }} title={`deployed ${ago(r.last_deployed_at)}${r.deployed_by ? ` by ${r.deployed_by}` : ''}${d ? ` · ${d}` : ''}`}>
-                        deployed {ago(r.last_deployed_at)}{r.deployed_by ? ` by ${r.deployed_by}` : ''}{d ? ` · ${d}` : ''}
+                      <div style={{ ...trunc, fontSize: 12.5, color: 'var(--info-text)' }} title={`deployed ${ago(r.last_deployed_at)}${d ? ` · ${d}` : ''}`}>
+                        deployed {ago(r.last_deployed_at)}{d ? ` · ${d}` : ''}
                       </div>
                     </>
                   ) : (

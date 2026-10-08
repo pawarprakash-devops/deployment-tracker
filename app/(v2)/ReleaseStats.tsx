@@ -12,7 +12,7 @@ const isRollback = (s: string) => /roll/i.test(s);
 const SR_ONLY: React.CSSProperties = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0, padding: 0, margin: -1 };
 const CHART_H = 84;
 const LABEL_H = 14; // room above the tallest bar for its count
-const BAR_MAX_W = 26;
+const BAR_MAX_W = 56;
 const GAP = 3;
 
 // Distinct fill patterns so status is never conveyed by colour alone.
@@ -170,8 +170,8 @@ export default function ReleaseStats() {
                     })}
                   </div>
                   <div aria-hidden="true" style={{ display: 'flex', gap: GAP, marginTop: 3 }}>
-                    {stats.days.map((d, i) => (
-                      <span key={d.date} className="tnum" style={{ flex: 1, maxWidth: BAR_MAX_W, minWidth: 0, textAlign: 'center', fontSize: 12, lineHeight: '16px', color: 'var(--muted)', overflow: 'visible', whiteSpace: 'nowrap' }}>{i % 2 === 1 ? d.short : ''}</span>
+                    {stats.days.map((d) => (
+                      <span key={d.date} className="tnum" style={{ flex: 1, maxWidth: BAR_MAX_W, minWidth: 0, textAlign: 'center', fontSize: 12.5, lineHeight: '15px', color: 'var(--text)', overflow: 'visible', whiteSpace: 'nowrap' }}><b style={{ fontWeight: 600 }}>{d.short}</b><br /><span style={{ color: 'var(--muted)', fontSize: 12 }}>{d.label.split(' ')[0]}</span></span>
                     ))}
                   </div>
                 </div>
