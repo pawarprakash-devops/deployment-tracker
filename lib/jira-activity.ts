@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Helpers for /api/jira/bugs and /api/jira/activity (server-only; read-only against Jira).
-import { jiraFetch, jiraBrowseUrl } from './jira';
+import { jiraFetch, jiraBrowseUrl, stageOf } from './jira';
 import type { ActivityEvent, ActivityKind, DayPoint } from './tickets-types';
 
 const DAY = 86400000;
@@ -43,6 +43,77 @@ export function bucketByDay(items: Array<{ created?: string | null; resolved?: s
   return points;
 }
 
+// ---- "Resolved" for the dashboard: QA Passed counts as resolved --------------------------------
+// A ticket is resolved once it has passed QA, i.e. it is in QA Passed or any later stage (this team does not
+// always set Jira's own resolution). Reopening it (moving back before QA Passed) makes it open again.
+export const RESOLVED_STAGES = new Set<string>(['QA Passed', 'Stage / Pre-Prod', 'Released to Prod', 'Done']);
+export const isResolvedStatus = (statusName: string, category?: string): boolean => RESOLVED_STAGES.has(stageOf(statusName, category));
+
+// ISO time the issue most recently entered a resolved stage and is still in one; null when it is not resolved now or the
+// date cannot be determined. Order: (1) the changelog transition; (2) Jira's resolutiondate; (3) `created` when the issue
+// was created directly in a resolved stage (complete changelog without any status history, or whose first status change
+// already leaves a resolved status). `updated` / `statuscategorychangedate` are never used: they date other events.
+// Callers must pass a COMPLETE changelog (see completeChangelogs); an incomplete one yields wrong dates.
+export function resolvedAtFromIssue(issue: any): string | null {
+  const f = issue?.fields || {};
+  if (!isResolvedStatus(f.status?.name || '', f.status?.statusCategory?.key)) return null;
+  const hasChangelog = Array.isArray(issue?.changelog?.histories);
+  const histories: any[] = [...(issue?.changelog?.histories || [])].sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
+  let at: string | null = null;
+  let seenStatus = false;
+  for (const h of histories) {
+    for (const it of h.items || []) {
+      if (it.field !== 'status') continue;
+      const to = isResolvedStatus(typeof it.toString === 'string' ? it.toString : '');
+      const from = isResolvedStatus(typeof it.fromString === 'string' ? it.fromString : '');
+      if (!seenStatus && from) at = f.created ?? null; // first move starts from a resolved status: created resolved
+      seenStatus = true;
+      if (to && !from) at = h.created;
+      else if (!to && from) at = null;
+    }
+  }
+  if (at) return at;
+  if (f.resolutiondate) return f.resolutiondate;
+  if (hasChangelog && !seenStatus) return f.created ?? null; // created directly in a resolved status
+  return null;
+}
+
+const CHANGELOG_PAGE = 100; // Jira's search `expand=changelog` returns at most this many histories per issue
+export const FULL_HISTORY_CAP = 30;
+
+// Fetch complete histories (GET /issue/{key}/changelog, paginated) for resolved-stage issues whose embedded changelog may
+// be cut off, replacing `issue.changelog.histories` in place. Returns the keys that could not be completed (beyond the cap
+// or failed): their resolution date is unknown, so callers must exclude them rather than guess.
+export async function completeChangelogs(issues: any[], cap = FULL_HISTORY_CAP): Promise<Set<string>> {
+  const unknown = new Set<string>();
+  const need = issues.filter((i) => {
+    if (!isResolvedStatus(i.fields?.status?.name || '', i.fields?.status?.statusCategory?.key)) return false;
+    const n = Math.max(Number(i.changelog?.total) || 0, i.changelog?.histories?.length || 0);
+    return n >= CHANGELOG_PAGE;
+  });
+  for (const i of need.slice(cap)) unknown.add(i.key);
+  const work = need.slice(0, cap);
+  for (let c = 0; c < work.length; c += 5) {
+    await Promise.all(work.slice(c, c + 5).map(async (issue) => {
+      try {
+        const all: any[] = [];
+        let startAt = 0;
+        for (let page = 0; page < 50; page++) {
+          const data = await jiraFetch(`/rest/api/3/issue/${encodeURIComponent(issue.key)}/changelog?startAt=${startAt}&maxResults=${CHANGELOG_PAGE}`);
+          const values: any[] = data.values || [];
+          all.push(...values);
+          startAt += values.length;
+          if (data.isLast || !values.length || (typeof data.total === 'number' && startAt >= data.total)) break;
+        }
+        issue.changelog = { ...(issue.changelog || {}), histories: all, total: Math.max(all.length, Number(issue.changelog?.total) || 0) };
+      } catch {
+        unknown.add(issue.key);
+      }
+    }));
+  }
+  return unknown;
+}
+
 export const AGE_BUCKETS = ['0-2 d', '3-7 d', '8-14 d', '15-30 d', '30+ d'] as const;
 export function ageBucket(ageDays: number): (typeof AGE_BUCKETS)[number] {
   if (ageDays <= 2) return '0-2 d';
@@ -66,19 +137,28 @@ export const emptyCounts = (): Record<ActivityKind, number> =>
 
 const ACTIVITY_FIELDS = ['summary', 'status', 'issuetype', 'priority', 'assignee', 'created', 'resolutiondate', 'reporter', 'comment'];
 
-export async function fetchIssuesWithChangelog(jql: string, maxIssues = 150): Promise<any[]> {
+export interface ChangelogFetchOpts { fields?: string[] }
+
+// Same as fetchIssuesWithChangelog but also reports whether the maxIssues cap cut the result short.
+export async function fetchIssuesWithChangelogPaged(jql: string, maxIssues = 150, opts?: ChangelogFetchOpts): Promise<{ issues: any[]; truncated: boolean }> {
   const issues: any[] = [];
+  let truncated = false;
   let nextPageToken: string | undefined;
   while (issues.length < maxIssues) {
     const data = await jiraFetch('/rest/api/3/search/jql', {
       method: 'POST',
-      body: { jql, fields: ACTIVITY_FIELDS, expand: 'changelog', maxResults: Math.min(100, maxIssues - issues.length), nextPageToken },
+      body: { jql, fields: opts?.fields || ACTIVITY_FIELDS, expand: 'changelog', maxResults: Math.min(100, maxIssues - issues.length), nextPageToken },
     });
     issues.push(...(data.issues || []));
     if (data.isLast || !data.nextPageToken) break;
     nextPageToken = data.nextPageToken;
+    if (issues.length >= maxIssues) truncated = true;
   }
-  return issues;
+  return { issues, truncated };
+}
+
+export async function fetchIssuesWithChangelog(jql: string, maxIssues = 150, opts?: ChangelogFetchOpts): Promise<any[]> {
+  return (await fetchIssuesWithChangelogPaged(jql, maxIssues, opts)).issues;
 }
 
 export interface IssueMeta { title: string; issueType: string | null; priority: string | null }
