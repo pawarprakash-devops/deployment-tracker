@@ -7,7 +7,6 @@ interface Commit { sha: string; message: string; author?: string; url: string }
 interface Promotion { number: number; url: string; mergedAt: string }
 interface Pair { baseRef?: string; from: string; to: string; fromEnv: string; toEnv: string; basis?: 'promotion-pr' | 'branch-compare'; promotion?: Promotion; pending?: number; error?: string }
 interface Detail { loading: boolean; error?: string; commits: Commit[]; total: number; truncated: boolean; compareUrl?: string }
-interface Want { from: string; to: string }
 
 const SHOWN = 30;
 const WINDOWS = [{ label: '1:30 PM', start: 13.5 * 3600 }, { label: '4:00 PM', start: 16 * 3600 }];
@@ -18,7 +17,6 @@ const key = (p: { from: string; to: string }) => `${p.from}>${p.to}`;
 // Seconds since midnight in IST (fixed UTC+5:30, no DST).
 const istSecs = (ms: number) => Math.floor((ms + 5.5 * 3600_000) / 1000) % 86400;
 const fmt = (s: number) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; };
-const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const mono = { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)' } as const;
 const mutedText = { color: 'var(--muted, #8a8f98)' } as const;
@@ -38,12 +36,7 @@ function WaitingToShip() {
   const [open, setOpen] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [filter, setFilter] = useState('');
-  const sectionRef = useRef<HTMLElement>(null);
-  const headRef = useRef<HTMLHeadingElement>(null);
   const whichRef = useRef<Which>('backend');
-  const pairsRef = useRef<Pair[] | null>(null);
-  const wantRef = useRef<Want | null>(null);
-  const focusRef = useRef(false);
   const reqRef = useRef(0);
 
   // Open a pair's commit list (always opens, never closes).
@@ -62,16 +55,6 @@ function WaitingToShip() {
       .catch((e) => fail(e instanceof Error ? e.message : 'Failed to load'));
   }, []);
 
-  // Fulfil a pending tracker:open-drift request once the right repo's pairs are present.
-  const applyWant = useCallback(() => {
-    const w = wantRef.current, list = pairsRef.current;
-    if (!w || !list) return;
-    wantRef.current = null;
-    sectionRef.current?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
-    const p = list.find((x) => x.from === w.from && x.to === w.to);
-    if (p && !p.error && (p.pending ?? 0) > 0) { focusRef.current = true; show(p); }
-  }, [show]);
-
   useEffect(() => {
     let alive = true;
     const load = () => {
@@ -80,36 +63,19 @@ function WaitingToShip() {
         .then((d) => {
           if (!alive) return;
           if (d.error || !Array.isArray(d.pairs)) { setFailed(true); return; }
-          pairsRef.current = d.pairs; setFailed(false); setPairs(d.pairs); applyWant();
+          setFailed(false); setPairs(d.pairs);
         })
         .catch(() => { if (alive) setFailed(true); });
     };
     load();
     const t = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 300_000);
     return () => { alive = false; clearInterval(t); };
-  }, [which, applyWant]);
+  }, [which]);
 
   const choose = useCallback((w: Which) => {
-    whichRef.current = w; pairsRef.current = null; reqRef.current++;
+    whichRef.current = w; reqRef.current++;
     setWhich(w); setPairs(null); setFailed(false); setOpen(null); setDetail(null); setFilter('');
   }, []);
-
-  useEffect(() => {
-    const onOpen = (e: Event) => {
-      const d = (e as CustomEvent<{ from?: string; to?: string; repo?: string }>).detail;
-      if (!d || !d.from || !d.to) return;
-      wantRef.current = { from: d.from, to: d.to };
-      if ((d.repo === 'backend' || d.repo === 'frontend') && d.repo !== whichRef.current) choose(d.repo);
-      else applyWant();
-    };
-    window.addEventListener('tracker:open-drift', onOpen);
-    return () => window.removeEventListener('tracker:open-drift', onOpen);
-  }, [choose, applyWant]);
-
-  // Move focus to the expanded region heading when opened via the rail.
-  useEffect(() => {
-    if (open && focusRef.current) { focusRef.current = false; headRef.current?.focus({ preventScroll: true }); }
-  }, [open]);
 
   const collapse = () => { reqRef.current++; setOpen(null); setDetail(null); setFilter(''); };
   const toggle = (p: Pair) => (open === key(p) ? collapse() : show(p));
@@ -132,7 +98,7 @@ function WaitingToShip() {
     const shown = detail?.commits.filter((c) => !filter || `${c.message} ${c.author ?? ''}`.toLowerCase().includes(filter.toLowerCase())).slice(0, SHOWN) ?? [];
     return (
       <div id={id} role="region" aria-labelledby={`${id}-h`} style={{ padding: '4px 8px 14px' }}>
-        <h3 id={`${id}-h`} ref={headRef} tabIndex={-1} className="rr-h" style={{ margin: '0 0 6px', fontSize: 'var(--fs-sm, 13px)', fontWeight: 600 }}>Commits waiting: {p.fromEnv} → {p.toEnv}</h3>
+        <h3 id={`${id}-h`} className="rr-h" style={{ margin: '0 0 6px', fontSize: 'var(--fs-sm, 13px)', fontWeight: 600 }}>Commits waiting: {p.fromEnv} → {p.toEnv}</h3>
         {detail?.loading && <Skeleton rows={3} />}
         {detail?.error && <p className="muted" style={{ margin: 0 }}>Could not load commits ({detail.error}).</p>}
         {detail && !detail.loading && !detail.error && detail.commits.length === 0 && <p className="muted" style={{ margin: 0 }}>No pending commits.</p>}
@@ -158,7 +124,7 @@ function WaitingToShip() {
   };
 
   return (
-    <section ref={sectionRef} className="panel-quiet fade-in" aria-labelledby={`${uid}-title`} style={{ scrollMarginTop: 16 }}>
+    <section className="panel-quiet fade-in" aria-labelledby={`${uid}-title`} style={{ scrollMarginTop: 16 }}>
       <style>{CSS}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 'var(--space-2, 8px)' }}>
         <h2 id={`${uid}-title`} className="section-h" style={sectionH}>Waiting to ship</h2>
