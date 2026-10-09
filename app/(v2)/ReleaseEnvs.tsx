@@ -17,17 +17,10 @@ interface Dep {
 interface Comp { branch: string | null; version: string | null; at: string | null }
 interface Derived { fe: Comp; be: Comp; banner: { tone: Tone; text: string } | null }
 interface ClusterRes { probed_at?: string; clusters?: Probe[]; by_environment?: Record<string, Probe> }
-interface DriftPair { from: string; to: string; fromEnv: string; toEnv: string; pending?: number; error?: string }
-type Repo = 'backend' | 'frontend';
 type Pipe = NonNullable<ReturnType<typeof useShell>['pipeline']>;
 type Col = Pipe['columns'][number];
 
 const PROBE_TONE: Record<Probe['status'], Tone> = { HEALTHY: 'ok', DEGRADED: 'warn', OFFLINE: 'bad' };
-// Static promotion edges (mirrors app/api/drift/route.ts); the fetched pairs only supply the counts.
-const EDGES: { fromEnv: string; toEnv: string }[] = [
-  { fromEnv: 'Preview', toEnv: 'QA' }, { fromEnv: 'QA', toEnv: 'Pre-Prod' }, { fromEnv: 'QA', toEnv: 'Demo-Preview' },
-  { fromEnv: 'Pre-Prod', toEnv: 'Production (Neotia/Babyjoy)' }, { fromEnv: 'Pre-Prod', toEnv: 'Production (Ankura)' },
-];
 
 function dur(s: number | null): string | null {
   if (s == null || !Number.isFinite(s)) return null;
@@ -84,68 +77,6 @@ function derive(deps: Dep[]): Derived {
   return { fe: comp('frontend'), be: comp('backend'), banner };
 }
 
-/* ---------- drift connector model ---------- */
-interface Link { fromEnv: string; toEnv: string; state: 'sync' | 'behind' | 'unknown' | 'none'; text: string; label: string; detail?: { from: string; to: string; repo: Repo } }
-
-function buildLink(edge: { fromEnv: string; toEnv: string } | undefined, drift: Record<Repo, DriftPair[] | null>, loaded: boolean): Link {
-  if (!edge) return { fromEnv: '', toEnv: '', state: 'none', text: '', label: '' };
-  const { fromEnv, toEnv } = edge;
-  const find = (r: Repo) => drift[r]?.find((p) => p.fromEnv === fromEnv && p.toEnv === toEnv);
-  const pb = find('backend'), pf = find('frontend');
-  const num = (p?: DriftPair) => (p && !p.error && typeof p.pending === 'number' ? p.pending : null);
-  const be = num(pb), fe = num(pf);
-  const base = { fromEnv, toEnv };
-  if (be === null && fe === null) {
-    return { ...base, state: 'unknown', text: loaded ? 'unknown' : 'checking', label: `${fromEnv} to ${toEnv}: ${loaded ? 'drift unknown' : 'checking drift'}` };
-  }
-  if ((be ?? 0) === 0 && (fe ?? 0) === 0) return { ...base, state: 'sync', text: 'in sync', label: `${fromEnv} to ${toEnv}: in sync` };
-  const text = be !== null && fe !== null
-    ? (be === fe ? `+${be}` : `BE +${be} · FE +${fe}`)
-    : be !== null ? `BE +${be}` : `FE +${fe}`;
-  const repo: Repo = (be ?? -1) >= (fe ?? -1) ? 'backend' : 'frontend';
-  const p = repo === 'backend' ? pb : pf;
-  const what = be !== null && fe !== null && be !== fe ? `${be} backend and ${fe} frontend` : `${Math.max(be ?? 0, fe ?? 0)}`;
-  return {
-    ...base, state: 'behind', text,
-    label: `${fromEnv} to ${toEnv}: ${what} commits waiting`,
-    detail: p ? { from: p.from, to: p.to, repo } : undefined,
-  };
-}
-
-const srOnly = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const;
-
-/** One outgoing promotion pair, rendered in normal flow inside the card footer. */
-function PairRow({ link }: { link: Link }) {
-  let mark: React.ReactNode;
-  if (link.state === 'behind') {
-    const n = link.label.replace(/^.*?: /, '');
-    mark = (
-      <button
-        type="button"
-        className="re-pill mono"
-        aria-label={`Show ${n.replace(' commits waiting', '')} commits waiting from ${link.fromEnv} to ${link.toEnv}`}
-        title={link.label}
-        onClick={() => { if (link.detail) window.dispatchEvent(new CustomEvent('tracker:open-drift', { detail: link.detail })); }}
-      >
-        {link.text}
-      </button>
-    );
-  } else {
-    mark = (
-      <span style={{ fontSize: 12, whiteSpace: 'nowrap', color: link.state === 'sync' ? 'var(--ok-text)' : 'var(--muted)' }}>
-        <span style={srOnly}>{link.label}</span>
-        <span aria-hidden="true">{link.state === 'sync' ? '✓ ' : '— '}{link.text}</span>
-      </span>
-    );
-  }
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px 8px', minWidth: 0 }}>
-      <span className="muted" style={{ fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}><span aria-hidden="true">→ </span>{link.toEnv}</span>
-      {mark}
-    </div>
-  );
-}
-
 /* ---------- node ---------- */
 const trunc = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 } as const;
 const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)';
@@ -156,13 +87,13 @@ function CompRow({ label, c }: { label: 'FE' | 'BE'; c: Comp | undefined }) {
   return (
     <>
       <span style={{ fontSize: 11.5, fontWeight: 700, color: label === 'FE' ? 'var(--fe-text, var(--accent-text))' : 'var(--be-text, var(--ok-text))' }}>{label}</span>
-      <span className="tnum" style={{ ...trunc, fontSize: 12.5, color: 'var(--text)' }} title={refs.join(' · ')}>{refs[0]}{refs.length > 1 ? ` +${refs.length - 1}` : ''}</span>
+      <span className="tnum" style={{ ...trunc, fontSize: 12.5, color: 'var(--text)' }} title={refs.join(' · ')}>{refs[0]}</span>
       <span className="muted tnum" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{c?.at ? ago(c.at) : ''}</span>
     </>
   );
 }
 
-function Node({ r, step, p, col, dv, probed, pairs }: { r: HealthRow; step: number; p: Probe | undefined; col: Col | undefined; dv: Derived | undefined; probed: boolean; pairs: Link[] }) {
+function Node({ r, step, p, col, dv, probed }: { r: HealthRow; step: number; p: Probe | undefined; col: Col | undefined; dv: Derived | undefined; probed: boolean }) {
   const failed = !!(col?.health.latest && /fail/i.test(col.health.latest.status));
   const d = dur(r.duration_seconds);
   const special = r.deployment_type && /hotfix|rollback/i.test(r.deployment_type);
@@ -230,11 +161,6 @@ function Node({ r, step, p, col, dv, probed, pairs }: { r: HealthRow; step: numb
           <p className="empty">No deployments yet</p>
         </>
       )}
-      {pairs.length > 0 && (
-        <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {pairs.map((l) => <PairRow key={l.toEnv} link={l} />)}
-        </div>
-      )}
     </article>
   );
 }
@@ -250,9 +176,6 @@ const GRID_CSS = `
 .re-grid>li>article{flex:1 1 auto}
 .re-card{transition:border-color .15s}
 .re-card:hover{border-color:var(--border-bright,var(--border))!important}
-.re-pill{font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;padding:2px 9px;border-radius:999px;border:1px dashed var(--warn);background:var(--warn-bg);color:var(--warn-text);line-height:1.5}
-.re-pill:hover{filter:brightness(1.08)}
-.re-pill:focus-visible{outline:2px solid var(--accent,currentColor);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.is-live{animation:none!important}.re-card{transition:none}}
 `;
 
@@ -263,9 +186,6 @@ export default function ReleaseEnvs() {
   const [probes, setProbes] = useState<ClusterRes | null>(null);
   const [probedAt, setProbedAt] = useState<string | null>(null);
   const [deps, setDeps] = useState<Dep[]>([]);
-  const [drift, setDrift] = useState<Record<Repo, DriftPair[] | null>>({ backend: null, frontend: null });
-  const [driftLoaded, setDriftLoaded] = useState(false);
-
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -288,22 +208,6 @@ export default function ReleaseEnvs() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    const loadDrift = () => {
-      (['backend', 'frontend'] as const).forEach((repo) => {
-        fetch(`/api/drift?repo=${repo}`, { cache: 'no-store' })
-          .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<{ pairs?: DriftPair[] }>; })
-          .then((j) => { if (alive) setDrift((s) => ({ ...s, [repo]: Array.isArray(j.pairs) ? j.pairs : null })); })
-          .catch(() => { if (alive) setDrift((s) => ({ ...s, [repo]: null })); }) // connectors fall back to "unknown"
-          .finally(() => { if (alive) setDriftLoaded(true); });
-      });
-    };
-    loadDrift();
-    const t = setInterval(() => { if (document.visibilityState === 'visible') loadDrift(); }, 300_000);
-    return () => { alive = false; clearInterval(t); };
-  }, []);
-
   const probeMap = useMemo(() => {
     const m = new Map<string, Probe>();
     Object.entries(probes?.by_environment ?? {}).forEach(([k, v]) => m.set(k, v));
@@ -321,7 +225,6 @@ export default function ReleaseEnvs() {
     return m;
   }, [deps]);
   const colFor = (env: string) => pipeline?.columns.find((c) => c.environments.includes(env));
-  const pairsFrom = (env: string) => EDGES.filter((e) => e.fromEnv === env).map((e) => buildLink(e, drift, driftLoaded));
 
   return (
     <section aria-labelledby="release-envs-h" style={{ minWidth: 0 }}>
@@ -331,7 +234,7 @@ export default function ReleaseEnvs() {
         <span className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
           {probedAt ? `live probes updated ${new Date(probedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'live probes pending'}
         </span>
-        <span className="muted" style={{ fontSize: 'var(--fs-xs)', marginLeft: 'auto' }}>Cards are in promotion order; the chip at the bottom of a card shows commits waiting to move to the next environment</span>
+        <span className="muted" style={{ fontSize: 'var(--fs-xs)', marginLeft: 'auto' }}>Cards are in promotion order</span>
       </div>
       {err && !rows ? <ErrorNote>Could not load environments ({err}).</ErrorNote>
         : !rows ? <Skeleton rows={3} />
@@ -339,7 +242,7 @@ export default function ReleaseEnvs() {
           <ul className="re-grid">
             {ordered.map((r, i) => (
               <li key={r.environment}>
-                <Node r={r} step={i + 1} p={probeMap.get(r.environment)} col={colFor(r.environment)} dv={derived.get(r.environment)} probed={!!probes} pairs={pairsFrom(r.environment)} />
+                <Node r={r} step={i + 1} p={probeMap.get(r.environment)} col={colFor(r.environment)} dv={derived.get(r.environment)} probed={!!probes} />
               </li>
             ))}
           </ul>
