@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Empty, ErrorNote } from './ui';
 
-interface Summary { total: number; success: number; failed: number; rollbacks: number; today: number; days: { date: string; success: number; failed: number; other: number; total: number }[]; latest: { environment: string; status: string }[] }
+interface Summary { total: number; success: number; failed: number; queued?: number; rollbacks: number; today: number; days: { date: string; success: number; failed: number; other: number; total: number }[]; latest: { environment: string; status: string }[] }
 interface Day { date: string; label: string; short: string; success: number; failed: number; other: number; total: number }
 
 const isFailed = (s: string) => /fail/i.test(s);
@@ -99,7 +99,8 @@ export default function ReleaseStats() {
     });
     return {
       total: sum.total,
-      rate: sum.total ? ((sum.success / sum.total) * 100).toFixed(1) : null,
+      // Queued runs have not started, so they stay out of the success-rate denominator.
+      rate: sum.total - (sum.queued ?? 0) > 0 ? ((sum.success / (sum.total - (sum.queued ?? 0))) * 100).toFixed(1) : null,
       rollbacks: sum.rollbacks, todayCount: sum.today, failedLatest, envCount: envs.length, days,
       max: Math.max(1, ...days.map((d) => d.total)),
     };

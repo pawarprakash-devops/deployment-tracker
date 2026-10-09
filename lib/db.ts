@@ -27,7 +27,7 @@ export interface Environment {
 export interface Deployment {
   id: string;
   environment: string;
-  status: 'Success' | 'In Progress' | 'Failed' | 'Cancelled' | 'Rolled Back';
+  status: 'Success' | 'Queued' | 'In Progress' | 'Failed' | 'Cancelled' | 'Rolled Back';
   deployment_type?: 'standard' | 'rollback' | 'hotfix' | null;
   branch?: string | null;
   version?: string | null;

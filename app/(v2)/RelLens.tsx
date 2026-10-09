@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useShell } from './ctx';
-import { Card, Empty, EnvDot, Pill, Skeleton, Tile, ErrorNote, ago, type Tone } from './ui';
+import { Card, Empty, EnvDot, Pill, QUEUED_GLYPH, QUEUED_TEXT, Skeleton, Tile, ErrorNote, ago, type Tone } from './ui';
 
 interface DriftPair {
   from: string; to: string; fromEnv: string; toEnv: string;
@@ -16,6 +16,7 @@ function statusTone(s: string | undefined): Tone {
   if (/(^|\s)success$/.test(v)) return 'ok';
   if (/fail/.test(v)) return 'bad';
   if (/progress/.test(v)) return 'info';
+  if (/(^|\s)queued$/.test(v)) return 'warn';
   if (/roll|cancel/.test(v)) return 'warn';
   return 'neutral';
 }
@@ -50,7 +51,8 @@ export default function RelLens() {
   const cols = pipeline.columns;
   const healthy = cols.filter((c) => statusTone(c.health.latest?.status) === 'ok' && !c.activeDeploy).length;
   const inProg = cols.filter((c) => c.activeDeploy).length;
-  const problems = cols.filter((c) => statusTone(c.health.latest?.status) === 'bad' || c.activeDeploy);
+  const queued = cols.filter((c) => c.queuedDeploy).length; // waiting behind a running deploy; not counted as running
+  const problems = cols.filter((c) => statusTone(c.health.latest?.status) === 'bad' || c.activeDeploy || c.queuedDeploy);
   const hasFailed = problems.some((c) => statusTone(c.health.latest?.status) === 'bad');
   const attention = pipeline.tickets.filter((t) => t.badges.some((b) => b.id in BADGE_LABEL));
   const failedTickets = pipeline.tickets.filter((t) => t.badges.some((b) => b.id === 'failed' || b.id === 'rolled_back')).length;
@@ -64,14 +66,14 @@ export default function RelLens() {
           {problems.map((c, i) => {
             const failed = statusTone(c.health.latest?.status) === 'bad';
             return (
-              <span key={c.id}>{i > 0 && '; '}{c.name} {failed ? `latest deploy failed (${ago(c.health.latest?.at)})` : 'deploy in progress'}{failed && c.activeDeploy ? ', redeploy in progress' : ''}</span>
+              <span key={c.id}>{i > 0 && '; '}{c.name} {failed ? `latest deploy failed (${ago(c.health.latest?.at)})` : c.activeDeploy ? 'deploy in progress' : 'deploy queued, waiting for previous deployment'}{failed && c.activeDeploy ? ', redeploy in progress' : ''}</span>
             );
           })}
         </div>
       )}
       <div className="grid g4">
         <Tile label="Environments healthy" value={`${healthy} / ${cols.length}`} tone={healthy === cols.length ? 'ok' : 'warn'} hint="latest deploy succeeded, none running" />
-        <Tile label="Deploys in progress" value={inProg} tone={inProg ? 'info' : undefined} />
+        <Tile label="Deploys in progress" value={inProg} tone={inProg ? 'info' : undefined} hint={queued ? `${queued} more queued, waiting for a previous deployment` : undefined} />
         <Tile label="Tickets failed / rolled back" value={failedTickets} tone={failedTickets ? 'bad' : 'ok'} />
         <Tile label="Unlinked deployments" value={pipeline.unlinked.deployments} hint="no Jira key in notes/branch" />
       </div>
@@ -90,7 +92,7 @@ export default function RelLens() {
                       <td>{st ? <Pill tone={tone}>{st}</Pill> : <span className="muted">no deploys</span>}</td>
                       <td className="muted">{ago(c.health.lastSuccessAt)}</td>
                       <td className="tnum">{c.ticketCount}</td>
-                      <td>{c.activeDeploy ? <Pill tone="info">In progress</Pill> : <span className="muted">idle</span>}</td>
+                      <td>{c.activeDeploy ? <Pill tone="info">In progress</Pill> : c.queuedDeploy ? <Pill tone="warn" glyph={QUEUED_GLYPH}>{QUEUED_TEXT}</Pill> : <span className="muted">idle</span>}</td>
                     </tr>
                   );
                 })}

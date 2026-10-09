@@ -37,7 +37,7 @@ Neon Postgres (`DATABASE_URL`, pooled connection, SSL, pool max 20).
 
 **deployments** — `id` (UUID), `environment`, `status`, `deployment_type` (`standard` | `rollback` | `hotfix`), `branch`, `version`, `frontend_branch`, `backend_branch`, `frontend_version`, `backend_version`, `requested_by`, `approved_by`, `tested_by`, `deployed_by`, `ticket_link`, `notes`, `started_at`, `completed_at`, `duration_seconds`, `created_at`, `updated_at`. All text columns are `TEXT` (widened so multiple PR authors fit); an index exists on `(frontend_branch, backend_branch)`.
 
-`status` values: `Success`, `In Progress`, `Failed`, `Cancelled`, `Rolled Back`, plus `Rerun - <status>` (see below). Note `lib/db.ts` does not list the `Rerun - …` values in its `Deployment` type.
+`status` values: `Success`, `Queued`, `In Progress`, `Failed`, `Cancelled`, `Rolled Back`, plus `Rerun - <status>` (see below). `Queued` and `In Progress` are the two **open** (non-final) statuses. Note `lib/db.ts` does not list the `Rerun - …` values in its `Deployment` type.
 
 ### Rerun behaviour
 When the webhook receives a payload whose `ticket_link` (the GitHub Actions run URL) already exists, it **inserts a new row** with status `Rerun - <status>` and notes prefixed `🔄 Rerun:` — the original failed row is kept in history (earlier versions updated in place). The one-off `GET /api/migrate` cleanup deletes `Failed` rows that have a later `Success` row for the same `ticket_link`.
@@ -63,12 +63,14 @@ curl -X POST "$TRACKER_WEBHOOK_URL" -H "Authorization: Bearer $TRACKER_WEBHOOK_S
   "notes":"Deployed; migrations applied","started_at":"2026-10-09T10:00:00Z","completed_at":"2026-10-09T10:08:30Z"}'
 ```
 Matching rules (inside one transaction, serialised per `ticket_link` + environment):
-- A row matches when it has the same `ticket_link`, the same **normalised** environment and status `In Progress` or `Rerun - In Progress` (newest first). The environment is normalised from the environment + notes + branches. If a **final** post finds no exact match, it falls back to in-progress rows with the same `ticket_link` in any environment: when exactly one exists it is updated in place and keeps its own environment (a `console.warn` logs both names; alerts use the row's environment); with zero or several, legacy behaviour applies (one run URL may legitimately report several environments). `In Progress` posts never use the fallback (exact match only).
+- A row matches when it has the same `ticket_link`, the same **normalised** environment and status `Queued`, `In Progress`, `Rerun - Queued` or `Rerun - In Progress` (newest first). The environment is normalised from the environment + notes + branches. If a **final** post finds no exact match, it falls back to in-progress rows with the same `ticket_link` in any environment: when exactly one exists it is updated in place and keeps its own environment (a `console.warn` logs both names; alerts use the row's environment); with zero or several, legacy behaviour applies (one run URL may legitimately report several environments). `Queued` / `In Progress` posts never use the fallback (exact match only).
 - Final status + matching row: the row is **updated in place** (status, notes, `completed_at`, `duration_seconds` from the row's original `started_at`; branches/versions/people only when non-empty in the payload; `updated_at = NOW()`). A `Rerun - ` status prefix and `🔄 Rerun:` notes prefix are preserved. Response `200 {success, deployment, updated: true}`. Production failure / recovery alerts fire here, once.
-- `In Progress` + matching in-progress row: idempotent update of notes/`started_at`, `200`, no new row.
-- `In Progress` + only completed rows for that `ticket_link` (GitHub "re-run all jobs" keeps the run id): inserts a `Rerun - In Progress` row (notes `🔄 Rerun: ...`), `201`.
+- `In Progress` + matching open row: idempotent update of notes (and non-empty fields), `200`, no new row. If the row is `Queued` it is upgraded in place to `In Progress` (or `Rerun - In Progress`); its original `started_at` is kept.
+- `Queued` is sent when a deploy run is **waiting behind an earlier deployment in the same FIFO lane** (cluster/component); notes should name the blocking run. It inserts a row like `In Progress` (no `completed_at`/duration, no alert). Transitions are always in place: `Queued` -> `In Progress` -> final, or `Queued` -> final. A `Queued` post for a row that is already `In Progress` never downgrades it (status kept, notes refreshed; e.g. the second lane of a both-component deploy). A duplicate `Queued` post is idempotent (`200`).
+- Sparse `Queued` / `In Progress` posts (empty branch/version/people fields) never overwrite populated columns of the existing row.
+- `Queued` / `In Progress` + only completed rows for that `ticket_link` (GitHub "re-run all jobs" keeps the run id): inserts a `Rerun - Queued` / `Rerun - In Progress` row (notes `🔄 Rerun: ...`), `201`.
 - Final status and no in-progress row: unchanged legacy behaviour (insert, or `Rerun - <status>` insert if the `ticket_link` exists), `201`.
-- `In Progress` never computes a duration (`completed_at` / `duration_seconds` stay null) and **never alerts**. A stale `In Progress` row blocks nothing; it is simply the row the next final post for that run updates.
+- `Queued` / `In Progress` never compute a duration (`completed_at` / `duration_seconds` stay null) and **never alerts**. A stale `Queued` / `In Progress` row blocks nothing; it is simply the row the next final post for that run updates.
 
 ## Setup
 

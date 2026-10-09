@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 const BASE = `deployments WHERE deployed_by IS NULL OR deployed_by NOT LIKE '%Deployment Tracker%'`;
 const SUCCESS = `status ~* '(^|\\s)success$'`;
 const FAILED = `status ~* 'fail'`;
+const QUEUED = `status ~* '(^|\\s)queued$'`; // waiting in the deploy FIFO queue: not final, never success/failed
 const TODAY_UTC = `(now() AT TIME ZONE 'UTC')::date`;
 const DAY_UTC = `(started_at AT TIME ZONE 'UTC')::date`;
 
@@ -20,6 +21,7 @@ export async function GET() {
         SELECT count(*)::int AS total,
                count(*) FILTER (WHERE ${SUCCESS})::int AS success,
                count(*) FILTER (WHERE ${FAILED})::int AS failed,
+               count(*) FILTER (WHERE ${QUEUED})::int AS queued,
                count(*) FILTER (WHERE status ~* 'roll' OR notes ~* 'rollback')::int AS rollbacks,
                count(*) FILTER (WHERE ${DAY_UTC} = ${TODAY_UTC})::int AS today
         FROM d`),

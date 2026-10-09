@@ -2,9 +2,9 @@
 import { useMemo, useState } from 'react';
 import type { PipelineColumn, PipelineEnvEntry, PipelineTicket } from '@/lib/pipeline-types';
 import { useShell } from './ctx';
-import { Chip, Empty, EnvDot, ErrorNote, JiraNote, Pill, Skeleton, ago, fmtDate, type Tone } from './ui';
+import { Chip, Empty, EnvDot, ErrorNote, JiraNote, Pill, QUEUED_GLYPH, QUEUED_TEXT, Skeleton, ago, fmtDate, type Tone } from './ui';
 
-const STATUS_TONE: [RegExp, Tone][] = [[/success/, 'ok'], [/fail/, 'bad'], [/progress/, 'info']];
+const STATUS_TONE: [RegExp, Tone][] = [[/success/, 'ok'], [/fail/, 'bad'], [/progress/, 'info'], [/queued/, 'warn']];
 
 function colTone(status: string | undefined): Tone {
   const s = (status ?? '').toLowerCase();
@@ -96,7 +96,9 @@ export default function PipelineTab() {
                   <h3>
                     <EnvDot tone={colTone(status)} label={`${c.name}: ${status ?? 'no deployments'}`} /> {c.name} <small>{c.ticketCount}</small>
                     {c.activeDeploy && <Pill tone="info">In progress</Pill>}
+                    {c.queuedDeploy && <Pill tone="warn" glyph={QUEUED_GLYPH}>Queued{(c.queuedCount ?? 0) > 1 ? ` ${c.queuedCount}` : ''}</Pill>}
                   </h3>
+                  {c.queuedDeploy && <div className="muted" title={c.queuedDeploy.note ?? undefined}>{QUEUED_TEXT}</div>}
                   <div className="muted">last success {ago(c.health.lastSuccessAt)}</div>
                   {items.length === 0 ? <Empty>Nothing here</Empty> : items.map((t) => <Card key={t.key} t={t} col={c} onOpen={setOpenTicket} />)}
                 </section>

@@ -71,7 +71,7 @@ function clusterChip(env: string): string | null {
 
 function statusTone(status: string): Tone {
   const s = status.toLowerCase();
-  return /success/.test(s) ? 'ok' : /fail/.test(s) ? 'bad' : /progress|pending/.test(s) ? 'info' : /roll|cancel/.test(s) ? 'warn' : 'neutral';
+  return /success/.test(s) ? 'ok' : /fail/.test(s) ? 'bad' : /progress|pending/.test(s) ? 'info' : /roll|cancel|queued/.test(s) ? 'warn' : 'neutral';
 }
 
 function Meter({ value, tone, label }: { value: number; tone: Tone; label: string }) {

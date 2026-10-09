@@ -142,11 +142,15 @@ export async function POST(request: NextRequest) {
     }
 
     const isInProgressStatus = /^\s*in progress\s*$/i.test(status);
+    // 'Queued' = waiting in the FIFO deploy lane behind an earlier run. It is an OPEN (non-final)
+    // status exactly like 'In Progress': it can be upgraded to In Progress or finalised in place.
+    const isQueuedStatus = /^\s*queued\s*$/i.test(status);
+    const isOpenStatus = isInProgressStatus || isQueuedStatus;
 
-    // Duration is only meaningful for a finished deployment. An 'In Progress'
+    // Duration is only meaningful for a finished deployment. An open ('Queued' / 'In Progress')
     // post never carries completed_at / duration (any that are sent are ignored).
-    const effectiveCompletedAt = isInProgressStatus ? null : completed_at || null;
-    let calculatedDuration = isInProgressStatus ? null : duration_seconds;
+    const effectiveCompletedAt = isOpenStatus ? null : completed_at || null;
+    let calculatedDuration = isOpenStatus ? null : duration_seconds;
     if (effectiveCompletedAt && !duration_seconds) {
       const startTime = new Date(deployStartedAt).getTime();
       const endTime = new Date(effectiveCompletedAt).getTime();
@@ -156,10 +160,10 @@ export async function POST(request: NextRequest) {
     // Non-empty payload value, else null (used with COALESCE to keep the stored value on updates)
     const nz = (v: unknown) => (v === undefined || v === null || v === '' ? null : v);
 
-    // Alerts are only ever sent for a FINAL outcome (never for 'In Progress' / 'Rerun - In Progress').
+    // Alerts are only ever sent for a FINAL outcome (never for 'Queued' / 'In Progress' or their 'Rerun - ' forms).
     // Shared by the insert path and the in-place update path so both behave identically.
     const alertIfFinal = async (row: { status: string } & Parameters<typeof notifyDeployment>[0]) => {
-      if (/in progress$/i.test(row.status)) return;
+      if (/(in progress|queued)$/i.test(row.status)) return;
       await notifyDeployment(row, alertIsProd);
     };
 
@@ -176,23 +180,23 @@ export async function POST(request: NextRequest) {
         // (e.g. two near-simultaneous 'In Progress' posts) — released at COMMIT/ROLLBACK.
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${ticket_link}|${targetEnv}`]);
 
-        // Newest 'In Progress' / 'Rerun - In Progress' row for this run + environment
+        // Newest open ('Queued' / 'In Progress' and 'Rerun - ' forms) row for this run + environment
         const open = await client.query(
           `SELECT * FROM deployments
-           WHERE ticket_link = $1 AND environment = $2 AND status ~* '^(rerun - )?in progress$'
+           WHERE ticket_link = $1 AND environment = $2 AND status ~* '^(rerun - )?(in progress|queued)$'
            ORDER BY created_at DESC LIMIT 1
            FOR UPDATE`,
           [ticket_link, targetEnv]
         );
 
         let openRow = open.rows[0];
-        if (!openRow && !isInProgressStatus) {
+        if (!openRow && !isOpenStatus) {
           // Fallback: environment normalisation also reads notes/branches, so POST 1 and POST 2 can
           // resolve to different names. If EXACTLY ONE in-progress row exists for this run URL
           // (any environment), it is that run's row. Zero or several => legacy behaviour.
           const anyEnv = await client.query(
             `SELECT * FROM deployments
-             WHERE ticket_link = $1 AND status ~* '^(rerun - )?in progress$'
+             WHERE ticket_link = $1 AND status ~* '^(rerun - )?(in progress|queued)$'
              ORDER BY created_at DESC LIMIT 2
              FOR UPDATE`,
             [ticket_link]
@@ -214,12 +218,19 @@ export async function POST(request: NextRequest) {
           const isRerunRow = /^rerun - /i.test(row.status);
           const noteText = notes ? (isRerunRow ? `🔄 Rerun: ${notes}` : notes) : null;
 
-          if (isInProgressStatus) {
-            // Duplicate 'In Progress' post: idempotent — refresh the existing row, no new row, no alert.
+          if (isOpenStatus) {
+            // Duplicate / transitional open post: idempotent — refresh the existing row, no new row, no alert.
+            // Queued -> In Progress upgrades the status; In Progress -> Queued is NEVER a downgrade
+            // (e.g. the 2nd lane of a both-component deploy posts Queued after the 1st lane is running).
+            const rowIsQueued = /queued$/i.test(row.status);
+            const nextStatus = isInProgressStatus && rowIsQueued
+              ? (isRerunRow ? 'Rerun - In Progress' : 'In Progress')
+              : row.status;
             result = await client.query(
               `UPDATE deployments SET
+                 status = $13,
                  notes = COALESCE($2, notes),
-                 started_at = COALESCE($3, started_at),
+                 started_at = COALESCE(started_at, $3),
                  deployment_type = COALESCE($4, deployment_type),
                  branch = COALESCE($5, branch), version = COALESCE($6, version),
                  frontend_branch = COALESCE($7, frontend_branch), backend_branch = COALESCE($8, backend_branch),
@@ -231,10 +242,11 @@ export async function POST(request: NextRequest) {
                 row.id, noteText, nz(started_at), nz(body.deployment_type),
                 nz(branch), nz(version), nz(frontend_branch), nz(backend_branch),
                 nz(frontend_version), nz(backend_version), nz(requested_by), nz(deployed_by),
+                nextStatus,
               ]
             );
           } else {
-            // Final status for an in-progress row: update the SAME row in place.
+            // Final status for an open (queued / in-progress) row: update the SAME row in place.
             const finalStatus = isRerunRow ? `Rerun - ${status}` : status;
             const doneAt = effectiveCompletedAt || new Date().toISOString();
             let dur: number | null = duration_seconds ?? null;
@@ -267,7 +279,7 @@ export async function POST(request: NextRequest) {
           });
         } else {
           // No open row — a previous attempt (if any) is completed: insert a NEW row tagged as rerun.
-          // The original row is preserved in history. (For 'In Progress' this yields 'Rerun - In Progress'.)
+          // The original row is preserved in history. (For 'Queued' / 'In Progress' this yields 'Rerun - Queued' / 'Rerun - In Progress'.)
           const existing = await client.query(
             'SELECT id, status FROM deployments WHERE ticket_link = $1 ORDER BY created_at DESC LIMIT 1',
             [ticket_link]
@@ -362,7 +374,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Optional Google Chat alert for failures / recoveries (no-op unless GCHAT_ALERT_WEBHOOK_URL is set).
-    // Runs after COMMIT, once per final outcome; never for 'In Progress'.
+    // Runs after COMMIT, once per final outcome; never for 'Queued' / 'In Progress'.
     await alertIfFinal(result.rows[0]);
 
     return NextResponse.json({

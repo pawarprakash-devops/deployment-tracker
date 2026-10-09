@@ -15,7 +15,7 @@ type SortKey = 'when' | 'env' | 'status';
 type DatePreset = '' | 'today' | '7d' | '30d' | 'custom';
 type Density = 'comfortable' | 'compact';
 
-const STATUSES = ['Success', 'In Progress', 'Failed', 'Rolled Back', 'Cancelled'];
+const STATUSES = ['Success', 'Queued', 'In Progress', 'Failed', 'Rolled Back', 'Cancelled'];
 const PAGE = 25;
 const API_LIMIT = 1000;
 const DAY = 86_400_000;
