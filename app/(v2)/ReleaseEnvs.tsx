@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useShell } from './ctx';
-import { Pill, Chip, QUEUED_GLYPH, QUEUED_TEXT, Skeleton, ErrorNote, ago, type Tone } from './ui';
+import { Pill, Chip, AWAITING_GLYPH, AWAITING_TEXT, QUEUED_GLYPH, QUEUED_TEXT, Skeleton, ErrorNote, ago, type Tone } from './ui';
 
 interface HealthRow {
   environment: string; is_production: boolean; display_order: number; status: string | null;
@@ -175,9 +175,11 @@ function Node({ r, step, p, col, dv, probed, pairs }: { r: HealthRow; step: numb
   const sep = bn ? bn.text.indexOf(':') : -1;
   const live = !!col?.activeDeploy;
   const queued = !!col?.queuedDeploy; // waiting behind a running deploy: shown separately, never as running
-  const pills = (live || queued || failed || special) && (
+  const awaiting = !!col?.awaitingDeploy; // paused on an approval: shown separately, never as running
+  const pills = (live || queued || awaiting || failed || special) && (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       {live && <Pill tone="info" icon={false}><span className="is-live" aria-hidden="true" style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--info)', marginRight: 5 }} />In progress</Pill>}
+      {awaiting && <Pill tone="info" glyph={AWAITING_GLYPH}>{AWAITING_TEXT}</Pill>}
       {queued && <Pill tone="warn" glyph={QUEUED_GLYPH}>{QUEUED_TEXT}</Pill>}
       {failed && <Pill tone="bad">Last deploy failed</Pill>}
       {special && <Pill tone="warn">{r.deployment_type}</Pill>}

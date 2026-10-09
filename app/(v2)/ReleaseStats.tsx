@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, Empty, ErrorNote } from './ui';
 
-interface Summary { total: number; success: number; failed: number; queued?: number; rollbacks: number; today: number; days: { date: string; success: number; failed: number; other: number; total: number }[]; latest: { environment: string; status: string }[] }
+interface Summary { total: number; success: number; failed: number; queued?: number; awaiting_approval?: number; rejected?: number; rollbacks: number; today: number; days: { date: string; success: number; failed: number; other: number; total: number }[]; latest: { environment: string; status: string }[] }
 interface Day { date: string; label: string; short: string; success: number; failed: number; other: number; total: number }
 
 const isFailed = (s: string) => /fail/i.test(s);
@@ -97,10 +97,12 @@ export default function ReleaseStats() {
         short: String(dt.getUTCDate()),
       };
     });
+    const den = sum.total - (sum.queued ?? 0) - (sum.awaiting_approval ?? 0) - (sum.rejected ?? 0);
     return {
       total: sum.total,
-      // Queued runs have not started, so they stay out of the success-rate denominator.
-      rate: sum.total - (sum.queued ?? 0) > 0 ? ((sum.success / (sum.total - (sum.queued ?? 0))) * 100).toFixed(1) : null,
+      // Queued and awaiting-approval runs have not started, and rejected ones never ran (a declined approval is not a delivery
+      // outcome), so none of them is in the success-rate denominator. Cancelled and failed runs stay in.
+      rate: den > 0 ? ((sum.success / den) * 100).toFixed(1) : null,
       rollbacks: sum.rollbacks, todayCount: sum.today, failedLatest, envCount: envs.length, days,
       max: Math.max(1, ...days.map((d) => d.total)),
     };

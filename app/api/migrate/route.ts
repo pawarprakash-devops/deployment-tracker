@@ -13,6 +13,9 @@ export async function POST() {
       ADD COLUMN IF NOT EXISTS backend_version TEXT
     `);
 
+    // Approval gate: when a gated run left 'Awaiting approval' (duration starts here). Nullable, additive.
+    await pool.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
+
     // Migrate existing data
     await pool.query(`
       UPDATE deployments 

@@ -22,7 +22,7 @@ const FIELDS: [string, string][] = [
   ['environment', 'Environment'], ['status', 'Status'], ['deployment_type', 'Type'], ['branch', 'Branch'], ['version', 'Version'],
   ['frontend_branch', 'FE branch'], ['frontend_version', 'FE version'], ['backend_branch', 'BE branch'], ['backend_version', 'BE version'],
   ['requested_by', 'Requested by'], ['approved_by', 'Approved by'], ['tested_by', 'Tested by'], ['deployed_by', 'Deployed by'],
-  ['started_at', 'Started'], ['duration_seconds', 'Duration'],
+  ['started_at', 'Started'], ['approved_at', 'Approved at'], ['duration_seconds', 'Duration'],
 ];
 
 const str = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v));
@@ -36,7 +36,7 @@ function fmtDur(s: number): string {
 function cell(field: string, r: Row): string {
   const v = r[field];
   if (v === null || v === undefined || v === '') return '—';
-  if (field === 'started_at') return fmtDateTime(String(v));
+  if (field === 'started_at' || field === 'approved_at') return fmtDateTime(String(v));
   if (field === 'duration_seconds') return fmtDur(Number(v));
   return String(v);
 }

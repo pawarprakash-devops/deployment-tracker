@@ -1,7 +1,7 @@
 // Client-safe types for GET /api/pipeline (no server imports here).
 
 export type ColumnId = 'preview' | 'demo' | 'qa' | 'stage' | 'preprod' | 'prod-ankura' | 'prod-neotia' | 'other';
-export type EnvState = 'deployed' | 'in_progress' | 'queued' | 'failed' | 'rolled_back';
+export type EnvState = 'deployed' | 'in_progress' | 'queued' | 'awaiting_approval' | 'failed' | 'rolled_back';
 export type BadgeId = 'hotfix' | 'rolled_back' | 'failed' | 'stuck';
 
 export interface PipelineColumn {
@@ -16,6 +16,9 @@ export interface PipelineColumn {
   // 'Queued: waiting for previous deployment run #N (position M)' text. Optional: older payloads omit it.
   queuedDeploy?: { id: string; status: string; startedAt: string; note: string | null } | null;
   queuedCount?: number;
+  // Newest 'Awaiting approval' deploy (paused on a GitHub Environment approval; not running, holds no FIFO lane). Optional: older payloads omit it.
+  awaitingDeploy?: { id: string; status: string; startedAt: string; note: string | null } | null;
+  awaitingCount?: number;
   ticketCount: number;
 }
 

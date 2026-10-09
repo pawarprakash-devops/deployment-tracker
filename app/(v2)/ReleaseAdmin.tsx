@@ -10,7 +10,7 @@ type Env = { id: string; name: string; is_production?: boolean; display_order?: 
 type Form = Record<string, string>;
 type Dialog = null | 'login' | 'form' | 'envs' | 'delete' | 'import';
 
-const STATUSES = ['Success', 'Queued', 'In Progress', 'Failed', 'Cancelled', 'Rolled Back'];
+const STATUSES = ['Success', 'Awaiting approval', 'Queued', 'In Progress', 'Failed', 'Cancelled', 'Rejected', 'Rolled Back'];
 const TYPES = ['standard', 'rollback', 'hotfix'];
 const TEXT_FIELDS: [string, string][] = [
   ['branch', 'Branch'], ['version', 'Version'], ['frontend_branch', 'Frontend branch'], ['frontend_version', 'Frontend version'],

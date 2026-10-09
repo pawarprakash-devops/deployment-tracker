@@ -40,7 +40,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const dots = (pipeline?.columns ?? []).map((c) => {
     const s = (c.health.latest?.status ?? '').toLowerCase();
-    const tone: Tone = !s ? 'neutral' : /fail/.test(s) ? 'bad' : /progress/.test(s) ? 'info' : /success/.test(s) ? 'ok' : 'warn';
+    const tone: Tone = !s ? 'neutral' : /fail/.test(s) ? 'bad' : /progress|awaiting approval/.test(s) ? 'info' : /success/.test(s) ? 'ok' : 'warn';
     return { id: c.id, tone, label: `${c.name}: ${c.health.latest?.status ?? 'no deployments'}` };
   });
 

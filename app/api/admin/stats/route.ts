@@ -25,12 +25,15 @@ export async function GET(request: NextRequest) {
     const deployments = deploymentsResult.rows;
     
     // Calculate stats
+    // Runs paused on an approval never started and rejected ones never ran: neither is a delivery outcome, so both stay
+    // out of every rate denominator (they still count in byStatus and the totals shown).
+    const rateBase = deployments.filter(d => !/^(awaiting approval|rejected)$/i.test(d.status)).length;
     const totalDeployments = deployments.length;
     const successCount = deployments.filter(d => d.status === 'Success').length;
     const failureCount = deployments.filter(d => d.status === 'Failed').length;
     
-    const successRate = totalDeployments > 0 ? (successCount / totalDeployments) * 100 : 0;
-    const failureRate = totalDeployments > 0 ? (failureCount / totalDeployments) * 100 : 0;
+    const successRate = rateBase > 0 ? (successCount / rateBase) * 100 : 0;
+    const failureRate = rateBase > 0 ? (failureCount / rateBase) * 100 : 0;
     
     // Average duration
     const deploymentsWithDuration = deployments.filter(d => d.duration_seconds);
@@ -105,7 +108,7 @@ export async function GET(request: NextRequest) {
     else if (dailyAvg >= 0.14) dfRating = 'Medium';
 
     // 2. Change Failure Rate
-    const cfrRate = totalDeployments > 0 ? Number(((failureCount / totalDeployments) * 100).toFixed(1)) : 0;
+    const cfrRate = rateBase > 0 ? Number(((failureCount / rateBase) * 100).toFixed(1)) : 0;
     const prodDeployments = deployments.filter(d => d.environment.includes('Production'));
     const prodFailures = prodDeployments.filter(d => d.status === 'Failed').length;
     const prodCfrRate = prodDeployments.length > 0 ? Number(((prodFailures / prodDeployments.length) * 100).toFixed(1)) : 0;

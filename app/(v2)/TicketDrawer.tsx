@@ -82,7 +82,7 @@ export default function TicketDrawer() {
                 {Object.entries(t.environments).map(([env, e]) => (
                   <tr key={env}>
                     <td>{env}</td>
-                    <td><StatusPill status={e.state === 'deployed' ? 'Success' : e.state === 'in_progress' ? 'In Progress' : e.state === 'queued' ? 'Queued' : e.state === 'rolled_back' ? 'Rolled Back' : 'Failed'} /></td>
+                    <td><StatusPill status={e.state === 'deployed' ? 'Success' : e.state === 'in_progress' ? 'In Progress' : e.state === 'queued' ? 'Queued' : e.state === 'awaiting_approval' ? 'Awaiting approval' : e.state === 'rolled_back' ? 'Rolled Back' : 'Failed'} /></td>
                     <td className="tnum">{e.versions.frontend && <Chip>FE {e.versions.frontend}</Chip>} {e.versions.backend && <Chip>BE {e.versions.backend}</Chip>} {!e.versions.frontend && !e.versions.backend && e.versions.single && <Chip>{e.versions.single}</Chip>}</td>
                     <td className="muted">{ago(e.lastAt)}</td>
                     <td>{e.runUrl && <a href={e.runUrl} target="_blank" rel="noreferrer" className="key">run ↗</a>}</td>

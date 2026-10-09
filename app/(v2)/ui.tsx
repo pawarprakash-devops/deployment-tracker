@@ -97,8 +97,18 @@ export const QUEUED_GLYPH = '◷';
 export const QUEUED_TEXT = 'Queued - waiting for previous deployment';
 export const isQueuedStatus = (s: string | null | undefined) => !!s && /(^|\s)queued$/i.test(s.trim());
 
+// 'Awaiting approval': the run is paused on a GitHub Environment approval (open, not running, not failed). Info tone + a pause glyph.
+export const AWAITING_GLYPH = '\u23F8\uFE0E';
+export const AWAITING_TEXT = 'Awaiting approval - waiting for DevOps approval';
+export const isAwaitingStatus = (s: string | null | undefined) => !!s && /(^|\s)awaiting approval$/i.test(s.trim());
+// 'Rejected': approval declined (or expired); never ran. Final, shown like Cancelled (warn) but with its own glyph.
+export const REJECTED_GLYPH = '\u2298';
+export const isRejectedStatus = (s: string | null | undefined) => !!s && /(^|\s)rejected$/i.test(s.trim());
+
 export function StatusPill({ status }: { status: string }) {
   const s = status.toLowerCase();
+  if (isAwaitingStatus(s)) return <Pill tone="info" glyph={AWAITING_GLYPH}>Awaiting approval</Pill>;
+  if (isRejectedStatus(s)) return <Pill tone="warn" glyph={REJECTED_GLYPH}>Rejected</Pill>;
   // 'Queued' / 'Rerun - Queued': waiting behind a running deploy. Warn tone + a clock glyph (not the '!' of rolled back/cancelled).
   if (isQueuedStatus(s)) return <Pill tone="warn" glyph={QUEUED_GLYPH}>Queued</Pill>;
   const tone: Tone = /success/.test(s) ? 'ok' : /progress/.test(s) ? 'info' : /fail/.test(s) ? 'bad' : /roll|cancel/.test(s) ? 'warn' : 'neutral';
