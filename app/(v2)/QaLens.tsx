@@ -27,7 +27,7 @@ function stateIn(t: PipelineTicket, p: PipelineResponse) {
   return e?.state ?? 'deployed';
 }
 const STATE: Record<string, { tone: Tone; label: string }> = {
-  deployed: { tone: 'ok', label: 'Deployed' }, in_progress: { tone: 'info', label: 'In progress' }, queued: { tone: 'warn', label: 'Queued' },
+  deployed: { tone: 'ok', label: 'Deployed' }, in_progress: { tone: 'info', label: 'In progress' }, queued: { tone: 'warn', label: 'Queued' }, awaiting_approval: { tone: 'info', label: 'Awaiting approval' },
   failed: { tone: 'bad', label: 'Failed' }, rolled_back: { tone: 'warn', label: 'Rolled back' },
 };
 

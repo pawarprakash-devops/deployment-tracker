@@ -9,13 +9,13 @@ interface Row {
   frontend_version?: string | null; backend_version?: string | null;
   requested_by?: string | null; approved_by?: string | null; tested_by?: string | null; deployed_by?: string | null;
   ticket_link?: string | null; notes?: string | null;
-  started_at: string; completed_at?: string | null; duration_seconds?: number | null;
+  started_at: string; approved_at?: string | null; completed_at?: string | null; duration_seconds?: number | null;
 }
 type SortKey = 'when' | 'env' | 'status';
 type DatePreset = '' | 'today' | '7d' | '30d' | 'custom';
 type Density = 'comfortable' | 'compact';
 
-const STATUSES = ['Success', 'Queued', 'In Progress', 'Failed', 'Rolled Back', 'Cancelled'];
+const STATUSES = ['Success', 'Awaiting approval', 'Queued', 'In Progress', 'Failed', 'Rolled Back', 'Cancelled', 'Rejected'];
 const PAGE = 25;
 const API_LIMIT = 1000;
 const DAY = 86_400_000;
@@ -599,8 +599,9 @@ export default function ReleaseHistory() {
               {field('Tested by', sel.tested_by)}
               {field('Deployed by', sel.deployed_by)}
               {field('Started', abs(sel.started_at))}
+              {sel.approved_at && field('Approved at', abs(sel.approved_at))}
               {field('Completed', abs(sel.completed_at))}
-              {field('Duration', dur(sel.duration_seconds))}
+              {field('Duration', sel.approved_at ? <>{dur(sel.duration_seconds)} <span className="muted">(from approval)</span></> : dur(sel.duration_seconds))}
               {field('Pull requests', selPrs.length ? <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}><PRChips prs={selPrs} /></span> : null)}
               {field('Run / link', sel.ticket_link ? (isUrl(sel.ticket_link)
                 ? <a href={sel.ticket_link} target="_blank" rel="noopener noreferrer" className="key">🔗 {ticketText(sel.ticket_link)} ↗</a> : sel.ticket_link) : null)}
