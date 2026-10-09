@@ -113,7 +113,7 @@ const RH_CSS = `
 .rh-wn>div{flex:1 1 auto;min-width:0}
 .rh-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
 .rh-wrap[data-density='compact'] .rh-clamp{-webkit-line-clamp:1}
-.rh-t{--rh-pw:110px;--rh-vw:190px}
+.rh-t{--rh-pw:150px;--rh-vw:160px}
 @media (min-width:1950px){
   .rh-t{table-layout:fixed}
   .rh-t th.rh-wide,.rh-t td.rh-wide{display:table-cell}
@@ -122,16 +122,17 @@ const RH_CSS = `
   .rh-t tbody td{overflow:hidden}
   .rh-t th.rh-h-sel{width:34px}
   .rh-t th.rh-h-env{width:130px}
-  .rh-t th.rh-h-st{width:105px}
+  .rh-t th.rh-h-st{width:165px}
   .rh-t th.rh-h-ver{width:var(--rh-vw)}
-  .rh-t th.rh-h-when{width:150px}
+  .rh-t th.rh-h-when{width:175px}
   .rh-t th.rh-h-pp{width:var(--rh-pw)}
   .rh-t th.rh-h-run{width:130px}
   .rh-t th.rh-h-act{width:140px}
   .rh-ver{max-width:none}
+  .rh-t td.rh-c-pp .rh-people{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
 }
-@media (min-width:2300px){.rh-t{--rh-pw:150px;--rh-vw:210px}.rh-t th.rh-h-run{width:170px}}
-@media (min-width:3000px){.rh-t{--rh-pw:200px;--rh-vw:260px}.rh-t th.rh-h-run{width:220px}.rh-t th.rh-h-env{width:170px}}
+@media (min-width:2300px){.rh-t{--rh-pw:190px;--rh-vw:210px}.rh-t th.rh-h-run{width:170px}}
+@media (min-width:3000px){.rh-t{--rh-pw:230px;--rh-vw:260px}.rh-t th.rh-h-run{width:220px}.rh-t th.rh-h-env{width:170px}}
 .rh-sk{display:grid;grid-template-columns:24px 1.2fr 1fr 1.4fr 1.2fr 2fr;gap:14px;padding:12px 10px;border-bottom:1px solid var(--border)}
 .rh-sk span{display:block;height:14px;border-radius:4px}
 .rh-state{padding:28px 12px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
@@ -148,6 +149,8 @@ const RH_CSS = `
   .rh-wrap[data-density='compact'] .rh-l2{display:none}
   .rh-l1{flex-wrap:wrap;white-space:normal}
   .rh-ver{max-width:none}
+  .rh-t tbody td.rh-c-det{height:auto}
+  .rh-c-det .rh-l2 .rh-trunc{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 }
 `;
 
