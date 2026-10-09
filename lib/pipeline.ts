@@ -3,6 +3,7 @@ import { extractJiraKeys, jiraConfigured, jiraIssuesByKeys, stageOf } from './ji
 import type { BadgeId, ColumnId, EnvState, PipelineColumn, PipelineEnvEntry, PipelineResponse, PipelineTicket } from './pipeline-types';
 
 const SUCCESS_RE = /(^|\s)success$/i;
+const AWAITING_RE = /(^|\s)awaiting approval$/i; // 'Awaiting approval' / 'Rerun - Awaiting approval': paused on an approval, not running
 const QUEUED_RE = /(^|\s)queued$/i; // 'Queued' / 'Rerun - Queued': waiting in the deploy FIFO, not running
 const WINDOW = 300;
 const MAX_TICKETS = 150;
@@ -97,6 +98,8 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
           activeDeploy: null,
           queuedDeploy: null,
           queuedCount: 0,
+          awaitingDeploy: null,
+          awaitingCount: 0,
           ticketCount: 0,
           _order: order,
         });
@@ -119,6 +122,10 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
     if (!col.health.latest) col.health.latest = { id: r.id, status: r.status, at };
     if (ok && !col.health.lastSuccessAt) col.health.lastSuccessAt = at;
     if (/in progress/i.test(r.status) && !col.activeDeploy) col.activeDeploy = { id: r.id, status: r.status, startedAt: at };
+    if (AWAITING_RE.test(r.status)) {
+      col.awaitingCount = (col.awaitingCount ?? 0) + 1;
+      if (!col.awaitingDeploy) col.awaitingDeploy = { id: r.id, status: r.status, startedAt: at, note: r.notes?.trim() || null };
+    }
     if (QUEUED_RE.test(r.status)) {
       col.queuedCount = (col.queuedCount ?? 0) + 1;
       if (!col.queuedDeploy) col.queuedDeploy = { id: r.id, status: r.status, startedAt: at, note: /Queued:[^\n]*/i.exec(r.notes ?? '')?.[0]?.trim() ?? null };
@@ -129,12 +136,14 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
       if (ok) unlinked++;
       continue;
     }
-    if (!ok && /cancel/i.test(r.status)) continue;
+    if (!ok && /cancel|reject/i.test(r.status)) continue; // never ran: not a failure
     const state: EnvState = ok
       ? 'deployed'
       : /in progress/i.test(r.status)
         ? 'in_progress'
-        : QUEUED_RE.test(r.status)
+        : AWAITING_RE.test(r.status)
+          ? 'awaiting_approval'
+          : QUEUED_RE.test(r.status)
           ? 'queued'
           : /rolled back/i.test(r.status) || r.deployment_type === 'rollback'
           ? 'rolled_back'
