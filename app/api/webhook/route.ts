@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { notifyDeployment } from '@/lib/alerts';
 
+// Open (non-final) statuses, lowest to highest rank. A post may only move a row UP this ladder; a lower or equal
+// post never downgrades it (e.g. a late 'Awaiting approval' must not overwrite 'In Progress').
+const OPEN_LADDER = ['Awaiting approval', 'Queued', 'In Progress'] as const;
+const OPEN_SQL = `'^(rerun - )?(awaiting approval|queued|in progress)$'`;
+const openRank = (s: string) => OPEN_LADDER.findIndex((l) => s.trim().toLowerCase().replace(/^rerun - /, '') === l.toLowerCase());
+
+// approved_at (nullable, additive) is when a gated run left 'Awaiting approval'. Duration starts there. Neon needs no
+// manual migration before this deploys: the column is added once per server instance, idempotently (also in /api/migrate).
+let approvedAtReady: Promise<void> | null = null;
+function ensureApprovedAtColumn(): Promise<void> {
+  approvedAtReady ??= pool
+    .query('ALTER TABLE deployments ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ')
+    .then(() => undefined)
+    .catch((e) => { approvedAtReady = null; throw e; });
+  return approvedAtReady;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify authorization (simple token-based auth)
@@ -20,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Extract deployment info from webhook payload
     const {
       environment,
-      status,
+      status: rawStatus,
       deployment_type = 'standard',
       branch,
       version,
@@ -40,12 +57,15 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!environment || !status) {
+    if (!environment || !rawStatus) {
       return NextResponse.json(
         { error: 'Missing required fields: environment, status' },
         { status: 400 }
       );
     }
+    // Canonical labels for the open statuses and 'Rejected' (matched case-insensitively on input).
+    const status: string = OPEN_LADDER.find((l) => l.toLowerCase() === String(rawStatus).trim().toLowerCase())
+      ?? (/^\s*rejected\s*$/i.test(rawStatus) ? 'Rejected' : rawStatus);
     const deployStartedAt = started_at || new Date().toISOString();
 
     // Auto-normalize environment & cluster name
@@ -145,7 +165,11 @@ export async function POST(request: NextRequest) {
     // 'Queued' = waiting in the FIFO deploy lane behind an earlier run. It is an OPEN (non-final)
     // status exactly like 'In Progress': it can be upgraded to In Progress or finalised in place.
     const isQueuedStatus = /^\s*queued\s*$/i.test(status);
-    const isOpenStatus = isInProgressStatus || isQueuedStatus;
+    // 'Awaiting approval' = the run is paused on a GitHub Environment approval. OPEN, lowest rank: it holds no FIFO
+    // lane and never counts as running; duration only starts once it is approved.
+    const isAwaitingStatus = status === 'Awaiting approval';
+    const isOpenStatus = isInProgressStatus || isQueuedStatus || isAwaitingStatus;
+    const incomingRank = openRank(status);
 
     // Duration is only meaningful for a finished deployment. An open ('Queued' / 'In Progress')
     // post never carries completed_at / duration (any that are sent are ignored).
@@ -163,10 +187,11 @@ export async function POST(request: NextRequest) {
     // Alerts are only ever sent for a FINAL outcome (never for 'Queued' / 'In Progress' or their 'Rerun - ' forms).
     // Shared by the insert path and the in-place update path so both behave identically.
     const alertIfFinal = async (row: { status: string } & Parameters<typeof notifyDeployment>[0]) => {
-      if (/(in progress|queued)$/i.test(row.status)) return;
+      if (/(in progress|queued|awaiting approval)$/i.test(row.status)) return;
       await notifyDeployment(row, alertIsProd);
     };
 
+    await ensureApprovedAtColumn();
     const client = await pool.connect();
     let result;
     let updated = false;
@@ -180,10 +205,10 @@ export async function POST(request: NextRequest) {
         // (e.g. two near-simultaneous 'In Progress' posts) — released at COMMIT/ROLLBACK.
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${ticket_link}|${targetEnv}`]);
 
-        // Newest open ('Queued' / 'In Progress' and 'Rerun - ' forms) row for this run + environment
+        // Newest open ('Awaiting approval' / 'Queued' / 'In Progress' and 'Rerun - ' forms) row for this run + environment
         const open = await client.query(
           `SELECT * FROM deployments
-           WHERE ticket_link = $1 AND environment = $2 AND status ~* '^(rerun - )?(in progress|queued)$'
+           WHERE ticket_link = $1 AND environment = $2 AND status ~* ${OPEN_SQL}
            ORDER BY created_at DESC LIMIT 1
            FOR UPDATE`,
           [ticket_link, targetEnv]
@@ -196,7 +221,7 @@ export async function POST(request: NextRequest) {
           // (any environment), it is that run's row. Zero or several => legacy behaviour.
           const anyEnv = await client.query(
             `SELECT * FROM deployments
-             WHERE ticket_link = $1 AND status ~* '^(rerun - )?(in progress|queued)$'
+             WHERE ticket_link = $1 AND status ~* ${OPEN_SQL}
              ORDER BY created_at DESC LIMIT 2
              FOR UPDATE`,
             [ticket_link]
@@ -220,15 +245,19 @@ export async function POST(request: NextRequest) {
 
           if (isOpenStatus) {
             // Duplicate / transitional open post: idempotent — refresh the existing row, no new row, no alert.
-            // Queued -> In Progress upgrades the status; In Progress -> Queued is NEVER a downgrade
-            // (e.g. the 2nd lane of a both-component deploy posts Queued after the 1st lane is running).
-            const rowIsQueued = /queued$/i.test(row.status);
-            const nextStatus = isInProgressStatus && rowIsQueued
-              ? (isRerunRow ? 'Rerun - In Progress' : 'In Progress')
-              : row.status;
+            // Ladder: Awaiting approval -> Queued -> In Progress. A post only moves the row UP; a lower or equal
+            // post never downgrades it (e.g. the 2nd lane of a both-component deploy posts Queued after the 1st
+            // lane is running, or a late 'Awaiting approval' arrives after the run started).
+            const rowRank = openRank(row.status);
+            const upgrade = incomingRank > rowRank;
+            const nextStatus = upgrade ? (isRerunRow ? `Rerun - ${status}` : status) : row.status;
+            // Leaving 'Awaiting approval' = approval time: duration is measured from here, not from row creation.
+            const approvedNow = upgrade && rowRank === 0;
             result = await client.query(
               `UPDATE deployments SET
                  status = $13,
+                 approved_at = CASE WHEN $14::boolean THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
+                 approved_by = COALESCE($15, approved_by),
                  notes = COALESCE($2, notes),
                  started_at = COALESCE(started_at, $3),
                  deployment_type = COALESCE($4, deployment_type),
@@ -242,7 +271,7 @@ export async function POST(request: NextRequest) {
                 row.id, noteText, nz(started_at), nz(body.deployment_type),
                 nz(branch), nz(version), nz(frontend_branch), nz(backend_branch),
                 nz(frontend_version), nz(backend_version), nz(requested_by), nz(deployed_by),
-                nextStatus,
+                nextStatus, approvedNow, nz(approved_by),
               ]
             );
           } else {
@@ -250,7 +279,14 @@ export async function POST(request: NextRequest) {
             const finalStatus = isRerunRow ? `Rerun - ${status}` : status;
             const doneAt = effectiveCompletedAt || new Date().toISOString();
             let dur: number | null = duration_seconds ?? null;
-            if (dur === null || dur === 0) {
+            if (row.approved_at) {
+              // Gated run: lead time starts at approval, so an overnight wait never inflates it. A duration sent by
+              // the workflow is measured from its own start (before approval) and is ignored.
+              dur = Math.max(0, Math.round((new Date(doneAt).getTime() - new Date(row.approved_at).getTime()) / 1000));
+            } else if (openRank(row.status) === 0) {
+              // Still 'Awaiting approval' when it ended: rejected / expired / cancelled never ran, so no duration.
+              dur = /reject|cancel|fail/i.test(status) ? null : dur || null;
+            } else if (dur === null || dur === 0) {
               // started_at stays the original row's value
               dur = Math.max(0, Math.round((new Date(doneAt).getTime() - new Date(row.started_at).getTime()) / 1000));
             }

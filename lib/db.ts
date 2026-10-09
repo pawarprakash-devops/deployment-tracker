@@ -27,7 +27,7 @@ export interface Environment {
 export interface Deployment {
   id: string;
   environment: string;
-  status: 'Success' | 'Queued' | 'In Progress' | 'Failed' | 'Cancelled' | 'Rolled Back';
+  status: 'Success' | 'Awaiting approval' | 'Queued' | 'In Progress' | 'Failed' | 'Cancelled' | 'Rejected' | 'Rolled Back';
   deployment_type?: 'standard' | 'rollback' | 'hotfix' | null;
   branch?: string | null;
   version?: string | null;
@@ -43,6 +43,7 @@ export interface Deployment {
   notes?: string | null;
   started_at: Date;
   completed_at?: Date | null;
+  approved_at?: Date | null; // set when a gated run left 'Awaiting approval'; duration starts here
   duration_seconds?: number | null;
   created_at: Date;
   updated_at: Date;
