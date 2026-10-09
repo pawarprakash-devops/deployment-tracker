@@ -42,6 +42,34 @@ Neon Postgres (`DATABASE_URL`, pooled connection, SSL, pool max 20).
 ### Rerun behaviour
 When the webhook receives a payload whose `ticket_link` (the GitHub Actions run URL) already exists, it **inserts a new row** with status `Rerun - <status>` and notes prefixed `🔄 Rerun:` — the original failed row is kept in history (earlier versions updated in place). The one-off `GET /api/migrate` cleanup deletes `Failed` rows that have a later `Success` row for the same `ticket_link`.
 
+### Two-phase reporting (In Progress, then final status)
+A pipeline can report the same run twice and the tracker updates the **same row**. Always send `ticket_link` = the Actions run URL (`.../actions/runs/<run_id>`) in both posts.
+
+**POST 1 — pipeline start** (`status: "In Progress"`, no `completed_at`):
+```bash
+curl -X POST "$TRACKER_WEBHOOK_URL" -H "Authorization: Bearer $TRACKER_WEBHOOK_SECRET" -H "Content-Type: application/json" -d '{
+  "environment":"qa-aps-ecs-cluster","status":"In Progress","deployment_type":"standard",
+  "branch":"qa","version":"v1.2.3","frontend_branch":"qa","backend_branch":"qa",
+  "requested_by":"alice","deployed_by":"GitHub Actions",
+  "ticket_link":"https://github.com/org/repo/actions/runs/123456789",
+  "notes":"Pipeline started","started_at":"2026-10-09T10:00:00Z"}'
+```
+**POST 2 — pipeline end** (same fields, final `status` = `Success` | `Failed` | `Cancelled` | `Rolled Back`, same `started_at`, plus `completed_at` and final `notes`):
+```bash
+curl -X POST "$TRACKER_WEBHOOK_URL" -H "Authorization: Bearer $TRACKER_WEBHOOK_SECRET" -H "Content-Type: application/json" -d '{
+  "environment":"qa-aps-ecs-cluster","status":"Success","deployment_type":"standard",
+  "branch":"qa","version":"v1.2.3","deployed_by":"GitHub Actions",
+  "ticket_link":"https://github.com/org/repo/actions/runs/123456789",
+  "notes":"Deployed; migrations applied","started_at":"2026-10-09T10:00:00Z","completed_at":"2026-10-09T10:08:30Z"}'
+```
+Matching rules (inside one transaction, serialised per `ticket_link` + environment):
+- A row matches when it has the same `ticket_link`, the same **normalised** environment and status `In Progress` or `Rerun - In Progress` (newest first). The environment is normalised from the environment + notes + branches. If a **final** post finds no exact match, it falls back to in-progress rows with the same `ticket_link` in any environment: when exactly one exists it is updated in place and keeps its own environment (a `console.warn` logs both names; alerts use the row's environment); with zero or several, legacy behaviour applies (one run URL may legitimately report several environments). `In Progress` posts never use the fallback (exact match only).
+- Final status + matching row: the row is **updated in place** (status, notes, `completed_at`, `duration_seconds` from the row's original `started_at`; branches/versions/people only when non-empty in the payload; `updated_at = NOW()`). A `Rerun - ` status prefix and `🔄 Rerun:` notes prefix are preserved. Response `200 {success, deployment, updated: true}`. Production failure / recovery alerts fire here, once.
+- `In Progress` + matching in-progress row: idempotent update of notes/`started_at`, `200`, no new row.
+- `In Progress` + only completed rows for that `ticket_link` (GitHub "re-run all jobs" keeps the run id): inserts a `Rerun - In Progress` row (notes `🔄 Rerun: ...`), `201`.
+- Final status and no in-progress row: unchanged legacy behaviour (insert, or `Rerun - <status>` insert if the `ticket_link` exists), `201`.
+- `In Progress` never computes a duration (`completed_at` / `duration_seconds` stay null) and **never alerts**. A stale `In Progress` row blocks nothing; it is simply the row the next final post for that run updates.
+
 ## Setup
 
 ```bash
@@ -91,7 +119,7 @@ All `GET`s are public. `POST/PUT/PATCH/DELETE` need admin auth (see `AUTHENTICAT
 | `PATCH /api/deployments/[id]` | Update any columns present in the body (admin) |
 | `DELETE /api/deployments/[id]` | Delete (admin) |
 | `GET /api/environments` · `POST` · `DELETE /api/environments/[id]` | Environment list/create/delete (writes need admin). 120 s edge cache |
-| `POST /api/webhook` | CI ingestion (Bearer `WEBHOOK_SECRET`). Required: `environment`, `status`. Accepts the deployment columns above; `deployment_type` defaults to `standard`, `started_at` to now, `duration_seconds` is computed from `completed_at`. Returns `201 {success, deployment}`. `GET` is a liveness check |
+| `POST /api/webhook` | CI ingestion (Bearer `WEBHOOK_SECRET`). Required: `environment`, `status`. Accepts the deployment columns above; `deployment_type` defaults to `standard`, `started_at` to now, `duration_seconds` is computed from `completed_at`. Returns `201 {success, deployment}` for inserts, or `200 {success, deployment, updated: true}` when an `In Progress` row for the same run is updated (see [Two-phase reporting](#two-phase-reporting-in-progress-then-final-status)). `GET` is a liveness check |
 | `GET /api/health` | Latest `Success` deployment per environment (used by `/health`; 60 s edge cache). It is **not** a live probe |
 | `GET /api/cluster-health` | Live probes of 9 backend API URLs (Preview, Demo-Preview, QA, Stage, Stage EUW2, Pre-Prod India, Pre-Prod USW, Prod Ankura, Prod Neotia) — `HEALTHY` (2xx/3xx ≤ 2000 ms), `DEGRADED` (slow or 4xx/5xx), `OFFLINE` (timeout 4.5 s / network error). 120 s edge cache. Backend only — there is no frontend/CloudFront chunk probe |
 | `GET /api/compare?repo=&base=&head=&run_id=` | GitHub compare (ahead/behind, ≤30 commits, ≤50 files) between two refs; with only `head`, last 15 commits; optional Actions run details. Default repo `vidaisolutions/vidai-react`. Needs `GH_TOKEN` |
