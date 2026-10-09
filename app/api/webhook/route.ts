@@ -141,111 +141,235 @@ export async function POST(request: NextRequest) {
       console.log(`✅ Auto-created environment: ${targetEnv} (is_production: ${isProdEnv})`);
     }
 
-    // Auto-calculate duration if completed_at is provided and duration_seconds is not
-    let calculatedDuration = duration_seconds;
-    if (completed_at && !duration_seconds) {
+    const isInProgressStatus = /^\s*in progress\s*$/i.test(status);
+
+    // Duration is only meaningful for a finished deployment. An 'In Progress'
+    // post never carries completed_at / duration (any that are sent are ignored).
+    const effectiveCompletedAt = isInProgressStatus ? null : completed_at || null;
+    let calculatedDuration = isInProgressStatus ? null : duration_seconds;
+    if (effectiveCompletedAt && !duration_seconds) {
       const startTime = new Date(deployStartedAt).getTime();
-      const endTime = new Date(completed_at).getTime();
+      const endTime = new Date(effectiveCompletedAt).getTime();
       calculatedDuration = Math.round((endTime - startTime) / 1000);
     }
 
-    // Check if an existing deployment record exists for this workflow run (e.g. rerun of failed jobs)
+    // Non-empty payload value, else null (used with COALESCE to keep the stored value on updates)
+    const nz = (v: unknown) => (v === undefined || v === null || v === '' ? null : v);
+
+    // Alerts are only ever sent for a FINAL outcome (never for 'In Progress' / 'Rerun - In Progress').
+    // Shared by the insert path and the in-place update path so both behave identically.
+    const alertIfFinal = async (row: { status: string } & Parameters<typeof notifyDeployment>[0]) => {
+      if (/in progress$/i.test(row.status)) return;
+      await notifyDeployment(row, alertIsProd);
+    };
+
+    const client = await pool.connect();
     let result;
-    if (ticket_link) {
-      const existing = await pool.query(
-        'SELECT id, status FROM deployments WHERE ticket_link = $1 ORDER BY created_at DESC LIMIT 1',
-        [ticket_link]
-      );
-      if (existing.rows.length > 0) {
-        // A previous attempt exists — insert a NEW row tagged as rerun.
-        // The original failed row is preserved in history.
-        const rerunStatus = `Rerun - ${status}`;
-        const rerunNotes = notes ? `🔄 Rerun: ${notes}` : `🔄 Rerun of failed deployment`;
-        result = await pool.query(
+    let updated = false;
+    let alertIsProd = isProdEnv;
+    let alertEnv: string | null = null;
+    try {
+      await client.query('BEGIN');
+
+      if (ticket_link) {
+        // Serialise concurrent posts for the same workflow run + environment
+        // (e.g. two near-simultaneous 'In Progress' posts) — released at COMMIT/ROLLBACK.
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${ticket_link}|${targetEnv}`]);
+
+        // Newest 'In Progress' / 'Rerun - In Progress' row for this run + environment
+        const open = await client.query(
+          `SELECT * FROM deployments
+           WHERE ticket_link = $1 AND environment = $2 AND status ~* '^(rerun - )?in progress$'
+           ORDER BY created_at DESC LIMIT 1
+           FOR UPDATE`,
+          [ticket_link, targetEnv]
+        );
+
+        let openRow = open.rows[0];
+        if (!openRow && !isInProgressStatus) {
+          // Fallback: environment normalisation also reads notes/branches, so POST 1 and POST 2 can
+          // resolve to different names. If EXACTLY ONE in-progress row exists for this run URL
+          // (any environment), it is that run's row. Zero or several => legacy behaviour.
+          const anyEnv = await client.query(
+            `SELECT * FROM deployments
+             WHERE ticket_link = $1 AND status ~* '^(rerun - )?in progress$'
+             ORDER BY created_at DESC LIMIT 2
+             FOR UPDATE`,
+            [ticket_link]
+          );
+          if (anyEnv.rows.length === 1) {
+            openRow = anyEnv.rows[0];
+            console.warn('⚠️ Environment differs between in-progress row and final post; updating the row in place:', {
+              ticket_link, rowEnvironment: openRow.environment, incomingEnvironment: targetEnv,
+            });
+            // Alerts follow the row's environment (what the dashboard shows)
+            const envRow = await client.query('SELECT is_production FROM environments WHERE name = $1', [openRow.environment]);
+            alertEnv = openRow.environment;
+            alertIsProd = envRow.rows[0] ? !!envRow.rows[0].is_production : /prod/i.test(openRow.environment) && !/pre-prod|preprod/i.test(openRow.environment);
+          }
+        }
+
+        if (openRow) {
+          const row = openRow;
+          const isRerunRow = /^rerun - /i.test(row.status);
+          const noteText = notes ? (isRerunRow ? `🔄 Rerun: ${notes}` : notes) : null;
+
+          if (isInProgressStatus) {
+            // Duplicate 'In Progress' post: idempotent — refresh the existing row, no new row, no alert.
+            result = await client.query(
+              `UPDATE deployments SET
+                 notes = COALESCE($2, notes),
+                 started_at = COALESCE($3, started_at),
+                 deployment_type = COALESCE($4, deployment_type),
+                 branch = COALESCE($5, branch), version = COALESCE($6, version),
+                 frontend_branch = COALESCE($7, frontend_branch), backend_branch = COALESCE($8, backend_branch),
+                 frontend_version = COALESCE($9, frontend_version), backend_version = COALESCE($10, backend_version),
+                 requested_by = COALESCE($11, requested_by), deployed_by = COALESCE($12, deployed_by),
+                 updated_at = NOW()
+               WHERE id = $1 RETURNING *`,
+              [
+                row.id, noteText, nz(started_at), nz(body.deployment_type),
+                nz(branch), nz(version), nz(frontend_branch), nz(backend_branch),
+                nz(frontend_version), nz(backend_version), nz(requested_by), nz(deployed_by),
+              ]
+            );
+          } else {
+            // Final status for an in-progress row: update the SAME row in place.
+            const finalStatus = isRerunRow ? `Rerun - ${status}` : status;
+            const doneAt = effectiveCompletedAt || new Date().toISOString();
+            let dur: number | null = duration_seconds ?? null;
+            if (dur === null || dur === 0) {
+              // started_at stays the original row's value
+              dur = Math.max(0, Math.round((new Date(doneAt).getTime() - new Date(row.started_at).getTime()) / 1000));
+            }
+            result = await client.query(
+              `UPDATE deployments SET
+                 status = $2, notes = COALESCE($3, notes),
+                 completed_at = $4, duration_seconds = $5,
+                 branch = COALESCE($6, branch), version = COALESCE($7, version),
+                 frontend_branch = COALESCE($8, frontend_branch), backend_branch = COALESCE($9, backend_branch),
+                 frontend_version = COALESCE($10, frontend_version), backend_version = COALESCE($11, backend_version),
+                 requested_by = COALESCE($12, requested_by), deployed_by = COALESCE($13, deployed_by),
+                 approved_by = COALESCE($14, approved_by), tested_by = COALESCE($15, tested_by),
+                 updated_at = NOW()
+               WHERE id = $1 RETURNING *`,
+              [
+                row.id, finalStatus, noteText, doneAt, dur,
+                nz(branch), nz(version), nz(frontend_branch), nz(backend_branch),
+                nz(frontend_version), nz(backend_version), nz(requested_by), nz(deployed_by),
+                nz(approved_by), nz(tested_by),
+              ]
+            );
+          }
+          updated = true;
+          console.log('🔁 In-progress deployment updated in place:', {
+            id: row.id, environment: alertEnv ?? targetEnv, status: result.rows[0].status, ticket_link,
+          });
+        } else {
+          // No open row — a previous attempt (if any) is completed: insert a NEW row tagged as rerun.
+          // The original row is preserved in history. (For 'In Progress' this yields 'Rerun - In Progress'.)
+          const existing = await client.query(
+            'SELECT id, status FROM deployments WHERE ticket_link = $1 ORDER BY created_at DESC LIMIT 1',
+            [ticket_link]
+          );
+          if (existing.rows.length > 0) {
+            const rerunStatus = `Rerun - ${status}`;
+            const rerunNotes = notes ? `🔄 Rerun: ${notes}` : `🔄 Rerun of failed deployment`;
+            result = await client.query(
+              `INSERT INTO deployments (
+                environment, status, deployment_type, branch, version,
+                frontend_branch, backend_branch, frontend_version, backend_version,
+                requested_by, approved_by, tested_by, deployed_by,
+                ticket_link, notes, started_at, completed_at, duration_seconds
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+              RETURNING *`,
+              [
+                targetEnv, rerunStatus, deployment_type,
+                branch || null, version || null,
+                frontend_branch || null, backend_branch || null,
+                frontend_version || null, backend_version || null,
+                requested_by || null, approved_by || null, tested_by || null, deployed_by || null,
+                ticket_link, rerunNotes,
+                deployStartedAt, effectiveCompletedAt, calculatedDuration || null,
+              ]
+            );
+            console.log('🔄 Re-run detected — new row inserted:', {
+              id: result.rows[0].id, environment: targetEnv, status: rerunStatus, ticket_link
+            });
+          }
+        }
+      }
+
+      if (!result) {
+        // Insert new deployment
+        result = await client.query(
           `INSERT INTO deployments (
-            environment, status, deployment_type, branch, version,
-            frontend_branch, backend_branch, frontend_version, backend_version,
-            requested_by, approved_by, tested_by, deployed_by,
-            ticket_link, notes, started_at, completed_at, duration_seconds
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+            environment, 
+            status,
+            deployment_type,
+            branch, 
+            version,
+            frontend_branch,
+            backend_branch,
+            frontend_version,
+            backend_version,
+            requested_by, 
+            approved_by,
+            tested_by,
+            deployed_by,
+            ticket_link,
+            notes,
+            started_at, 
+            completed_at, 
+            duration_seconds
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
           RETURNING *`,
           [
-            targetEnv, rerunStatus, deployment_type,
-            branch || null, version || null,
-            frontend_branch || null, backend_branch || null,
-            frontend_version || null, backend_version || null,
-            requested_by || null, approved_by || null, tested_by || null, deployed_by || null,
-            ticket_link, rerunNotes,
-            deployStartedAt, completed_at || null, calculatedDuration || null,
+            targetEnv,
+            status,
+            deployment_type,
+            branch,
+            version,
+            frontend_branch,
+            backend_branch,
+            frontend_version,
+            backend_version,
+            requested_by,
+            approved_by,
+            tested_by,
+            deployed_by,
+            ticket_link,
+            notes,
+            deployStartedAt,
+            effectiveCompletedAt,
+            calculatedDuration,
           ]
         );
-        console.log('🔄 Re-run detected — new row inserted:', {
-          id: result.rows[0].id, environment: targetEnv, status: rerunStatus, ticket_link
+        console.log('✅ Deployment logged:', {
+          id: result.rows[0].id,
+          environment: targetEnv,
+          status,
+          requested_by,
         });
       }
+
+      await client.query('COMMIT');
+    } catch (txError) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw txError;
+    } finally {
+      client.release();
     }
 
-
-    if (!result) {
-      // Insert new deployment
-      result = await pool.query(
-        `INSERT INTO deployments (
-          environment, 
-          status,
-          deployment_type,
-          branch, 
-          version,
-          frontend_branch,
-          backend_branch,
-          frontend_version,
-          backend_version,
-          requested_by, 
-          approved_by,
-          tested_by,
-          deployed_by,
-          ticket_link,
-          notes,
-          started_at, 
-          completed_at, 
-          duration_seconds
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-        RETURNING *`,
-        [
-          targetEnv,
-          status,
-          deployment_type,
-          branch,
-          version,
-          frontend_branch,
-          backend_branch,
-          frontend_version,
-          backend_version,
-          requested_by,
-          approved_by,
-          tested_by,
-          deployed_by,
-          ticket_link,
-          notes,
-          deployStartedAt,
-          completed_at,
-          calculatedDuration,
-        ]
-      );
-      console.log('✅ Deployment logged:', {
-        id: result.rows[0].id,
-        environment: targetEnv,
-        status,
-        requested_by,
-      });
-    }
-
-    // Optional Google Chat alert for failures / recoveries (no-op unless GCHAT_ALERT_WEBHOOK_URL is set)
-    await notifyDeployment(result.rows[0], isProdEnv);
+    // Optional Google Chat alert for failures / recoveries (no-op unless GCHAT_ALERT_WEBHOOK_URL is set).
+    // Runs after COMMIT, once per final outcome; never for 'In Progress'.
+    await alertIfFinal(result.rows[0]);
 
     return NextResponse.json({
       success: true,
       deployment: result.rows[0],
-    }, { status: 201 });
+      ...(updated ? { updated: true } : {}),
+    }, { status: updated ? 200 : 201 });
 
   } catch (error) {
     console.error('❌ Webhook error:', error);
