@@ -210,6 +210,8 @@ Shows the state of a deployment, ticket stage or check. Read-only.
 | warning | alert-triangle | Drift / Stuck 5d / Degraded |
 | danger | x-circle | Failed / Blocked / Rolled back |
 | info | info or clock | Queued / Hotfix |
+| info (pause glyph) | pause `⏸︎` | Awaiting approval (open, waiting for DevOps approval) |
+| warning (slashed-circle glyph) | `⊘` | Rejected (approval declined; final, never ran) |
 | neutral | minus-circle | Not deployed / Unknown |
 | progress (warning family) | spinner (static under reduced motion) | In progress |
 
