@@ -142,9 +142,9 @@ export default function ReleaseStats() {
                   <span aria-hidden="true" className="tnum" style={{ position: 'absolute', left: 0, top: 0, fontSize: 11.5, lineHeight: '14px', color: 'var(--muted)' }}>max {stats.max}</span>
                   <div role="group" aria-label="Deployments per day, last 14 days"
                     style={{ display: 'flex', gap: GAP, alignItems: 'flex-end', height: CHART_H, borderBottom: '1px solid var(--border-bright)' }}>
-                    {stats.days.map((d, i) => {
+                    {stats.days.map((d) => {
                       const h = d.total ? Math.max(3, Math.round((d.total / stats.max) * barArea)) : 0;
-                      const showCount = d.total > 0 && (d.total === stats.max || i === stats.days.length - 1);
+                      const showCount = d.total > 0;
                       return (
                         <div key={d.date} title={`${d.label}: ${d.success} success, ${d.failed} failed, ${d.other} other`}
                           style={{ flex: 1, maxWidth: BAR_MAX_W, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'stretch' }}>

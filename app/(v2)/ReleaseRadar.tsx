@@ -116,7 +116,8 @@ function WaitingToShip() {
 
   const waiting = (pairs ?? []).filter((p) => !p.error && (p.pending ?? 0) > 0).sort((a, b) => (b.pending ?? 0) - (a.pending ?? 0));
   const errored = (pairs ?? []).filter((p) => p.error);
-  const inSync = (pairs ?? []).filter((p) => !p.error && (p.pending ?? 0) === 0).length;
+  const synced = (pairs ?? []).filter((p) => !p.error && (p.pending ?? 0) === 0);
+  const inSync = synced.length;
   const total = waiting.reduce((n, p) => n + (p.pending ?? 0), 0);
 
   const toggles = (
@@ -172,9 +173,9 @@ function WaitingToShip() {
           <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}><CheckIcon />Nothing is waiting to ship</p>
         )}
       </div>
-      {!failed && pairs && (waiting.length > 0 || errored.length > 0) && (
+      {!failed && pairs && (waiting.length > 0 || errored.length > 0 || synced.length > 0) && (
         <>
-          {waiting.length > 0 && <p className="tnum" style={{ margin: '0 0 6px', fontSize: 13, ...mutedText }}>{total} commits across {waiting.length} {waiting.length === 1 ? 'pair' : 'pairs'}</p>}
+          {waiting.length > 0 && <p className="tnum" style={{ margin: '0 0 6px', fontSize: 13, ...mutedText }}>{total} commits waiting across {waiting.length} {waiting.length === 1 ? 'pair' : 'pairs'} · {inSync} in sync</p>}
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--border, rgba(127,127,127,.25))' }}>
             {waiting.map((p, i) => {
               const k = key(p), isOpen = open === k, id = `${uid}-p${i}`;
@@ -197,6 +198,17 @@ function WaitingToShip() {
                 </li>
               );
             })}
+            {synced.map((p) => (
+              <li key={key(p)} style={{ borderBottom: '1px solid var(--border, rgba(127,127,127,.25))', display: 'flex', flexWrap: 'wrap', gap: '0 10px', alignItems: 'center', minHeight: 40, padding: '0 8px', fontSize: 14 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><CheckIcon /><span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{p.fromEnv} → {p.toEnv}</span></span>
+                <span className="mono tnum" style={mono}>· in sync</span>
+                <span style={{ fontSize: 13, ...mutedText }}>
+                  {p.promotion ? (
+                    <>· last promotion <a href={p.promotion.url} target="_blank" rel="noopener noreferrer">PR #{p.promotion.number} ↗</a> · {ago(p.promotion.mergedAt)}</>
+                  ) : '· no promotion PR found'}
+                </span>
+              </li>
+            ))}
             {errored.map((p) => (
               <li key={key(p)} style={{ borderBottom: '1px solid var(--border, rgba(127,127,127,.25))', display: 'flex', gap: 8, alignItems: 'center', minHeight: 40, padding: '0 8px', fontSize: 13, ...mutedText }} title={p.error}>
                 <span style={{ fontWeight: 600 }}>{p.fromEnv} → {p.toEnv}</span><span>· unavailable</span>
@@ -204,12 +216,6 @@ function WaitingToShip() {
             ))}
           </ul>
         </>
-      )}
-      {!failed && pairs && inSync > 0 && (waiting.length > 0 || errored.length > 0) && (
-        <p className="muted" style={{ margin: '10px 8px 0', fontSize: 13 }}>{inSync} {inSync === 1 ? 'pair' : 'pairs'} in sync</p>
-      )}
-      {!failed && pairs && inSync > 0 && waiting.length === 0 && errored.length === 0 && (
-        <p className="muted" style={{ margin: '8px 0 0', fontSize: 13 }}>{inSync} {inSync === 1 ? 'pair' : 'pairs'} in sync</p>
       )}
     </section>
   );
