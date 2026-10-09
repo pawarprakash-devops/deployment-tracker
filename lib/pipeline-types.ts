@@ -1,7 +1,7 @@
 // Client-safe types for GET /api/pipeline (no server imports here).
 
 export type ColumnId = 'preview' | 'demo' | 'qa' | 'stage' | 'preprod' | 'prod-ankura' | 'prod-neotia' | 'other';
-export type EnvState = 'deployed' | 'in_progress' | 'failed' | 'rolled_back';
+export type EnvState = 'deployed' | 'in_progress' | 'queued' | 'failed' | 'rolled_back';
 export type BadgeId = 'hotfix' | 'rolled_back' | 'failed' | 'stuck';
 
 export interface PipelineColumn {
@@ -11,7 +11,11 @@ export interface PipelineColumn {
   rank: number;
   isProduction: boolean;
   health: { lastSuccessAt: string | null; latest: { id: string; status: string; at: string } | null };
-  activeDeploy: { id: string; status: string; startedAt: string } | null;
+  activeDeploy: { id: string; status: string; startedAt: string } | null; // running now ('In Progress' only)
+  // Newest 'Queued' deploy waiting behind a running one in the same cluster/component (not running yet). `note` = the row's
+  // 'Queued: waiting for previous deployment run #N (position M)' text. Optional: older payloads omit it.
+  queuedDeploy?: { id: string; status: string; startedAt: string; note: string | null } | null;
+  queuedCount?: number;
   ticketCount: number;
 }
 

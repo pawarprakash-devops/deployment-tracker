@@ -3,6 +3,7 @@ import { extractJiraKeys, jiraConfigured, jiraIssuesByKeys, stageOf } from './ji
 import type { BadgeId, ColumnId, EnvState, PipelineColumn, PipelineEnvEntry, PipelineResponse, PipelineTicket } from './pipeline-types';
 
 const SUCCESS_RE = /(^|\s)success$/i;
+const QUEUED_RE = /(^|\s)queued$/i; // 'Queued' / 'Rerun - Queued': waiting in the deploy FIFO, not running
 const WINDOW = 300;
 const MAX_TICKETS = 150;
 
@@ -94,6 +95,8 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
           isProduction: prod || c.rank === 4,
           health: { lastSuccessAt: null, latest: null },
           activeDeploy: null,
+          queuedDeploy: null,
+          queuedCount: 0,
           ticketCount: 0,
           _order: order,
         });
@@ -116,6 +119,10 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
     if (!col.health.latest) col.health.latest = { id: r.id, status: r.status, at };
     if (ok && !col.health.lastSuccessAt) col.health.lastSuccessAt = at;
     if (/in progress/i.test(r.status) && !col.activeDeploy) col.activeDeploy = { id: r.id, status: r.status, startedAt: at };
+    if (QUEUED_RE.test(r.status)) {
+      col.queuedCount = (col.queuedCount ?? 0) + 1;
+      if (!col.queuedDeploy) col.queuedDeploy = { id: r.id, status: r.status, startedAt: at, note: /Queued:[^\n]*/i.exec(r.notes ?? '')?.[0]?.trim() ?? null };
+    }
 
     const keys = extractJiraKeys(r.notes, r.branch, r.version, r.frontend_branch, r.backend_branch, r.ticket_link);
     if (!keys.length) {
@@ -127,7 +134,9 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
       ? 'deployed'
       : /in progress/i.test(r.status)
         ? 'in_progress'
-        : /rolled back/i.test(r.status) || r.deployment_type === 'rollback'
+        : QUEUED_RE.test(r.status)
+          ? 'queued'
+          : /rolled back/i.test(r.status) || r.deployment_type === 'rollback'
           ? 'rolled_back'
           : 'failed';
     for (const key of keys) {

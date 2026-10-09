@@ -84,17 +84,23 @@ export function Kbd({ children }: { children: ReactNode }) {
   );
 }
 
-export function Pill({ tone = 'neutral', children, icon = true, live = false }: { tone?: Tone; children: React.ReactNode; icon?: boolean; live?: boolean }) {
+export function Pill({ tone = 'neutral', children, icon = true, live = false, glyph }: { tone?: Tone; children: React.ReactNode; icon?: boolean; live?: boolean; glyph?: string }) {
   return (
     <span className="pill" style={{ color: `var(--${tone}-text)`, background: `var(--${tone}-bg)`, border: `1px solid var(--${tone}-border)` }}>
-      {live ? <span aria-hidden="true" style={{ display: 'inline-flex' }}><LiveDot tone={tone} /></span> : icon && <span aria-hidden="true">{ICON[tone]}</span>}
+      {live ? <span aria-hidden="true" style={{ display: 'inline-flex' }}><LiveDot tone={tone} /></span> : icon && <span aria-hidden="true">{glyph ?? ICON[tone]}</span>}
       {children}
     </span>
   );
 }
 
+export const QUEUED_GLYPH = '◷';
+export const QUEUED_TEXT = 'Queued - waiting for previous deployment';
+export const isQueuedStatus = (s: string | null | undefined) => !!s && /(^|\s)queued$/i.test(s.trim());
+
 export function StatusPill({ status }: { status: string }) {
   const s = status.toLowerCase();
+  // 'Queued' / 'Rerun - Queued': waiting behind a running deploy. Warn tone + a clock glyph (not the '!' of rolled back/cancelled).
+  if (isQueuedStatus(s)) return <Pill tone="warn" glyph={QUEUED_GLYPH}>Queued</Pill>;
   const tone: Tone = /success/.test(s) ? 'ok' : /progress/.test(s) ? 'info' : /fail/.test(s) ? 'bad' : /roll|cancel/.test(s) ? 'warn' : 'neutral';
   return <Pill tone={tone} live={/progress/.test(s)}>{status}</Pill>;
 }

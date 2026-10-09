@@ -67,6 +67,7 @@ export default function DevLens() {
       failed: sorted.filter((t) => has(t, 'failed', 'rolled_back') || Object.values(t.environments).some((e) => e.state === 'failed' || e.state === 'rolled_back')).length,
       hotfix: sorted.filter((t) => has(t, 'hotfix')).length,
       waiting: sorted.filter((t) => Object.values(t.environments).some((e) => e.state === 'in_progress')).length,
+      queued: sorted.filter((t) => Object.values(t.environments).some((e) => e.state === 'queued')).length,
       attention: sorted.filter((t) => has(t, 'failed', 'rolled_back', 'hotfix', 'stuck')),
     };
   }, [p]);
@@ -85,7 +86,7 @@ export default function DevLens() {
             <Tile label="Tickets, last 7 days" value={d.week} />
             <Tile label="Failed or rolled back" value={d.failed} tone={d.failed ? 'bad' : undefined} />
             <Tile label="Hotfix tickets" value={d.hotfix} tone={d.hotfix ? 'info' : undefined} />
-            <Tile label="Deployments waiting" value={d.waiting} hint="in progress now" />
+            <Tile label="Deployments waiting" value={d.waiting} hint={d.queued ? `in progress now; ${d.queued} more queued behind a running deploy` : 'in progress now'} />
           </div>
           <div className="stack">
             <Card title="Recently deployed tickets">
