@@ -5,7 +5,7 @@ import { Card, Empty, EnvDot, Pill, AWAITING_GLYPH, AWAITING_TEXT, QUEUED_GLYPH,
 
 interface DriftPair {
   from: string; to: string; fromEnv: string; toEnv: string;
-  pending?: number; status?: string; error?: string;
+  pending?: number; status?: string; error?: string; missingBranch?: string;
 }
 
 const BADGE_TONE: Record<string, Tone> = { failed: 'bad', rolled_back: 'warn', hotfix: 'info', stuck: 'warn' };
@@ -136,7 +136,7 @@ export default function RelLens() {
                     {drift.map((p) => (
                       <tr key={`${p.from}-${p.to}`}>
                         <td>{p.fromEnv} → {p.toEnv}</td>
-                        <td className="tnum">{p.error ? <span className="muted">unavailable ({p.error})</span> : <Pill tone={p.pending ? 'warn' : 'ok'}>{p.pending ?? 0}</Pill>}</td>
+                        <td className="tnum">{p.missingBranch ? <span className="muted">{p.missingBranch} not created yet</span> : p.error ? <span className="muted">unavailable ({p.error})</span> : <Pill tone={p.pending ? 'warn' : 'ok'}>{p.pending ?? 0}</Pill>}</td>
                       </tr>
                     ))}
                   </tbody>

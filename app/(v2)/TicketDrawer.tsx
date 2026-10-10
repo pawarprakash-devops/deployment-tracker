@@ -15,8 +15,10 @@ const STEPS: { id: ColumnId; label: string }[] = [
 const BADGE_LABEL: Record<string, string> = { hotfix: 'Hotfix', failed: 'Failed', rolled_back: 'Rolled back' };
 
 function stepState(t: PipelineTicket, id: ColumnId): 'done' | 'now' | 'bad' | '' {
-  const reachedProd = t.reached.some((c) => c === 'prod-ankura' || c === 'prod-neotia');
+  const reachedProd = t.reached.some((c) => c === 'prod-ankura' || c === 'prod-neotia' || c === 'prod-usw');
   if (id === 'prod-ankura' && reachedProd) return t.column.startsWith('prod') ? 'now' : 'done';
+  // The single Pre-Prod step covers Pre-Prod India and Pre-Prod USW.
+  if (id === 'preprod' && (t.column === 'preprod-usw' || t.reached.includes('preprod-usw'))) return t.column === 'preprod-usw' ? 'now' : 'done';
   if (t.column === id) return 'now';
   if (t.reached.includes(id)) return 'done';
   return '';

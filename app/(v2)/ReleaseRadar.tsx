@@ -5,7 +5,7 @@ import { Card, Chip, Skeleton, ago } from './ui';
 type Which = 'backend' | 'frontend';
 interface Commit { sha: string; message: string; author?: string; url: string }
 interface Promotion { number: number; url: string; mergedAt: string }
-interface Pair { baseRef?: string; from: string; to: string; fromEnv: string; toEnv: string; basis?: 'promotion-pr' | 'branch-compare'; promotion?: Promotion; pending?: number; error?: string }
+interface Pair { baseRef?: string; from: string; to: string; fromEnv: string; toEnv: string; basis?: 'promotion-pr' | 'branch-compare'; promotion?: Promotion; pending?: number; error?: string; missingBranch?: string }
 interface Detail { loading: boolean; error?: string; commits: Commit[]; total: number; truncated: boolean; compareUrl?: string }
 
 const SHOWN = 30;
@@ -177,7 +177,7 @@ function WaitingToShip() {
             ))}
             {errored.map((p) => (
               <li key={key(p)} style={{ borderBottom: '1px solid var(--border, rgba(127,127,127,.25))', display: 'flex', gap: 8, alignItems: 'center', minHeight: 40, padding: '0 8px', fontSize: 13, ...mutedText }} title={p.error}>
-                <span style={{ fontWeight: 600 }}>{p.fromEnv} → {p.toEnv}</span><span>· unavailable</span>
+                <span style={{ fontWeight: 600 }}>{p.fromEnv} → {p.toEnv}</span><span>· {p.missingBranch ? `${p.missingBranch} not created yet` : 'unavailable'}</span>
               </li>
             ))}
           </ul>
