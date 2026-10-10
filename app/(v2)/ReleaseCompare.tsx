@@ -11,7 +11,7 @@ const REPOS: Record<Repo, { slug: string; label: string }> = {
 const ENV_DEFAULT_BRANCH: Record<string, string> = {
   'Preview': 'dev', 'Demo-Preview': 'demo', 'QA': 'qa', 'Stage': 'stage', 'Stage EUW2': 'stage',
   'Pre-Prod': 'preprod', 'Pre-Prod (India)': 'preprod', 'Pre-Prod USW': 'preprod_usw',
-  'Production (Ankura)': 'prod_ank', 'Production (Neotia)': 'prod_neo', 'Production (Neotia/Babyjoy)': 'prod_neo', 'Production USW': 'prod_usw', 'Production': 'prod_ank',
+  'Production (Ankura)': 'prod_ank', 'Production (Neotia)': 'prod_neo', 'Production (Neotia/Babyjoy)': 'prod_neo', 'Production USW': 'prod_citmer', 'Production': 'prod_ank',
 };
 interface Commit { sha: string; short_sha: string; message: string; author: string; author_login?: string; date: string; url: string }
 interface GhFile { filename: string; status: string; additions: number; deletions: number }

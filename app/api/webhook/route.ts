@@ -80,10 +80,11 @@ export async function POST(request: NextRequest) {
       const envOnly = (rawEnv || '').toLowerCase();
       // US-West: `preprod_usw` / `pre-prod-usw` CONTAIN `prod_usw` / `prod-usw`, so the Production USW pattern
       // refuses a preceding `pre` / `pre-` / `pre_` / `pre ` (lookbehind). Matches "Production USW", production-usw,
-      // production-usw-ecs-cluster, prod-usw, prod_usw. Separators include a space because the deploy workflows post
-      // labels like "Pre-Prod USW". The raw environment decides first, so a promotion note such as
-      // "preprod_usw -> prod_usw" or a stray "preview"/"demo" in notes cannot override the cluster that was deployed.
-      const PROD_USW_RE = /production[-_ ]usw|(?<!pre[-_ ]?)prod[-_ ]usw/;
+      // production-usw-ecs-cluster, prod-usw, prod_usw, and the release branch prod_citmer / prod-citmer / citmer
+      // (the Production USW branch; also refuses a preceding pre-prod / preprod_). Separators include a space because
+      // the deploy workflows post labels like "Pre-Prod USW". The raw environment decides first, so a promotion note
+      // such as "preprod_usw -> prod_citmer" or a stray "preview"/"demo" in notes cannot override the cluster that was deployed.
+      const PROD_USW_RE = /production[-_ ]usw|(?<!pre[-_ ]?)prod[-_ ]usw|(?<!pre[-_ ]?prod[-_ ]?)citmer/;
       const PREPROD_USW_RE = /pre-?prod[-_ ]usw/;
       if (PROD_USW_RE.test(envOnly)) {
         return { name: 'Production USW', isProduction: true };

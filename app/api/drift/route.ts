@@ -6,10 +6,10 @@ export const dynamic = 'force-dynamic';
 // upstream branch since the last promotion PR into the downstream branch.
 // Promotion chain (stage is not on the path):
 //   dev (Preview) -> qa (QA) -> demo (Demo-Preview)
-//                            -> preprod (Pre-Prod India) -> preprod_usw (Pre-Prod USW) -> prod_usw (Production USW)
+//                            -> preprod (Pre-Prod India) -> preprod_usw (Pre-Prod USW) -> prod_citmer (Production USW)
 //                                                        -> prod_neo (Production Neotia/Babyjoy)
 //                                                        -> prod_ank (Production Ankura; mostly cherry-pick/release PRs)
-// A branch that does not exist yet (e.g. prod_usw before go-live) is reported per pair as `missingBranch`
+// A branch that does not exist yet (e.g. a new release branch before go-live) is reported per pair as `missingBranch`
 // (plus a readable `error`), so the rest of the response is unaffected.
 const PAIRS: { from: string; to: string; fromEnv: string; toEnv: string }[] = [
   { from: 'dev', to: 'qa', fromEnv: 'Preview', toEnv: 'QA' },
@@ -18,7 +18,7 @@ const PAIRS: { from: string; to: string; fromEnv: string; toEnv: string }[] = [
   { from: 'preprod', to: 'prod_neo', fromEnv: 'Pre-Prod', toEnv: 'Production (Neotia/Babyjoy)' },
   { from: 'preprod', to: 'prod_ank', fromEnv: 'Pre-Prod', toEnv: 'Production (Ankura)' },
   { from: 'preprod', to: 'preprod_usw', fromEnv: 'Pre-Prod', toEnv: 'Pre-Prod USW' },
-  { from: 'preprod_usw', to: 'prod_usw', fromEnv: 'Pre-Prod USW', toEnv: 'Production USW' },
+  { from: 'preprod_usw', to: 'prod_citmer', fromEnv: 'Pre-Prod USW', toEnv: 'Production USW' },
 ];
 const REPOS: Record<string, string> = { frontend: 'vidaisolutions/vidai-react', backend: 'vidaisolutions/vidai-backend' };
 
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
       const res = await gh(`compare/${baseRef}...${p.from}?per_page=1`);
       if (!res.ok) {
-        // A 404 can mean a branch does not exist yet (e.g. prod_usw before go-live) or an unreachable SHA.
+        // A 404 can mean a branch does not exist yet (e.g. a new release branch before go-live) or an unreachable SHA.
         // Only report "branch not found" when GitHub confirms the branch itself is missing.
         if (res.status === 404) {
           for (const b of [p.to, p.from]) {

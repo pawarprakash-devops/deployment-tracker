@@ -16,10 +16,12 @@ export function columnOf(env: string, isProduction: boolean): { id: ColumnId; ra
   if (e === 'qa') return { id: 'qa', rank: 1 };
   if (e.startsWith('stage')) return { id: 'stage', rank: 2 };
   // US-West first: 'Pre-Prod USW' would otherwise fall into generic preprod. Pre-Prod USW is promoted from Pre-Prod
-  // India (preprod -> preprod_usw -> prod_usw), so it ranks between Pre-Prod and the production columns.
-  // Production USW is matched on a 'prod'/'production' PREFIX so 'Pre-Prod USW' can never land in a prod column.
+  // India (preprod -> preprod_usw -> prod_citmer), so it ranks between Pre-Prod and the production columns.
+  // Production USW is matched on a 'prod'/'production' PREFIX so 'Pre-Prod USW' can never land in a prod column;
+  // a name built from its release branch (prod_citmer / citmer) also maps there, unless it starts with pre-prod.
   if (/^pre-?prod\b.*\busw\b/.test(e)) return { id: 'preprod-usw', rank: 3.5 };
   if (/^prod(uction)?\b.*\busw\b/.test(e)) return { id: 'prod-usw', rank: 4 };
+  if (e.includes('citmer') && !/^pre[-_ ]?prod/.test(e)) return { id: 'prod-usw', rank: 4 };
   if (e.startsWith('pre-prod') || e.startsWith('preprod')) return { id: 'preprod', rank: 3 };
   if (e.includes('ankura')) return { id: 'prod-ankura', rank: 4 };
   if (e.includes('neotia') || e.includes('babyjoy')) return { id: 'prod-neotia', rank: 4 };
