@@ -66,6 +66,13 @@ const PROBE_TARGETS: ClusterTarget[] = [
     type: 'backend',
   },
   {
+    // Prod account, us-west-1. Reports OFFLINE until the production-usw stack and DNS exist.
+    name: 'Production USW Backend API',
+    env: 'Production USW',
+    url: 'https://production-usw-api.vidaisolutions.com/api/',
+    type: 'backend',
+  },
+  {
     name: 'Prod Ankura Backend API',
     env: 'Production (Ankura)',
     url: 'https://production-api.vidaisolutions.com/api/',

@@ -36,7 +36,8 @@ const realVersion = (v?: string | null) => (v && SEMVER.test(v.trim()) && !/^v?0
 function regionOf(host: string): string {
   const l = host.toLowerCase();
   if (/euw2|eu-west-2|london/.test(l)) return 'eu-west-2';
-  if (/usw2|usw|us-west-2/.test(l)) return 'us-west-2';
+  if (/usw2|us-west-2/.test(l)) return 'us-west-2';
+  if (/usw|us-west-1/.test(l)) return 'us-west-1'; // pre-prod-usw / production-usw live in us-west-1
   if (/use1|us-east-1/.test(l)) return 'us-east-1';
   return 'ap-south-1';
 }

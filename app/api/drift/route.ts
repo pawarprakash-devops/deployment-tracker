@@ -4,14 +4,21 @@ export const dynamic = 'force-dynamic';
 
 // Promotion pipeline: each pair is [upstream branch, downstream branch]; "pending" = commits on the
 // upstream branch since the last promotion PR into the downstream branch.
-// Active flow observed in vidai-backend PRs: dev -> qa -> preprod (QA promotes straight to preprod; `stage` is
-// not on the path), qa -> demo (Demo-Preview), preprod -> prod_neo via promotion PRs, prod_ank is updated by cherry-pick/release PRs.
+// Promotion chain (stage is not on the path):
+//   dev (Preview) -> qa (QA) -> demo (Demo-Preview)
+//                            -> preprod (Pre-Prod India) -> preprod_usw (Pre-Prod USW) -> prod_usw (Production USW)
+//                                                        -> prod_neo (Production Neotia/Babyjoy)
+//                                                        -> prod_ank (Production Ankura; mostly cherry-pick/release PRs)
+// A branch that does not exist yet (e.g. prod_usw before go-live) is reported per pair as `missingBranch`
+// (plus a readable `error`), so the rest of the response is unaffected.
 const PAIRS: { from: string; to: string; fromEnv: string; toEnv: string }[] = [
   { from: 'dev', to: 'qa', fromEnv: 'Preview', toEnv: 'QA' },
   { from: 'qa', to: 'preprod', fromEnv: 'QA', toEnv: 'Pre-Prod' },
   { from: 'qa', to: 'demo', fromEnv: 'QA', toEnv: 'Demo-Preview' },
   { from: 'preprod', to: 'prod_neo', fromEnv: 'Pre-Prod', toEnv: 'Production (Neotia/Babyjoy)' },
   { from: 'preprod', to: 'prod_ank', fromEnv: 'Pre-Prod', toEnv: 'Production (Ankura)' },
+  { from: 'preprod', to: 'preprod_usw', fromEnv: 'Pre-Prod', toEnv: 'Pre-Prod USW' },
+  { from: 'preprod_usw', to: 'prod_usw', fromEnv: 'Pre-Prod USW', toEnv: 'Production USW' },
 ];
 const REPOS: Record<string, string> = { frontend: 'vidaisolutions/vidai-react', backend: 'vidaisolutions/vidai-backend' };
 
@@ -46,7 +53,17 @@ export async function GET(request: NextRequest) {
       }
 
       const res = await gh(`compare/${baseRef}...${p.from}?per_page=1`);
-      if (!res.ok) return { ...p, error: `GitHub ${res.status}` };
+      if (!res.ok) {
+        // A 404 can mean a branch does not exist yet (e.g. prod_usw before go-live) or an unreachable SHA.
+        // Only report "branch not found" when GitHub confirms the branch itself is missing.
+        if (res.status === 404) {
+          for (const b of [p.to, p.from]) {
+            const br = await gh(`branches/${encodeURIComponent(b)}`);
+            if (br.status === 404) return { ...p, missingBranch: b, error: `branch ${b} not found` };
+          }
+        }
+        return { ...p, error: `GitHub ${res.status}` };
+      }
       const d = await res.json();
       return { ...p, basis, promotion, baseRef, status: d.status as string, pending: d.ahead_by as number, behind: d.behind_by as number };
     } catch (e) {

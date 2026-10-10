@@ -46,7 +46,7 @@ const activeCount = (f: Filters) => LISTS.filter((k) => f[k].length).length + (f
 const initialFilters = (): Filters => { try { return fromQS(new URLSearchParams(window.location.search).get(JF) || ''); } catch { return EMPTY; } };
 
 // ---- helpers ----------------------------------------------------------------------------------------
-const ENV_ORDER = ['Preview', 'Demo-Preview', 'QA', 'Stage', 'Stage EUW2', 'Pre-Prod', 'Pre-Prod USW', 'Production (Ankura)', 'Production (Neotia/Babyjoy)', 'Production'];
+const ENV_ORDER = ['Preview', 'Demo-Preview', 'QA', 'Stage', 'Stage EUW2', 'Pre-Prod', 'Pre-Prod USW', 'Production (Ankura)', 'Production (Neotia/Babyjoy)', 'Production USW', 'Production'];
 const DAY = 86400000;
 const ctl: CSSProperties = { height: 34, minHeight: 34, border: '1px solid var(--border-bright)', background: 'var(--panel)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '0 10px', fontSize: 'var(--fs-sm)', fontFamily: 'inherit' };
 const row: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' };

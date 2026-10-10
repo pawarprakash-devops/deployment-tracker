@@ -1,6 +1,6 @@
 // Client-safe types for GET /api/pipeline (no server imports here).
 
-export type ColumnId = 'preview' | 'demo' | 'qa' | 'stage' | 'preprod' | 'prod-ankura' | 'prod-neotia' | 'other';
+export type ColumnId = 'preview' | 'demo' | 'qa' | 'stage' | 'preprod' | 'preprod-usw' | 'prod-ankura' | 'prod-neotia' | 'prod-usw' | 'other';
 export type EnvState = 'deployed' | 'in_progress' | 'queued' | 'awaiting_approval' | 'failed' | 'rolled_back';
 export type BadgeId = 'hotfix' | 'rolled_back' | 'failed' | 'stuck';
 

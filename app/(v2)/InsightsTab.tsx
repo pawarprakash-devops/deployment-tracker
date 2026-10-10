@@ -51,7 +51,8 @@ const ENV_CLUSTER: Record<string, [string, string]> = {
   'Stage USE1': ['us-east-1', 'staging-use1'],
   'Pre-Prod': ['ap-south-1', 'pre-prod-ecs'],
   'Pre-Prod (India)': ['ap-south-1', 'pre-prod-ecs'],
-  'Pre-Prod USW': ['us-west-2', 'pre-prod-usw'],
+  'Pre-Prod USW': ['us-west-1', 'pre-prod-usw'],
+  'Production USW': ['us-west-1', 'production-usw'],
   'Production (Ankura)': ['ap-south-1', 'vidai-prod'],
   'Production (Neotia)': ['ap-south-1', 'prod-aps'],
   'Production (Neotia/Babyjoy)': ['ap-south-1', 'prod-aps'],
@@ -64,6 +65,7 @@ function clusterChip(env: string): string | null {
   const l = env.toLowerCase();
   const region = /euw2|eu-west-2|london/.test(l) ? 'eu-west-2'
     : /usw2|us-west-2|oregon/.test(l) ? 'us-west-2'
+    : /usw|us-west-1|california/.test(l) ? 'us-west-1'
     : /use1|us-east-1|virginia/.test(l) ? 'us-east-1'
     : /euc1|eu-central-1|frankfurt/.test(l) ? 'eu-central-1' : 'ap-south-1';
   return `${region} · ${l.replace(/\s+/g, '-')}`;

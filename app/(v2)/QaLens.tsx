@@ -5,7 +5,7 @@ import { useShell } from './ctx';
 import { Card, Chip, Empty, ErrorNote, JiraNote, Pill, Skeleton, Tile, ago, type Tone } from './ui';
 
 const QA_COLS: ColumnId[] = ['qa', 'demo'];
-const LATER_COLS: ColumnId[] = ['stage', 'preprod', 'prod-ankura', 'prod-neotia'];
+const LATER_COLS: ColumnId[] = ['stage', 'preprod', 'preprod-usw', 'prod-ankura', 'prod-neotia', 'prod-usw'];
 const WINDOWS = [{ label: '1:30 PM', min: 13 * 60 + 30 }, { label: '4:00 PM', min: 16 * 60 }];
 const IST_OFFSET_MS = 330 * 60_000; // Asia/Kolkata is a fixed UTC+5:30 (no DST)
 const bareBtn: React.CSSProperties = { background: 'none', border: 0, padding: 0, textAlign: 'left' };

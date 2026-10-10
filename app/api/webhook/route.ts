@@ -77,7 +77,21 @@ export async function POST(request: NextRequest) {
       beBranch?: string
     ): { name: string; isProduction: boolean } {
       const combined = `${rawEnv || ''} ${noteText || ''} ${branchName || ''} ${feBranch || ''} ${beBranch || ''}`.toLowerCase();
-      
+      const envOnly = (rawEnv || '').toLowerCase();
+      // US-West: `preprod_usw` / `pre-prod-usw` CONTAIN `prod_usw` / `prod-usw`, so the Production USW pattern
+      // refuses a preceding `pre` / `pre-` / `pre_` / `pre ` (lookbehind). Matches "Production USW", production-usw,
+      // production-usw-ecs-cluster, prod-usw, prod_usw. Separators include a space because the deploy workflows post
+      // labels like "Pre-Prod USW". The raw environment decides first, so a promotion note such as
+      // "preprod_usw -> prod_usw" or a stray "preview"/"demo" in notes cannot override the cluster that was deployed.
+      const PROD_USW_RE = /production[-_ ]usw|(?<!pre[-_ ]?)prod[-_ ]usw/;
+      const PREPROD_USW_RE = /pre-?prod[-_ ]usw/;
+      if (PROD_USW_RE.test(envOnly)) {
+        return { name: 'Production USW', isProduction: true };
+      }
+      if (PREPROD_USW_RE.test(envOnly)) {
+        return { name: 'Pre-Prod USW', isProduction: false };
+      }
+
       if (/staging-euw2|stage-euw2|euw2/.test(combined)) {
         return { name: 'Stage EUW2', isProduction: false };
       }
@@ -97,7 +111,11 @@ export async function POST(request: NextRequest) {
       if (/qa-aps|\bqa\b/.test((rawEnv || '').toLowerCase()) || /qa-aps-ecs-cluster/.test(combined)) {
         return { name: 'QA', isProduction: false };
       }
-      if (/pre-prod-usw|preprod-usw|preprod_usw/.test(combined)) {
+      // Production USW BEFORE Pre-Prod USW and the generic pre-prod / production rules (see PROD_USW_RE above).
+      if (PROD_USW_RE.test(combined)) {
+        return { name: 'Production USW', isProduction: true };
+      }
+      if (PREPROD_USW_RE.test(combined)) {
         return { name: 'Pre-Prod USW', isProduction: false };
       }
       if (/pre-prod|preprod/.test(combined)) {
