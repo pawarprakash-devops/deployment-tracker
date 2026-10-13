@@ -4,9 +4,10 @@ export const dynamic = 'force-dynamic';
 
 // Promotion pipeline: each pair is [upstream branch, downstream branch]; "pending" = commits on the
 // upstream branch since the last promotion PR into the downstream branch.
-// Promotion chain (stage is not on the path):
+// Promotion chain:
 //   dev (Preview) -> qa (QA) -> demo (Demo-Preview)
-//                            -> preprod (Pre-Prod India) -> preprod_usw (Pre-Prod USW) -> prod_citmer (Production USW)
+//                            -> preprod (Pre-Prod India) -> stage (Stage)
+//                                                        -> preprod_usw (Pre-Prod USW) -> prod_citmer (Production USW)
 //                                                        -> prod_neo (Production Neotia/Babyjoy)
 //                                                        -> prod_ank (Production Ankura; mostly cherry-pick/release PRs)
 // A branch that does not exist yet (e.g. a new release branch before go-live) is reported per pair as `missingBranch`
@@ -15,6 +16,7 @@ const PAIRS: { from: string; to: string; fromEnv: string; toEnv: string }[] = [
   { from: 'dev', to: 'qa', fromEnv: 'Preview', toEnv: 'QA' },
   { from: 'qa', to: 'preprod', fromEnv: 'QA', toEnv: 'Pre-Prod' },
   { from: 'qa', to: 'demo', fromEnv: 'QA', toEnv: 'Demo-Preview' },
+  { from: 'preprod', to: 'stage', fromEnv: 'Pre-Prod', toEnv: 'Stage' },
   { from: 'preprod', to: 'prod_neo', fromEnv: 'Pre-Prod', toEnv: 'Production (Neotia/Babyjoy)' },
   { from: 'preprod', to: 'prod_ank', fromEnv: 'Pre-Prod', toEnv: 'Production (Ankura)' },
   { from: 'preprod', to: 'preprod_usw', fromEnv: 'Pre-Prod', toEnv: 'Pre-Prod USW' },
