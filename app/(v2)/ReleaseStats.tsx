@@ -140,7 +140,7 @@ export default function ReleaseStats() {
           <div style={{ flex: '1 1 380px', minWidth: 0 }}>
             {!anyDays ? <Empty>No deployments in the last 14 days.</Empty> : (
               <>
-                <div style={{ position: 'relative', maxWidth: chartW }}>
+                <div style={{ position: 'relative', maxWidth: chartW, paddingTop: 18 }}>
                   <span aria-hidden="true" className="tnum" style={{ position: 'absolute', left: 0, top: 0, fontSize: 11.5, lineHeight: '14px', color: 'var(--muted)' }}>max {stats.max}</span>
                   <div role="group" aria-label="Deployments per day, last 14 days"
                     style={{ display: 'flex', gap: GAP, alignItems: 'flex-end', height: CHART_H, borderBottom: '1px solid var(--border-bright)' }}>
