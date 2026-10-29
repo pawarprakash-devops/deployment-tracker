@@ -119,7 +119,7 @@ function Node({ r, step, p, col, dv, probed }: { r: HealthRow; step: number; p: 
   );
   const stripe = failed || p?.status === 'OFFLINE' ? 'bad' : p?.status === 'DEGRADED' ? 'warn' : p ? 'ok' : 'border-bright';
   return (
-    <article id={`env-${slug(r.environment)}`} className="re-card fade-in" aria-label={r.environment} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', minWidth: 0, height: '100%', overflow: 'hidden', background: 'var(--surface, transparent)', border: '1px solid var(--border)', borderRadius: 'var(--r-md, 8px)', boxShadow: `inset 3px 0 0 var(--${stripe})` }}>
+    <article id={`env-${slug(r.environment)}`} className="re-card fade-in" aria-label={r.environment} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', minWidth: 0, height: '100%', overflow: 'hidden', background: 'var(--surface, transparent)', border: `1px solid color-mix(in srgb, var(--${stripe}) 38%, var(--border))`, borderRadius: 'var(--r-md, 8px)', boxShadow: `0 1px 0 color-mix(in srgb, var(--${stripe}) 55%, transparent) inset` }}>
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, minWidth: 0 }}>
         <span className="muted tnum" aria-hidden="true" style={{ flex: 'none', width: 22, height: 22, borderRadius: '50%', border: '1px solid var(--border-bright, var(--border))', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{step}</span>
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 110px' }}>
