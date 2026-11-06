@@ -1,6 +1,8 @@
 // Client-safe types for GET /api/pipeline (no server imports here).
 
-export type ColumnId = 'preview' | 'demo' | 'qa' | 'stage' | 'preprod' | 'preprod-usw' | 'preprod-egypt' | 'prod-ankura' | 'prod-neotia' | 'prod-usw' | 'prod-egypt' | 'other';
+// Board column id. Open-ended: self-registered environments bring their own (environments.column_id, kebab-case).
+// The ids that existed before are listed in KNOWN_COLUMN_IDS (lib/env-meta.ts).
+export type ColumnId = string;
 export type EnvState = 'deployed' | 'in_progress' | 'queued' | 'awaiting_approval' | 'failed' | 'rolled_back';
 export type BadgeId = 'hotfix' | 'rolled_back' | 'failed' | 'stuck';
 
@@ -9,6 +11,9 @@ export interface PipelineColumn {
   name: string;
   environments: string[];
   rank: number;
+  // preview | demo | qa | stage | preprod | prod | lms | other (environments.env_group, else derived from the id).
+  // Optional: older payloads omit it; use groupOfColumnId(id) from lib/env-meta.ts then.
+  group?: string;
   isProduction: boolean;
   health: { lastSuccessAt: string | null; latest: { id: string; status: string; at: string } | null };
   activeDeploy: { id: string; status: string; startedAt: string } | null; // running now ('In Progress' only)

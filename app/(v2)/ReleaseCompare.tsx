@@ -1,6 +1,8 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Chip, Empty, ErrorNote, Pill, Skeleton, fmtDateTime } from './ui';
+import { LEGACY_ENV_BRANCH, type EnvMetaRow } from '@/lib/env-meta';
+import { useEnvMeta } from './useEnvMeta';
 
 type Row = Record<string, string | number | null | undefined>;
 type Repo = 'FE' | 'BE';
@@ -8,11 +10,8 @@ const REPOS: Record<Repo, { slug: string; label: string }> = {
   FE: { slug: 'vidaisolutions/vidai-react', label: 'Frontend' },
   BE: { slug: 'vidaisolutions/vidai-backend', label: 'Backend' },
 };
-const ENV_DEFAULT_BRANCH: Record<string, string> = {
-  'Preview': 'dev', 'Demo-Preview': 'demo', 'QA': 'qa', 'Stage': 'stage', 'Stage EUW2': 'stage',
-  'Pre-Prod': 'preprod', 'Pre-Prod (India)': 'preprod', 'Pre-Prod USW': 'preprod_usw', 'Pre-Prod Egypt': 'preprod_egypt',
-  'Production (Ankura)': 'prod_ank', 'Production (Neotia)': 'prod_neo', 'Production (Neotia/Babyjoy)': 'prod_neo', 'Production USW': 'prod_citmer', 'Production Egypt': 'prod_egypt', 'Production': 'prod_ank',
-};
+// Fallback only: environments.branch (self-registered from the deploy's tracker block) wins when set.
+const ENV_DEFAULT_BRANCH = LEGACY_ENV_BRANCH;
 interface Commit { sha: string; short_sha: string; message: string; author: string; author_login?: string; date: string; url: string }
 interface GhFile { filename: string; status: string; additions: number; deletions: number }
 interface CompareData { status?: string; ahead_by?: number; behind_by?: number; total_commits?: number; commits?: Commit[]; files?: GhFile[]; files_changed?: number }
@@ -40,9 +39,10 @@ function cell(field: string, r: Row): string {
   if (field === 'duration_seconds') return fmtDur(Number(v));
   return String(v);
 }
-function refFor(r: Row, repo: Repo): string {
+function refFor(r: Row, repo: Repo, envMeta: Map<string, EnvMetaRow> | null): string {
   const specific = repo === 'FE' ? r.frontend_branch : r.backend_branch;
-  return str(specific) || str(r.branch) || ENV_DEFAULT_BRANCH[str(r.environment)] || '';
+  const env = str(r.environment);
+  return str(specific) || str(r.branch) || str(envMeta?.get(env)?.branch) || ENV_DEFAULT_BRANCH[env] || '';
 }
 function defaultRepo(a: Row, b: Row): Repo {
   const be = [a, b].some(r => r.backend_branch || r.backend_version);
@@ -58,6 +58,7 @@ export default function ReleaseCompare() {
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
+  const envMeta = useEnvMeta();
 
   const close = useCallback(() => {
     setPair(null); setResult(null);
@@ -84,7 +85,7 @@ export default function ReleaseCompare() {
     if (!pair) return;
     const ctl = new AbortController();
     const slug = REPOS[repo].slug;
-    const base = refFor(pair.a, repo), head = refFor(pair.b, repo);
+    const base = refFor(pair.a, repo, envMeta), head = refFor(pair.b, repo, envMeta);
     const get = async (qs: string): Promise<CompareData | null> => {
       const r = await fetch(`/api/compare?repo=${encodeURIComponent(slug)}${qs}`, { signal: ctl.signal });
       if (!r.ok) return null;
@@ -111,7 +112,7 @@ export default function ReleaseCompare() {
       }
     })();
     return () => ctl.abort();
-  }, [pair, repo]);
+  }, [pair, repo, envMeta]);
 
   // Focus management, Esc, Tab trap, body scroll lock.
   useEffect(() => {

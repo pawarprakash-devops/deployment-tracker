@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AdminGate from './AdminGate';
 import InsightsLists, { type ListsStats } from './InsightsLists';
 import { Card, Chip, Empty, ErrorNote, Pill, Skeleton, StatusPill, Tile, type Tone } from './ui';
+import type { EnvMetaRow } from '@/lib/env-meta';
+import { useEnvMeta } from './useEnvMeta';
 
 // ---- types: mirror of GET /api/admin/stats -----------------------------------------------------------
 type Tier = 'Elite' | 'High' | 'Medium' | 'Low';
@@ -42,7 +44,8 @@ const fmtDuration = (s: number) => {
 const pct = (n: number) => `${(Number.isFinite(n) ? n : 0).toFixed(1)}%`;
 const clamp01 = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0);
 
-// region + cluster label per environment (ported from the legacy page)
+// region + cluster label per environment (ported from the legacy page). Fallback only: environments.region /
+// environments.cluster (self-registered from the deploy's tracker block) win when set.
 const ENV_CLUSTER: Record<string, [string, string]> = {
   'Preview': ['ap-south-1', 'preview-99999'],
   'QA': ['ap-south-1', 'qa-aps-ecs'],
@@ -61,16 +64,22 @@ const ENV_CLUSTER: Record<string, [string, string]> = {
   'Production': ['ap-south-1', 'vidai-prod'],
   'LMS': ['ap-south-1', 'lms-aps-ecs'],
 };
-function clusterChip(env: string): string | null {
+function clusterChip(env: string, meta?: EnvMetaRow): string | null {
+  const fb = legacyClusterChip(env);
+  const region = meta?.region || fb[0];
+  const cluster = meta?.cluster || fb[1];
+  return `${region} · ${cluster}`;
+}
+function legacyClusterChip(env: string): [string, string] {
   const hit = ENV_CLUSTER[env];
-  if (hit) return `${hit[0]} · ${hit[1]}`;
+  if (hit) return hit;
   const l = env.toLowerCase();
   const region = /euw2|eu-west-2|london/.test(l) ? 'eu-west-2'
     : /usw2|us-west-2|oregon/.test(l) ? 'us-west-2'
     : /usw|us-west-1|california/.test(l) ? 'us-west-1'
     : /use1|us-east-1|virginia/.test(l) ? 'us-east-1'
     : /euc1|eu-central-1|frankfurt/.test(l) ? 'eu-central-1' : 'ap-south-1';
-  return `${region} · ${l.replace(/\s+/g, '-')}`;
+  return [region, l.replace(/\s+/g, '-')];
 }
 
 function statusTone(status: string): Tone {
@@ -108,13 +117,14 @@ function DoraCard({ title, value, tier, target, bar, barLabel, children }: {
 function Distribution({ entries, total, tone, cluster }: {
   entries: [string, number][]; total: number; tone: (k: string) => Tone; cluster?: boolean;
 }) {
+  const envMeta = useEnvMeta();
   if (entries.length === 0) return <Empty>No deployments recorded yet.</Empty>;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       {entries.map(([name, count]) => {
         const share = total > 0 ? (count / total) * 100 : 0;
         const t = tone(name);
-        const cc = cluster ? clusterChip(name) : null;
+        const cc = cluster ? clusterChip(name, envMeta?.get(name)) : null;
         return (
           <div key={name}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>

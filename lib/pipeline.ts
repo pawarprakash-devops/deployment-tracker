@@ -1,5 +1,6 @@
 import pool from './db';
 import { extractJiraKeys, jiraConfigured, jiraIssuesByKeys, stageOf } from './jira';
+import { resolveColumn, type EnvMetaRow } from './env-meta';
 import type { BadgeId, ColumnId, EnvState, PipelineColumn, PipelineEnvEntry, PipelineResponse, PipelineTicket } from './pipeline-types';
 
 const SUCCESS_RE = /(^|\s)success$/i;
@@ -8,43 +9,9 @@ const QUEUED_RE = /(^|\s)queued$/i; // 'Queued' / 'Rerun - Queued': waiting in t
 const WINDOW = 300;
 const MAX_TICKETS = 150;
 
-// environments.name -> board column (see docs/redesign/02-API-SPEC.md 1.4)
-export function columnOf(env: string, isProduction: boolean): { id: ColumnId; rank: number } {
-  const e = env.toLowerCase();
-  if (e === 'preview') return { id: 'preview', rank: 0 };
-  if (e.startsWith('demo')) return { id: 'demo', rank: 1 };
-  if (e === 'qa') return { id: 'qa', rank: 1 };
-  if (e.startsWith('stage')) return { id: 'stage', rank: 2 };
-  // US-West first: 'Pre-Prod USW' would otherwise fall into generic preprod. Pre-Prod USW is promoted from Pre-Prod
-  // India (preprod -> preprod_usw -> prod_citmer), so it ranks between Pre-Prod and the production columns.
-  // Production USW is matched on a 'prod'/'production' PREFIX so 'Pre-Prod USW' can never land in a prod column;
-  // a name built from its release branch (prod_citmer / citmer) also maps there, unless it starts with pre-prod.
-  if (/^pre-?prod\b.*\busw\b/.test(e)) return { id: 'preprod-usw', rank: 3.5 };
-  // Egypt (eu-central-1): Pre-Prod Egypt is cut from Pre-Prod India (preprod -> preprod_egypt), same rank as USW.
-  if (/^pre-?prod\b.*\b(egypt|euc)\b/.test(e)) return { id: 'preprod-egypt', rank: 3.5 };
-  if (/^prod(uction)?\b.*\b(egypt|euc)\b/.test(e)) return { id: 'prod-egypt', rank: 4 };
-  if (/^prod(uction)?\b.*\busw\b/.test(e)) return { id: 'prod-usw', rank: 4 };
-  if (e.includes('citmer') && !/^pre[-_ ]?prod/.test(e)) return { id: 'prod-usw', rank: 4 };
-  if (e.startsWith('pre-prod') || e.startsWith('preprod')) return { id: 'preprod', rank: 3 };
-  if (e.includes('ankura')) return { id: 'prod-ankura', rank: 4 };
-  if (e.includes('neotia') || e.includes('babyjoy')) return { id: 'prod-neotia', rank: 4 };
-  return { id: 'other', rank: isProduction || /^production/i.test(env) ? 4 : 1 };
-}
-
-const COLUMN_NAMES: Record<ColumnId, string> = {
-  preview: 'Preview',
-  demo: 'Demo',
-  qa: 'QA',
-  stage: 'Stage',
-  preprod: 'Pre-Prod',
-  'preprod-usw': 'Pre-Prod · USW',
-  'preprod-egypt': 'Pre-Prod · Egypt',
-  'prod-ankura': 'Prod · Ankura',
-  'prod-neotia': 'Prod · Neotia',
-  'prod-usw': 'Prod · USW',
-  'prod-egypt': 'Prod · Egypt',
-  other: 'Other',
-};
+// environments row -> board column: stored metadata (column_id / column_label / env_group) first, the legacy
+// name-based columnOf otherwise (see lib/env-meta.ts and docs/redesign/02-API-SPEC.md 1.4).
+export { columnOf } from './env-meta';
 
 interface Row {
   id: string;
@@ -72,7 +39,8 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
     frontend_version, backend_version, deployed_by, ticket_link, notes, started_at`;
 
   const [envRes, okRes, otherRes] = await Promise.all([
-    pool.query(`SELECT name, is_production, display_order FROM environments ORDER BY display_order, name`),
+    // SELECT * so the optional metadata columns are read when present and the query still works before /api/migrate.
+    pool.query<EnvMetaRow>(`SELECT * FROM environments ORDER BY display_order, name`),
     pool.query<Row>(
       `SELECT ${cols} FROM deployments
        WHERE started_at IS NOT NULL AND status ~* '(^|\\s)success$' AND (deployed_by IS NULL OR deployed_by NOT LIKE '%Deployment Tracker%')
@@ -90,10 +58,10 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
   // ---- columns --------------------------------------------------------------------------------
   const envMeta = new Map<string, { col: ColumnId; rank: number; prod: boolean; order: number }>();
   const columns = new Map<ColumnId, PipelineColumn & { _order: number }>();
-  const ensureEnv = (name: string, prod = false, order = 999) => {
+  const ensureEnv = (name: string, prod = false, order = 999, row?: EnvMetaRow) => {
     let m = envMeta.get(name);
     if (!m) {
-      const c = columnOf(name, prod);
+      const c = resolveColumn(row ?? { name, is_production: prod });
       m = { col: c.id, rank: c.rank, prod, order };
       envMeta.set(name, m);
       const existing = columns.get(c.id);
@@ -104,9 +72,10 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
       } else {
         columns.set(c.id, {
           id: c.id,
-          name: COLUMN_NAMES[c.id],
+          name: c.label,
           environments: [name],
           rank: c.rank,
+          group: c.group,
           isProduction: prod || c.rank === 4,
           health: { lastSuccessAt: null, latest: null },
           activeDeploy: null,
@@ -121,7 +90,7 @@ export async function buildPipeline(opts: { jira: boolean; sinceDays?: number })
     }
     return m;
   };
-  for (const e of envRes.rows) ensureEnv(e.name, e.is_production, e.display_order);
+  for (const e of envRes.rows) ensureEnv(e.name, !!e.is_production, e.display_order ?? 999, e);
 
   // ---- merge rows newest first ----------------------------------------------------------------
   const all = [...okRes.rows, ...otherRes.rows].sort((a, b) => +new Date(b.started_at) - +new Date(a.started_at));

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import pool from '@/lib/db';
+import type { EnvMetaRow } from '@/lib/env-meta';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +10,7 @@ export interface ClusterTarget {
   url: string;
   type: 'backend' | 'frontend';
   timeoutMs?: number;
+  region?: string | null;
 }
 
 export interface ProbeResult {
@@ -19,9 +22,11 @@ export interface ProbeResult {
   latencyMs: number;
   message: string;
   checkedAt: string;
+  region?: string | null; // environments.region when the env self-registered (else absent: UI derives it from the host)
 }
 
-// Configured endpoints based on VidAI infrastructure specification
+// Fallback endpoints. Environments that self-registered an api_url (deploy webhook `tracker` block) are probed from
+// the environments table instead; a static entry is only used for an env with no api_url row (merged by env name).
 const PROBE_TARGETS: ClusterTarget[] = [
   {
     name: 'Preview Backend API',
@@ -91,6 +96,32 @@ const PROBE_TARGETS: ClusterTarget[] = [
     type: 'backend',
   },
 ];
+
+// environments.api_url (self-registered) first, then static targets for envs without one. Never throws: on a DB error or
+// before /api/migrate has added the columns, the static list is used as-is. Each env and each URL is probed once.
+async function probeTargets(): Promise<ClusterTarget[]> {
+  let rows: EnvMetaRow[] = [];
+  try {
+    rows = (await pool.query<EnvMetaRow>('SELECT * FROM environments ORDER BY display_order, name')).rows;
+  } catch (e) {
+    console.warn('cluster-health: environments metadata unavailable, using static probes:', e instanceof Error ? e.message : e);
+  }
+  const out: ClusterTarget[] = [];
+  const envs = new Set<string>();
+  const urls = new Set<string>();
+  for (const r of rows) {
+    if (typeof r.api_url !== 'string' || !/^https?:\/\//i.test(r.api_url) || envs.has(r.name) || urls.has(r.api_url)) continue;
+    out.push({ name: `${r.name} Backend API`, env: r.name, url: r.api_url, type: 'backend', region: r.region ?? null });
+    envs.add(r.name); urls.add(r.api_url);
+  }
+  const regionOf = new Map(rows.map((r) => [r.name, r.region ?? null]));
+  for (const t of PROBE_TARGETS) {
+    if (envs.has(t.env) || urls.has(t.url)) continue;
+    out.push({ ...t, region: regionOf.get(t.env) ?? null });
+    envs.add(t.env); urls.add(t.url);
+  }
+  return out;
+}
 
 async function probeTarget(target: ClusterTarget): Promise<ProbeResult> {
   const start = Date.now();
@@ -166,7 +197,11 @@ async function probeTarget(target: ClusterTarget): Promise<ProbeResult> {
 
 export async function GET() {
   try {
-    const results = await Promise.all(PROBE_TARGETS.map(probeTarget));
+    const targets = await probeTargets();
+    const results = await Promise.all(targets.map(async (t) => {
+      const r = await probeTarget(t);
+      return t.region ? { ...r, region: t.region } : r;
+    }));
 
     // Aggregate health by environment
     const byEnvironment: Record<string, ProbeResult> = {};

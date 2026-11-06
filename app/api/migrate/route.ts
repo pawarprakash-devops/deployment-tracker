@@ -16,6 +16,22 @@ export async function POST() {
     // Approval gate: when a gated run left 'Awaiting approval' (duration starts here). Nullable, additive.
     await pool.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
 
+    // Self-registering environments: metadata sent by the deploy workflows (webhook `tracker` block, from the env's
+    // clusters.json). All nullable, additive; null = fall back to the built-in name-based mapping.
+    await pool.query(`
+      ALTER TABLE environments
+      ADD COLUMN IF NOT EXISTS env_group TEXT,
+      ADD COLUMN IF NOT EXISTS column_id TEXT,
+      ADD COLUMN IF NOT EXISTS column_label TEXT,
+      ADD COLUMN IF NOT EXISTS region TEXT,
+      ADD COLUMN IF NOT EXISTS api_url TEXT,
+      ADD COLUMN IF NOT EXISTS frontend_url TEXT,
+      ADD COLUMN IF NOT EXISTS branch TEXT,
+      ADD COLUMN IF NOT EXISTS promotes_from TEXT,
+      ADD COLUMN IF NOT EXISTS cluster TEXT,
+      ADD COLUMN IF NOT EXISTS meta_updated_at TIMESTAMPTZ
+    `);
+
     // Migrate existing data
     await pool.query(`
       UPDATE deployments 

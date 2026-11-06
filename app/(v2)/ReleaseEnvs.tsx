@@ -8,7 +8,7 @@ interface HealthRow {
   deployment_type: string | null; branch: string | null; version: string | null; deployed_by: string | null;
   last_deployed_at: string | null; duration_seconds: number | null;
 }
-interface Probe { environment: string; status: 'HEALTHY' | 'DEGRADED' | 'OFFLINE'; latencyMs: number; message?: string; url?: string; host?: string }
+interface Probe { environment: string; status: 'HEALTHY' | 'DEGRADED' | 'OFFLINE'; latencyMs: number; message?: string; url?: string; host?: string; region?: string | null }
 interface Dep {
   environment: string; status: string; branch?: string | null; version?: string | null;
   frontend_branch?: string | null; backend_branch?: string | null; frontend_version?: string | null; backend_version?: string | null;
@@ -33,6 +33,7 @@ const isFail = (st: string) => /^(rerun - )?fail/i.test(st);
 const SEMVER = /^v?\d+\.\d+\.\d+([-+][\w.-]+)?$/;
 const realVersion = (v?: string | null) => (v && SEMVER.test(v.trim()) && !/^v?0\.0\.0$/.test(v.trim()) ? v.trim() : null);
 
+// Fallback only: the probe carries environments.region when the env self-registered.
 function regionOf(host: string): string {
   const l = host.toLowerCase();
   if (/euw2|eu-west-2|london/.test(l)) return 'eu-west-2';
@@ -128,7 +129,7 @@ function Node({ r, step, p, col, dv, probed }: { r: HealthRow; step: number; p: 
             <h3 style={{ fontSize: 14, fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }} title={r.environment}>{r.environment}</h3>
             {r.is_production && <Chip title="Production environment">PROD</Chip>}
           </div>
-          {host && <span style={{ ...trunc, fontSize: 11.5, color: 'var(--faint)' }} title={p?.url ?? host}>{regionOf(host)}</span>}
+          {host && <span style={{ ...trunc, fontSize: 11.5, color: 'var(--faint)' }} title={p?.url ?? host}>{p?.region || regionOf(host)}</span>}
         </div>
         <div style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
           {p ? <Pill tone={PROBE_TONE[p.status]}>{p.status[0] + p.status.slice(1).toLowerCase()} <span className="tnum">{Math.round(p.latencyMs)} ms</span></Pill>
