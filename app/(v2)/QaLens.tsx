@@ -1,11 +1,13 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import type { ColumnId, PipelineResponse, PipelineTicket } from '@/lib/pipeline-types';
+import type { PipelineResponse, PipelineTicket } from '@/lib/pipeline-types';
+import { groupOfColumnId } from '@/lib/env-meta';
 import { useShell } from './ctx';
 import { Card, Chip, Empty, ErrorNote, JiraNote, Pill, Skeleton, Tile, ago, type Tone } from './ui';
 
-const QA_COLS: ColumnId[] = ['qa', 'demo'];
-const LATER_COLS: ColumnId[] = ['stage', 'preprod', 'preprod-usw', 'preprod-egypt', 'prod-ankura', 'prod-neotia', 'prod-usw', 'prod-egypt'];
+// Column groups (not fixed ids), so self-registered columns are picked up automatically.
+const QA_GROUPS = ['qa', 'demo'];
+const LATER_GROUPS = ['stage', 'preprod', 'prod'];
 const WINDOWS = [{ label: '1:30 PM', min: 13 * 60 + 30 }, { label: '4:00 PM', min: 16 * 60 }];
 const IST_OFFSET_MS = 330 * 60_000; // Asia/Kolkata is a fixed UTC+5:30 (no DST)
 const bareBtn: React.CSSProperties = { background: 'none', border: 0, padding: 0, textAlign: 'left' };
@@ -75,12 +77,16 @@ export default function QaLens() {
     if (!p) return null;
     const sorted = [...p.tickets].sort((a, b) => b.latestAt.localeCompare(a.latestAt));
     const passed = (t: PipelineTicket) => t.stage === 'QA Passed';
-    const inQa = sorted.filter((t) => QA_COLS.includes(t.column));
+    const groups = new Map(p.columns.map((c) => [c.id, c.group ?? groupOfColumnId(c.id)]));
+    const groupOf = (col: string) => groups.get(col) ?? groupOfColumnId(col);
+    const isQa = (t: PipelineTicket) => QA_GROUPS.includes(groupOf(t.column));
+    const isLater = (t: PipelineTicket) => LATER_GROUPS.includes(groupOf(t.column));
+    const inQa = sorted.filter(isQa);
     return {
       ready: inQa.filter((t) => !passed(t) && stateIn(t, p) === 'deployed'),
       queue: inQa.filter((t) => !passed(t)),
-      later: sorted.filter((t) => LATER_COLS.includes(t.column) || (passed(t) && QA_COLS.includes(t.column))),
-      laterCount: sorted.filter((t) => LATER_COLS.includes(t.column)).length,
+      later: sorted.filter((t) => isLater(t) || (passed(t) && isQa(t))),
+      laterCount: sorted.filter(isLater).length,
       failedQa: inQa.filter((t) => ['failed', 'rolled_back'].includes(stateIn(t, p))).length,
     };
   }, [p]);

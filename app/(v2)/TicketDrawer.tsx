@@ -1,29 +1,32 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import type { ColumnId, PipelineTicket } from '@/lib/pipeline-types';
+import type { PipelineResponse, PipelineTicket } from '@/lib/pipeline-types';
+import { groupOfColumnId } from '@/lib/env-meta';
 import { useShell } from './ctx';
 import { Chip, Pill, StatusPill, ago } from './ui';
 
-const STEPS: { id: ColumnId; label: string }[] = [
+// Journey steps are column GROUPS, so every Pre-Prod column (India, USW, Egypt, any new one) lights the Pre-Prod step
+// and every production column lights Prod. Demo is its own group and (as before) does not light QA.
+const STEPS: { id: string; label: string }[] = [
   { id: 'preview', label: 'Preview' },
   { id: 'qa', label: 'QA' },
   { id: 'stage', label: 'Stage' },
   { id: 'preprod', label: 'Pre-Prod' },
-  { id: 'prod-ankura', label: 'Prod' },
+  { id: 'prod', label: 'Prod' },
 ];
 
 const BADGE_LABEL: Record<string, string> = { hotfix: 'Hotfix', failed: 'Failed', rolled_back: 'Rolled back' };
 
-function stepState(t: PipelineTicket, id: ColumnId): 'done' | 'now' | 'bad' | '' {
-  const reachedProd = t.reached.some((c) => c === 'prod-ankura' || c === 'prod-neotia' || c === 'prod-usw' || c === 'prod-egypt');
-  if (id === 'prod-ankura' && reachedProd) return t.column.startsWith('prod') ? 'now' : 'done';
-  // The single Pre-Prod step covers Pre-Prod India, Pre-Prod USW and Pre-Prod Egypt.
-  if (id === 'preprod' && (t.column === 'preprod-usw' || t.reached.includes('preprod-usw'))) return t.column === 'preprod-usw' ? 'now' : 'done';
-  if (id === 'preprod' && (t.column === 'preprod-egypt' || t.reached.includes('preprod-egypt'))) return t.column === 'preprod-egypt' ? 'now' : 'done';
-  if (t.column === id) return 'now';
-  if (t.reached.includes(id)) return 'done';
+function stepState(t: PipelineTicket, group: string, groupOf: (col: string) => string): 'done' | 'now' | 'bad' | '' {
+  if (groupOf(t.column) === group) return 'now';
+  if (t.reached.some((c) => groupOf(c) === group)) return 'done';
   return '';
 }
+
+const groupLookup = (p: PipelineResponse | null) => {
+  const m = new Map((p?.columns ?? []).map((c) => [c.id, c.group ?? groupOfColumnId(c.id)]));
+  return (col: string) => m.get(col) ?? groupOfColumnId(col);
+};
 
 export default function TicketDrawer() {
   const { openTicket, setOpenTicket, pipeline } = useShell();
@@ -52,6 +55,7 @@ export default function TicketDrawer() {
 
   if (!openTicket) return null;
   const t = pipeline?.tickets.find((x) => x.key === openTicket);
+  const groupOf = groupLookup(pipeline);
 
   return (
     <>
@@ -76,7 +80,7 @@ export default function TicketDrawer() {
 
             <h3 className="muted" style={{ fontSize: 'var(--fs-xs)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 18 }}>Journey</h3>
             <div className="stepper">
-              {STEPS.map((s) => <div key={s.id} className={`step ${stepState(t, s.id)}`}><i />{s.label}</div>)}
+              {STEPS.map((s) => <div key={s.id} className={`step ${stepState(t, s.id, groupOf)}`}><i />{s.label}</div>)}
             </div>
 
             <h3 className="muted" style={{ fontSize: 'var(--fs-xs)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Deployments</h3>

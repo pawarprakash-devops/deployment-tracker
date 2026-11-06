@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEnvMeta } from './useEnvMeta';
 import type { CSSProperties } from 'react';
 import AdminGate from './AdminGate';
 import { Card, Tile, Skeleton, Empty, ErrorNote, fmtDate, fmtDateTime } from './ui';
@@ -46,7 +47,14 @@ const activeCount = (f: Filters) => LISTS.filter((k) => f[k].length).length + (f
 const initialFilters = (): Filters => { try { return fromQS(new URLSearchParams(window.location.search).get(JF) || ''); } catch { return EMPTY; } };
 
 // ---- helpers ----------------------------------------------------------------------------------------
+// Fallback order only: environments.display_order (from the env's clusters.json tracker block) decides once loaded.
 const ENV_ORDER = ['Preview', 'Demo-Preview', 'QA', 'Stage', 'Stage EUW2', 'Pre-Prod', 'Pre-Prod USW', 'Pre-Prod Egypt', 'Production (Ankura)', 'Production (Neotia/Babyjoy)', 'Production USW', 'Production Egypt', 'Production'];
+// environments.display_order first; names without a row keep the legacy ENV_ORDER position, then go last.
+function orderByDisplayOrder(names: string[], meta: Map<string, { display_order?: number | null }>): string[] {
+  const legacy = (e: string) => { const i = ENV_ORDER.indexOf(e); return i < 0 ? ENV_ORDER.length : i; };
+  const ord = (e: string) => { const d = meta.get(e)?.display_order; return typeof d === 'number' ? d : Number.MAX_SAFE_INTEGER; };
+  return names.slice().sort((a, b) => ord(a) - ord(b) || legacy(a) - legacy(b) || a.localeCompare(b));
+}
 const DAY = 86400000;
 const ctl: CSSProperties = { height: 34, minHeight: 34, border: '1px solid var(--border-bright)', background: 'var(--panel)', color: 'var(--text)', borderRadius: 'var(--r-sm)', padding: '0 10px', fontSize: 'var(--fs-sm)', fontFamily: 'inherit' };
 const row: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' };
@@ -296,6 +304,7 @@ function Tickets() {
   const [copied, setCopied] = useState(false);
   const seq = useRef(0);
   const bugSeq = useRef(0);
+  const envMeta = useEnvMeta();
 
   const load = useCallback(async (fresh = false) => {
     const mine = ++seq.current;
@@ -368,7 +377,9 @@ function Tickets() {
   const now = res?.now || 0;
   const notConfigured = stats?.configured === false;
   const envs = deployed
-    ? ENV_ORDER.filter((e) => deployed.tickets.some((x) => x.environments[e])).concat([...new Set(deployed.tickets.flatMap((x) => Object.keys(x.environments)))].filter((e) => !ENV_ORDER.includes(e)))
+    ? envMeta
+      ? orderByDisplayOrder([...new Set(deployed.tickets.flatMap((x) => Object.keys(x.environments)))], envMeta)
+      : ENV_ORDER.filter((e) => deployed.tickets.some((x) => x.environments[e])).concat([...new Set(deployed.tickets.flatMap((x) => Object.keys(x.environments)))].filter((e) => !ENV_ORDER.includes(e)))
     : [];
   const people = options?.people || [];
   const opt = (xs?: string[]) => (xs || []).map((x) => ({ id: x, name: x }));

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import pool from '@/lib/db';
+import type { EnvMetaRow } from '@/lib/env-meta';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,9 +12,12 @@ export const dynamic = 'force-dynamic';
 //                                                        -> preprod_usw (Pre-Prod USW) -> prod_citmer (Production USW)
 //                                                        -> prod_neo (Production Neotia/Babyjoy)
 //                                                        -> prod_ank (Production Ankura; mostly cherry-pick/release PRs)
+// Self-registered environments add/override pairs: every env with both `promotes_from` and `branch` yields
+// promotes_from -> branch (see pairsFromEnvs). PAIRS stays as the fallback and for envs not registered yet.
 // A branch that does not exist yet (e.g. a new release branch before go-live) is reported per pair as `missingBranch`
 // (plus a readable `error`), so the rest of the response is unaffected.
-const PAIRS: { from: string; to: string; fromEnv: string; toEnv: string }[] = [
+type Pair = { from: string; to: string; fromEnv: string; toEnv: string };
+const PAIRS: Pair[] = [
   { from: 'dev', to: 'qa', fromEnv: 'Preview', toEnv: 'QA' },
   { from: 'qa', to: 'preprod', fromEnv: 'QA', toEnv: 'Pre-Prod' },
   { from: 'qa', to: 'demo', fromEnv: 'QA', toEnv: 'Demo-Preview' },
@@ -25,6 +30,33 @@ const PAIRS: { from: string; to: string; fromEnv: string; toEnv: string }[] = [
   { from: 'preprod', to: 'preprod_egypt', fromEnv: 'Pre-Prod', toEnv: 'Pre-Prod Egypt' },
   { from: 'preprod_egypt', to: 'prod_egypt', fromEnv: 'Pre-Prod Egypt', toEnv: 'Production Egypt' },
 ];
+// Static pairs + pairs from environments (promotes_from -> branch), deduped by from|to (env metadata wins). Never
+// throws: on a DB error or before /api/migrate has added the columns, PAIRS is returned unchanged.
+async function promotionPairs(): Promise<Pair[]> {
+  let rows: EnvMetaRow[] = [];
+  try {
+    rows = (await pool.query<EnvMetaRow>('SELECT * FROM environments ORDER BY display_order, name')).rows;
+  } catch (e) {
+    console.warn('drift: environments metadata unavailable, using static pairs:', e instanceof Error ? e.message : e);
+  }
+  const envOfBranch = new Map<string, string>();
+  for (const p of PAIRS) { envOfBranch.set(p.from, p.fromEnv); envOfBranch.set(p.to, p.toEnv); }
+  // First env (by display_order) per branch wins, so envs sharing a branch (Stage / Stage EUW2) don't rename a pair.
+  const metaEnvOfBranch = new Map<string, string>();
+  for (const r of rows) if (typeof r.branch === 'string' && r.branch && !metaEnvOfBranch.has(r.branch)) metaEnvOfBranch.set(r.branch, r.name);
+  for (const [b, n] of metaEnvOfBranch) envOfBranch.set(b, n);
+  const byKey = new Map<string, Pair>(PAIRS.map((p) => [`${p.from}|${p.to}`, p]));
+  const fromMeta = new Set<string>();
+  for (const r of rows) {
+    if (typeof r.branch !== 'string' || typeof r.promotes_from !== 'string' || !r.branch || !r.promotes_from || r.branch === r.promotes_from) continue;
+    const key = `${r.promotes_from}|${r.branch}`;
+    if (fromMeta.has(key)) continue;
+    fromMeta.add(key);
+    byKey.set(key, { from: r.promotes_from, to: r.branch, fromEnv: envOfBranch.get(r.promotes_from) ?? r.promotes_from, toEnv: r.name });
+  }
+  return [...byKey.values()];
+}
+
 const REPOS: Record<string, string> = { frontend: 'vidaisolutions/vidai-react', backend: 'vidaisolutions/vidai-backend' };
 
 // GET /api/drift?repo=frontend|backend   (public read, like /api/compare; needs GH_TOKEN on the server)
@@ -38,7 +70,7 @@ export async function GET(request: NextRequest) {
   const owner = repo.split('/')[0];
   const gh = (path: string) => fetch(`https://api.github.com/repos/${repo}/${path}`, { headers, cache: 'no-store' });
 
-  const pairs = await Promise.all(PAIRS.map(async (p) => {
+  const pairs = await Promise.all((await promotionPairs()).map(async (p) => {
     try {
       // Squash / merge-commit promotions give the same change a new SHA on every branch, so a plain
       // downstream...upstream compare counts every old commit as "pending". Instead anchor on the last

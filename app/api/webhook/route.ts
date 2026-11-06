@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { notifyDeployment } from '@/lib/alerts';
+import { metaDecision, parseTrackerBlock, trackerIsProduction, type TrackerMeta } from '@/lib/env-meta';
 
 // Open (non-final) statuses, lowest to highest rank. A post may only move a row UP this ladder; a lower or equal
 // post never downgrades it (e.g. a late 'Awaiting approval' must not overwrite 'In Progress').
@@ -17,6 +18,48 @@ function ensureApprovedAtColumn(): Promise<void> {
     .then(() => undefined)
     .catch((e) => { approvedAtReady = null; throw e; });
   return approvedAtReady;
+}
+
+// Self-registering environments: store the `tracker` block's metadata on the environments row. Runs on `pool`, outside
+// the deployment transaction, and never throws: before `POST /api/migrate` has added the columns (pg 42703) or on any
+// other error the deployment is still recorded exactly as before.
+// Ownership (lib/env-meta.ts metaDecision): only the cluster stored in environments.cluster may change the metadata; an
+// unowned env is claimed by the first PRIMARY cluster that posts (ai-preview can never claim Preview). Null fields never
+// overwrite stored values (COALESCE).
+async function saveEnvMeta(m: TrackerMeta): Promise<void> {
+  // is_production is only changed when the block says so (production flag, else group); never from the name guess.
+  const prod = m.production ?? (m.group ? m.group === 'prod' : null);
+  try {
+    const cur = await pool.query<{ cluster?: string | null }>('SELECT * FROM environments WHERE name = $1', [m.env]);
+    const decision = metaDecision(cur.rows[0]?.cluster, m);
+    if (!decision.apply) {
+      console.log(`ℹ️ Metadata for "${m.env}" not updated (${decision.reason}; cluster ${m.cluster ?? 'none'}, owner ${cur.rows[0]?.cluster ?? 'none'}). Deployment still recorded.`);
+      return;
+    }
+    // The WHERE re-checks ownership atomically, so two clusters racing to claim an unowned env cannot both write.
+    const upd = await pool.query(
+      `UPDATE environments SET
+         is_production = COALESCE($2, is_production),
+         display_order = COALESCE($3, display_order),
+         env_group = COALESCE($4, env_group),
+         column_id = COALESCE($5, column_id),
+         column_label = COALESCE($6, column_label),
+         region = COALESCE($7, region),
+         api_url = COALESCE($8, api_url),
+         frontend_url = COALESCE($9, frontend_url),
+         branch = COALESCE($10, branch),
+         promotes_from = COALESCE($11, promotes_from),
+         cluster = COALESCE(cluster, $12),
+         meta_updated_at = NOW()
+       WHERE name = $1 AND (cluster IS NULL OR cluster = $12)`,
+      [m.env, prod, m.order, m.group, m.column, m.column_label, m.region, m.api_url, m.frontend_url, m.branch, m.promotes_from, m.cluster]
+    );
+    if (upd.rowCount && decision.claim) console.log(`🏷️ Environment "${m.env}" metadata now owned by cluster ${m.cluster}`);
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
+    if (code === '42703') console.warn(`⚠️ environments metadata columns missing (run POST /api/migrate); metadata for "${m.env}" not saved`);
+    else console.error(`⚠️ Could not save environment metadata for "${m.env}":`, e);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -56,8 +99,11 @@ export async function POST(request: NextRequest) {
       duration_seconds,
     } = body;
 
+    // Self-registering environments: a valid `tracker` block names the environment exactly (see lib/env-meta.ts).
+    const tracker = parseTrackerBlock(body.tracker);
+
     // Validate required fields
-    if (!environment || !rawStatus) {
+    if ((!environment && !tracker) || !rawStatus) {
       return NextResponse.json(
         { error: 'Missing required fields: environment, status' },
         { status: 400 }
@@ -68,7 +114,8 @@ export async function POST(request: NextRequest) {
       ?? (/^\s*rejected\s*$/i.test(rawStatus) ? 'Rejected' : rawStatus);
     const deployStartedAt = started_at || new Date().toISOString();
 
-    // Auto-normalize environment & cluster name
+    // FALLBACK ONLY: guess the environment from free text. Used when the post has no valid `tracker` block
+    // (older workflows, manual posts). Deploys that send `tracker` use tracker.env verbatim.
     function normalizeEnvironment(
       rawEnv?: string,
       noteText?: string,
@@ -167,13 +214,15 @@ export async function POST(request: NextRequest) {
       return { name: 'Demo-Preview', isProduction: false };
     }
 
-    const resolved = normalizeEnvironment(
-      environment,
-      notes,
-      branch,
-      frontend_branch,
-      backend_branch
-    );
+    const resolved = tracker
+      ? { name: tracker.env, isProduction: trackerIsProduction(tracker) }
+      : normalizeEnvironment(
+          environment,
+          notes,
+          branch,
+          frontend_branch,
+          backend_branch
+        );
     const targetEnv = resolved.name;
     const isProdEnv = resolved.isProduction;
 
@@ -184,10 +233,18 @@ export async function POST(request: NextRequest) {
     );
 
     if (envCheck.rows.length === 0) {
+      if (tracker && environment) {
+        // Name-mismatch guard: a registered env whose name differs from the existing row would split its history.
+        const guess = normalizeEnvironment(environment, notes, branch, frontend_branch, backend_branch).name;
+        if (guess !== targetEnv) {
+          const old = await pool.query('SELECT 1 FROM environments WHERE name = $1', [guess]);
+          if (old.rows.length) console.warn(`⚠️ tracker.env "${targetEnv}" is new, but the legacy mapping gives existing env "${guess}". Check the clusters.json tracker name.`);
+        }
+      }
       const maxOrder = await pool.query(
         'SELECT COALESCE(MAX(display_order), 0) + 1 as next_order FROM environments'
       );
-      const nextOrder = maxOrder.rows[0].next_order;
+      const nextOrder = tracker?.order ?? maxOrder.rows[0].next_order;
       
       await pool.query(
         `INSERT INTO environments (name, is_production, display_order) 
@@ -196,6 +253,8 @@ export async function POST(request: NextRequest) {
       );
       console.log(`✅ Auto-created environment: ${targetEnv} (is_production: ${isProdEnv})`);
     }
+    // Every tracker post refreshes the env's metadata (clusters.json is the source of truth).
+    if (tracker) await saveEnvMeta(tracker);
 
     const isInProgressStatus = /^\s*in progress\s*$/i.test(status);
     // 'Queued' = waiting in the FIFO deploy lane behind an earlier run. It is an OPEN (non-final)
