@@ -21,6 +21,9 @@ const PAIRS: { from: string; to: string; fromEnv: string; toEnv: string }[] = [
   { from: 'preprod', to: 'prod_ank', fromEnv: 'Pre-Prod', toEnv: 'Production (Ankura)' },
   { from: 'preprod', to: 'preprod_usw', fromEnv: 'Pre-Prod', toEnv: 'Pre-Prod USW' },
   { from: 'preprod_usw', to: 'prod_citmer', fromEnv: 'Pre-Prod USW', toEnv: 'Production USW' },
+  // Egypt (eu-central-1). prod_egypt is not created yet, so that pair shows "not created yet".
+  { from: 'preprod', to: 'preprod_egypt', fromEnv: 'Pre-Prod', toEnv: 'Pre-Prod Egypt' },
+  { from: 'preprod_egypt', to: 'prod_egypt', fromEnv: 'Pre-Prod Egypt', toEnv: 'Production Egypt' },
 ];
 const REPOS: Record<string, string> = { frontend: 'vidaisolutions/vidai-react', backend: 'vidaisolutions/vidai-backend' };
 

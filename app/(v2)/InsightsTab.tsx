@@ -53,6 +53,8 @@ const ENV_CLUSTER: Record<string, [string, string]> = {
   'Pre-Prod (India)': ['ap-south-1', 'pre-prod-ecs'],
   'Pre-Prod USW': ['us-west-1', 'pre-prod-usw'],
   'Production USW': ['us-west-1', 'production-usw'],
+  'Pre-Prod Egypt': ['eu-central-1', 'preprod-euc'],
+  'Production Egypt': ['eu-central-1', 'production-euc'],
   'Production (Ankura)': ['ap-south-1', 'vidai-prod'],
   'Production (Neotia)': ['ap-south-1', 'prod-aps'],
   'Production (Neotia/Babyjoy)': ['ap-south-1', 'prod-aps'],

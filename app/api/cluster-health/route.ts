@@ -66,6 +66,12 @@ const PROBE_TARGETS: ClusterTarget[] = [
     type: 'backend',
   },
   {
+    name: 'Pre-Prod Egypt Backend API',
+    env: 'Pre-Prod Egypt',
+    url: 'https://preprod-euc-api.vidaisolutions.com/api/',
+    type: 'backend',
+  },
+  {
     // Prod account, us-west-1. Reports OFFLINE until the production-usw stack and DNS exist.
     name: 'Production USW Backend API',
     env: 'Production USW',

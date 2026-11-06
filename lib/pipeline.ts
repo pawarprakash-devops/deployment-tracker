@@ -20,6 +20,9 @@ export function columnOf(env: string, isProduction: boolean): { id: ColumnId; ra
   // Production USW is matched on a 'prod'/'production' PREFIX so 'Pre-Prod USW' can never land in a prod column;
   // a name built from its release branch (prod_citmer / citmer) also maps there, unless it starts with pre-prod.
   if (/^pre-?prod\b.*\busw\b/.test(e)) return { id: 'preprod-usw', rank: 3.5 };
+  // Egypt (eu-central-1): Pre-Prod Egypt is cut from Pre-Prod India (preprod -> preprod_egypt), same rank as USW.
+  if (/^pre-?prod\b.*\b(egypt|euc)\b/.test(e)) return { id: 'preprod-egypt', rank: 3.5 };
+  if (/^prod(uction)?\b.*\b(egypt|euc)\b/.test(e)) return { id: 'prod-egypt', rank: 4 };
   if (/^prod(uction)?\b.*\busw\b/.test(e)) return { id: 'prod-usw', rank: 4 };
   if (e.includes('citmer') && !/^pre[-_ ]?prod/.test(e)) return { id: 'prod-usw', rank: 4 };
   if (e.startsWith('pre-prod') || e.startsWith('preprod')) return { id: 'preprod', rank: 3 };
@@ -35,9 +38,11 @@ const COLUMN_NAMES: Record<ColumnId, string> = {
   stage: 'Stage',
   preprod: 'Pre-Prod',
   'preprod-usw': 'Pre-Prod · USW',
+  'preprod-egypt': 'Pre-Prod · Egypt',
   'prod-ankura': 'Prod · Ankura',
   'prod-neotia': 'Prod · Neotia',
   'prod-usw': 'Prod · USW',
+  'prod-egypt': 'Prod · Egypt',
   other: 'Other',
 };
 
