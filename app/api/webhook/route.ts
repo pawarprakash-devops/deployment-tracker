@@ -86,6 +86,17 @@ export async function POST(request: NextRequest) {
       // such as "preprod_usw -> prod_citmer" or a stray "preview"/"demo" in notes cannot override the cluster that was deployed.
       const PROD_USW_RE = /production[-_ ]usw|(?<!pre[-_ ]?)prod[-_ ]usw|(?<!pre[-_ ]?prod[-_ ]?)citmer/;
       const PREPROD_USW_RE = /pre-?prod[-_ ]usw/;
+      // Egypt (eu-central-1): cluster preprod-euc / production-euc, branches preprod_egypt / prod_egypt, workflow
+      // label "Pre-Prod EUC". Same lookbehind trick as USW (preprod_egypt contains prod_egypt). Checked before the
+      // generic pre-prod / production rules, which would otherwise file Egypt under Pre-Prod (India) / Production.
+      const PROD_EGYPT_RE = /production[-_ ](euc|egypt)|(?<!pre[-_ ]?)prod[-_ ](euc|egypt)/;
+      const PREPROD_EGYPT_RE = /pre-?prod[-_ ](euc|egypt)/;
+      if (PROD_EGYPT_RE.test(envOnly)) {
+        return { name: 'Production Egypt', isProduction: true };
+      }
+      if (PREPROD_EGYPT_RE.test(envOnly)) {
+        return { name: 'Pre-Prod Egypt', isProduction: false };
+      }
       if (PROD_USW_RE.test(envOnly)) {
         return { name: 'Production USW', isProduction: true };
       }
@@ -118,6 +129,12 @@ export async function POST(request: NextRequest) {
       }
       if (PREPROD_USW_RE.test(combined)) {
         return { name: 'Pre-Prod USW', isProduction: false };
+      }
+      if (PROD_EGYPT_RE.test(combined)) {
+        return { name: 'Production Egypt', isProduction: true };
+      }
+      if (PREPROD_EGYPT_RE.test(combined)) {
+        return { name: 'Pre-Prod Egypt', isProduction: false };
       }
       if (/pre-prod|preprod/.test(combined)) {
         return { name: 'Pre-Prod', isProduction: false };
