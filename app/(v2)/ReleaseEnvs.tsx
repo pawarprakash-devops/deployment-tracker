@@ -39,6 +39,7 @@ function regionOf(host: string): string {
   if (/usw2|us-west-2/.test(l)) return 'us-west-2';
   if (/usw|us-west-1/.test(l)) return 'us-west-1'; // pre-prod-usw / production-usw live in us-west-1
   if (/use1|us-east-1/.test(l)) return 'us-east-1';
+  if (/euc|eu-central-1/.test(l)) return 'eu-central-1'; // preprod-euc / production-euc (Egypt) live in eu-central-1
   return 'ap-south-1';
 }
 function hostOf(p?: Probe): string | null {
