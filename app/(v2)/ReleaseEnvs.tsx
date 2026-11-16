@@ -1,61 +1,97 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import {
+  Server,
+  Globe,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Clock,
+  Layers,
+  ExternalLink,
+  Filter,
+  Radio,
+  Cpu,
+} from 'lucide-react';
 import { useShell } from './ctx';
-import { Pill, Chip, AWAITING_GLYPH, AWAITING_TEXT, QUEUED_GLYPH, QUEUED_TEXT, Skeleton, ErrorNote, ago, type Tone } from './ui';
+import { StatusPill, Chip, ago, formatDuration } from './ui';
 
 interface HealthRow {
-  environment: string; is_production: boolean; display_order: number; status: string | null;
-  deployment_type: string | null; branch: string | null; version: string | null; deployed_by: string | null;
-  last_deployed_at: string | null; duration_seconds: number | null;
+  environment: string;
+  is_production: boolean;
+  display_order: number;
+  status: string | null;
+  deployment_type: string | null;
+  branch: string | null;
+  version: string | null;
+  deployed_by: string | null;
+  last_deployed_at: string | null;
+  duration_seconds: number | null;
 }
-interface Probe { environment: string; status: 'HEALTHY' | 'DEGRADED' | 'OFFLINE'; latencyMs: number; message?: string; url?: string; host?: string; region?: string | null }
+
+interface Probe {
+  environment: string;
+  status: 'HEALTHY' | 'DEGRADED' | 'OFFLINE';
+  latencyMs: number;
+  url?: string;
+  host?: string;
+  region?: string | null;
+}
+
 interface Dep {
-  environment: string; status: string; branch?: string | null; version?: string | null;
-  frontend_branch?: string | null; backend_branch?: string | null; frontend_version?: string | null; backend_version?: string | null;
-  notes?: string | null; started_at: string; created_at?: string | null; completed_at?: string | null;
+  environment: string;
+  status: string;
+  branch?: string | null;
+  version?: string | null;
+  frontend_branch?: string | null;
+  backend_branch?: string | null;
+  frontend_version?: string | null;
+  backend_version?: string | null;
+  notes?: string | null;
+  started_at: string;
+  created_at?: string | null;
+  completed_at?: string | null;
 }
-interface Comp { branch: string | null; version: string | null; at: string | null }
-interface Derived { fe: Comp; be: Comp; banner: { tone: Tone; text: string } | null }
-interface ClusterRes { probed_at?: string; clusters?: Probe[]; by_environment?: Record<string, Probe> }
-type Pipe = NonNullable<ReturnType<typeof useShell>['pipeline']>;
-type Col = Pipe['columns'][number];
 
-const PROBE_TONE: Record<Probe['status'], Tone> = { HEALTHY: 'ok', DEGRADED: 'warn', OFFLINE: 'bad' };
+interface Comp {
+  branch: string | null;
+  version: string | null;
+  at: string | null;
+}
 
-function dur(s: number | null): string | null {
-  if (s == null || !Number.isFinite(s)) return null;
-  const t = Math.max(0, Math.round(s));
-  return `${Math.floor(t / 60)}m ${t % 60}s`;
+interface Derived {
+  fe: Comp;
+  be: Comp;
+  banner: { tone: 'bad' | 'warn' | 'neutral'; text: string } | null;
 }
 
 const isOk = (st: string) => /^(rerun - )?success$/i.test(st);
 const isFail = (st: string) => /^(rerun - )?fail/i.test(st);
 const SEMVER = /^v?\d+\.\d+\.\d+([-+][\w.-]+)?$/;
-const realVersion = (v?: string | null) => (v && SEMVER.test(v.trim()) && !/^v?0\.0\.0$/.test(v.trim()) ? v.trim() : null);
+const realVersion = (v?: string | null) =>
+  v && SEMVER.test(v.trim()) && !/^v?0\.0\.0$/.test(v.trim()) ? v.trim() : null;
 
-// Fallback only: the probe carries environments.region when the env self-registered.
-function regionOf(host: string): string {
-  const l = host.toLowerCase();
+function regionOf(envName: string, host?: string): string {
+  const l = `${envName} ${host || ''}`.toLowerCase();
+  if (/euc|eu-central-1|egypt/.test(l)) return 'eu-central-1';
+  if (/usw|us-west-1|citmer/.test(l)) return 'us-west-1';
   if (/euw2|eu-west-2|london/.test(l)) return 'eu-west-2';
-  if (/usw2|us-west-2/.test(l)) return 'us-west-2';
-  if (/usw|us-west-1/.test(l)) return 'us-west-1'; // pre-prod-usw / production-usw live in us-west-1
   if (/use1|us-east-1/.test(l)) return 'us-east-1';
-  if (/euc|eu-central-1/.test(l)) return 'eu-central-1'; // preprod-euc / production-euc (Egypt) live in eu-central-1
   return 'ap-south-1';
 }
-function hostOf(p?: Probe): string | null {
-  if (!p) return null;
-  if (p.host) return p.host;
-  if (!p.url) return null;
-  try { return new URL(p.url).hostname; } catch { return null; }
-}
-
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-const ts = (d: Dep) => new Date(d.started_at).getTime() || 0;
 
 function derive(deps: Dep[]): Derived {
-  const sorted = deps.slice().sort((a, b) => ts(b) - ts(a) || (new Date(b.created_at || b.completed_at || 0).getTime() - new Date(a.created_at || a.completed_at || 0).getTime()));
+  const sorted = deps
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.started_at).getTime() - new Date(a.started_at).getTime() ||
+        new Date(b.created_at || b.completed_at || 0).getTime() -
+          new Date(a.created_at || a.completed_at || 0).getTime()
+    );
+
   const okRows = sorted.filter((d) => isOk(d.status));
+
   const comp = (kind: 'frontend' | 'backend'): Comp => {
     const re = kind === 'frontend' ? /Component:\s*frontend/i : /Component:\s*backend/i;
     const bk = kind === 'frontend' ? 'frontend_branch' : 'backend_branch';
@@ -63,193 +99,247 @@ function derive(deps: Dep[]): Derived {
     const row = okRows.find((d) => d[bk] || d[vk] || (d.notes && re.test(d.notes)));
     if (!row) return { branch: null, version: null, at: null };
     const noted = !!(row.notes && re.test(row.notes));
-    return { branch: row[bk] || (noted ? row.branch ?? null : null), version: row[vk] || (noted ? row.version ?? null : null), at: row.started_at };
+    return {
+      branch: row[bk] || (noted ? row.branch ?? null : null),
+      version: row[vk] || (noted ? row.version ?? null : null),
+      at: row.started_at,
+    };
   };
+
   let banner: Derived['banner'] = null;
   if (sorted.length) {
     let fails = 0;
-    for (const d of sorted) { if (isFail(d.status)) fails++; else break; }
+    for (const d of sorted) {
+      if (isFail(d.status)) fails++;
+      else break;
+    }
     const lastOk = okRows[0];
-    const days = lastOk ? Math.floor((Date.now() - ts(lastOk)) / 86_400_000) : null;
-    if (fails >= 3) banner = { tone: 'bad', text: `Critical: ${fails} failures in a row${lastOk ? ` since the last success ${ago(lastOk.started_at)}` : ''}` };
-    else if (fails >= 2) banner = { tone: 'warn', text: `Warning: ${fails} failures in a row${lastOk ? ` since the last success ${ago(lastOk.started_at)}` : ''}` };
-    else if (!lastOk) banner = { tone: 'warn', text: 'Warning: no successful deploy recorded' };
-    else if (days !== null && days > 30) banner = { tone: 'warn', text: `Warning: stale, no successful deploy for ${days} days` };
-    else if (days !== null && days > 14) banner = { tone: 'neutral', text: `Notice: aging, no successful deploy for ${days} days` };
+    const days = lastOk ? Math.floor((Date.now() - new Date(lastOk.started_at).getTime()) / 86_400_000) : null;
+    if (fails >= 3) {
+      banner = { tone: 'bad', text: `${fails} failures in a row` };
+    } else if (fails >= 2) {
+      banner = { tone: 'warn', text: `${fails} consecutive failures` };
+    } else if (!lastOk) {
+      banner = { tone: 'warn', text: 'No successful deploy on record' };
+    } else if (days !== null && days > 30) {
+      banner = { tone: 'warn', text: `Stale: no deploy for ${days}d` };
+    }
   }
+
   return { fe: comp('frontend'), be: comp('backend'), banner };
 }
 
-/* ---------- node ---------- */
-const trunc = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 } as const;
-const MONO = 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)';
-
-function CompRow({ label, c }: { label: 'FE' | 'BE'; c: Comp | undefined }) {
-  const refs = c ? [c.branch, c.version && c.version !== c.branch ? c.version : null].filter(Boolean) as string[] : [];
-  if (!refs.length) return null;
-  return (
-    <>
-      <span style={{ fontSize: 11.5, fontWeight: 700, color: label === 'FE' ? 'var(--fe-text, var(--accent-text))' : 'var(--be-text, var(--ok-text))' }}>{label}</span>
-      <span className="tnum" style={{ ...trunc, fontSize: 12.5, color: 'var(--text)' }} title={refs.join(' · ')}>{refs[0]}</span>
-      <span className="muted tnum" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{c?.at ? ago(c.at) : ''}</span>
-    </>
-  );
-}
-
-function Node({ r, step, p, col, dv, probed }: { r: HealthRow; step: number; p: Probe | undefined; col: Col | undefined; dv: Derived | undefined; probed: boolean }) {
-  const failed = !!(col?.health.latest && /fail/i.test(col.health.latest.status));
-  const d = dur(r.duration_seconds);
-  const special = r.deployment_type && /hotfix|rollback/i.test(r.deployment_type);
-  const fe = dv?.fe, be = dv?.be;
-  const headline = realVersion(r.version) ?? realVersion(fe?.version) ?? realVersion(be?.version) ?? r.branch ?? r.version ?? 'unknown';
-  const host = hostOf(p);
-  const hasComp = !!(fe && (fe.branch || fe.version)) || !!(be && (be.branch || be.version));
-  const bn = dv?.banner;
-  const bt = bn ? (bn.tone === 'neutral' ? 'info' : bn.tone) : null;
-  const sep = bn ? bn.text.indexOf(':') : -1;
-  const live = !!col?.activeDeploy;
-  const queued = !!col?.queuedDeploy; // waiting behind a running deploy: shown separately, never as running
-  const awaiting = !!col?.awaitingDeploy; // paused on an approval: shown separately, never as running
-  const pills = (live || queued || awaiting || failed || special) && (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      {live && <Pill tone="info" icon={false}><span className="is-live" aria-hidden="true" style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--info)', marginRight: 5 }} />In progress</Pill>}
-      {awaiting && <Pill tone="info" glyph={AWAITING_GLYPH}>{AWAITING_TEXT}</Pill>}
-      {queued && <Pill tone="warn" glyph={QUEUED_GLYPH}>{QUEUED_TEXT}</Pill>}
-      {failed && <Pill tone="bad">Last deploy failed</Pill>}
-      {special && <Pill tone="warn">{r.deployment_type}</Pill>}
-    </div>
-  );
-  const stripe = failed || p?.status === 'OFFLINE' ? 'bad' : p?.status === 'DEGRADED' ? 'warn' : p ? 'ok' : 'border-bright';
-  return (
-    <article id={`env-${slug(r.environment)}`} className="re-card fade-in" aria-label={r.environment} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', minWidth: 0, height: '100%', overflow: 'hidden', background: 'var(--surface, transparent)', border: `1px solid color-mix(in srgb, var(--${stripe}) 38%, var(--border))`, borderRadius: 'var(--r-md, 8px)', boxShadow: `0 1px 0 color-mix(in srgb, var(--${stripe}) 55%, transparent) inset` }}>
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, minWidth: 0 }}>
-        <span className="muted tnum" aria-hidden="true" style={{ flex: 'none', width: 22, height: 22, borderRadius: '50%', border: '1px solid var(--border-bright, var(--border))', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{step}</span>
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 110px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }} title={r.environment}>{r.environment}</h3>
-            {r.is_production && <Chip title="Production environment">PROD</Chip>}
-          </div>
-          {host && <span style={{ ...trunc, fontSize: 11.5, color: 'var(--faint)' }} title={p?.url ?? host}>{p?.region || regionOf(host)}</span>}
-        </div>
-        <div style={{ marginLeft: 'auto', flex: '0 0 auto' }}>
-          {p ? <Pill tone={PROBE_TONE[p.status]}>{p.status[0] + p.status.slice(1).toLowerCase()} <span className="tnum">{Math.round(p.latencyMs)} ms</span></Pill>
-            : <Pill tone="neutral">{probed ? 'No probe' : 'Probing…'}</Pill>}
-        </div>
-      </div>
-      {bn && bt && (
-        <div role="status" style={{ fontSize: 12, padding: '3px 8px', borderLeft: `3px solid var(--${bt})`, background: `var(--${bt}-bg)`, color: `var(--${bt}-text)`, borderRadius: '0 var(--r-sm) var(--r-sm) 0', overflowWrap: 'anywhere' }}>
-          {sep > 0 ? <><strong>{bn.text.slice(0, sep)}</strong>{bn.text.slice(sep)}</> : bn.text}
-        </div>
-      )}
-      {r.version || fe || be ? (
-        <>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
-            <span className="mono tnum" style={{ ...trunc, fontFamily: MONO, fontSize: 20, lineHeight: 1.2, fontWeight: 600 }} title={headline}>{headline}</span>
-            {r.branch && r.branch !== headline && <span className="muted" style={{ ...trunc, fontSize: 11, padding: '0 6px', borderRadius: 'var(--r-xs)', border: '1px solid var(--border)', flex: '0 1 auto' }} title={r.branch}>{r.branch}</span>}
-          </div>
-          {pills}
-          {hasComp && (
-            <div style={{ display: 'grid', gridTemplateColumns: '20px minmax(0, 1fr) auto', columnGap: 8, rowGap: 2, alignItems: 'baseline' }}>
-              <CompRow label="FE" c={fe} />
-              <CompRow label="BE" c={be} />
-            </div>
-          )}
-          <div style={{ ...trunc, fontSize: 12, color: 'var(--info-text)' }} title={`deployed ${ago(r.last_deployed_at)}${d ? ` · ${d}` : ''}`}>
-            deployed {ago(r.last_deployed_at)}{d ? ` · ${d}` : ''}
-          </div>
-        </>
-      ) : (
-        <>
-          {pills}
-          <p className="empty">No deployments yet</p>
-        </>
-      )}
-    </article>
-  );
-}
-
-/* ---------- layout model ---------- */
-// Promotion order: Preview, QA, Demo, Stage*, Pre-Prod*, Production*, LMS, anything else (display_order breaks ties).
-const RANK: RegExp[] = [/^preview\b/i, /^qa\b/i, /^demo/i, /^stage\b/i, /^pre-?prod\b/i, /^production/i, /^lms/i];
-const rankOf = (env: string) => { const i = RANK.findIndex((t) => t.test(env)); return i < 0 ? RANK.length : i; };
-
-const GRID_CSS = `
-.re-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:12px;align-items:stretch;list-style:none;margin:0;padding:0;width:100%}
-.re-grid>li{min-width:0;display:flex;flex-direction:column}
-.re-grid>li>article{flex:1 1 auto}
-.re-card{transition:border-color .15s}
-.re-card:hover{border-color:var(--border-bright,var(--border))!important}
-@media (prefers-reduced-motion:reduce){.is-live{animation:none!important}.re-card{transition:none}}
-`;
-
 export default function ReleaseEnvs() {
-  const { pipeline } = useShell();
-  const [rows, setRows] = useState<HealthRow[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [probes, setProbes] = useState<ClusterRes | null>(null);
-  const [probedAt, setProbedAt] = useState<string | null>(null);
-  const [deps, setDeps] = useState<Dep[]>([]);
+  const { refreshKey, envFilter, setEnvFilter } = useShell();
+  const [envs, setEnvs] = useState<HealthRow[] | null>(null);
+  const [probes, setProbes] = useState<Record<string, Probe>>({});
+  const [derivedMap, setDerivedMap] = useState<Record<string, Derived>>({});
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     let alive = true;
-    const load = async () => {
-      // Independent: a cluster-health failure must never hide the nodes.
-      fetch('/api/health', { cache: 'no-store' })
-        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<HealthRow[]>; })
-        .then((j) => { if (alive) { setRows(Array.isArray(j) ? j : []); setErr(null); } })
-        .catch((e) => { if (alive) setErr(e instanceof Error ? e.message : 'Failed to load'); });
-      fetch('/api/deployments?limit=1000', { cache: 'no-store' })
-        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<Dep[]>; })
-        .then((j) => { if (alive && Array.isArray(j)) setDeps(j); })
-        .catch(() => { /* optional enrichment; nodes still render */ });
-      fetch('/api/cluster-health', { cache: 'no-store' })
-        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<ClusterRes>; })
-        .then((j) => { if (alive) { setProbes(j); setProbedAt(j.probed_at ?? new Date().toISOString()); } })
-        .catch(() => { /* keep last known probes; nodes still render */ });
+    setLoading(true);
+
+    Promise.allSettled([
+      fetch('/api/health', { cache: 'no-store' }).then((r) => r.json()),
+      fetch('/api/cluster-health', { cache: 'no-store' }).then((r) => r.json()),
+      fetch('/api/deployments?limit=300', { cache: 'no-store' }).then((r) => r.json()),
+    ]).then(([hRes, pRes, dRes]) => {
+      if (!alive) return;
+
+      if (hRes.status === 'fulfilled' && Array.isArray(hRes.value)) {
+        setEnvs(hRes.value);
+      }
+
+      if (pRes.status === 'fulfilled' && pRes.value?.clusters) {
+        const map: Record<string, Probe> = {};
+        for (const p of pRes.value.clusters as Probe[]) {
+          map[p.environment.toLowerCase()] = p;
+        }
+        setProbes(map);
+      }
+
+      if (dRes.status === 'fulfilled') {
+        const val = dRes.value;
+        const dList: Dep[] = Array.isArray(val) ? val : Array.isArray(val?.deployments) ? val.deployments : [];
+        const byEnv: Record<string, Dep[]> = {};
+        for (const d of dList) {
+          if (!byEnv[d.environment]) byEnv[d.environment] = [];
+          byEnv[d.environment].push(d);
+        }
+        const derived: Record<string, Derived> = {};
+        for (const [env, list] of Object.entries(byEnv)) {
+          derived[env] = derive(list);
+        }
+        setDerivedMap(derived);
+      }
+
+      setLoading(false);
+    });
+
+    return () => {
+      alive = false;
     };
-    load();
-    const t = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 90_000);
-    return () => { alive = false; clearInterval(t); };
-  }, []);
+  }, [refreshKey]);
 
-  const probeMap = useMemo(() => {
-    const m = new Map<string, Probe>();
-    Object.entries(probes?.by_environment ?? {}).forEach(([k, v]) => m.set(k, v));
-    (probes?.clusters ?? []).forEach((c) => m.set(c.environment, c));
-    return m;
-  }, [probes]);
+  if (loading && !envs) {
+    return (
+      <div className="envs-section">
+        <div className="section-header">
+          <h2 className="section-title">Environment Fleet</h2>
+        </div>
+        <div className="envs-grid">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="env-card is-loading">
+              <div className="skeleton-line w-32" />
+              <div className="skeleton-line w-20" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-  const sorted = useMemo(() => (rows ?? []).slice().sort((a, b) => a.display_order - b.display_order), [rows]);
-  const ordered = useMemo(() => sorted.map((r, i) => ({ r, i })).sort((a, b) => rankOf(a.r.environment) - rankOf(b.r.environment) || a.i - b.i).map((x) => x.r), [sorted]);
-  const derived = useMemo(() => {
-    const by = new Map<string, Dep[]>();
-    deps.forEach((d) => { const a = by.get(d.environment); if (a) a.push(d); else by.set(d.environment, [d]); });
-    const m = new Map<string, Derived>();
-    by.forEach((v, k) => m.set(k, derive(v)));
-    return m;
-  }, [deps]);
-  const colFor = (env: string) => pipeline?.columns.find((c) => c.environments.includes(env));
+  const sortedEnvs = (envs || []).slice().sort((a, b) => a.display_order - b.display_order);
 
   return (
-    <section aria-labelledby="release-envs-h" style={{ minWidth: 0 }}>
-      <style>{GRID_CSS}</style>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)', flexWrap: 'wrap', marginBottom: 'var(--space-3, 12px)' }}>
-        <h2 id="release-envs-h" className="section-h" style={{ fontSize: 'var(--fs-xs)', fontVariant: 'small-caps', textTransform: 'lowercase', letterSpacing: '.08em', color: 'var(--muted)', fontWeight: 600 }}>Environments</h2>
-        <span className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
-          {probedAt ? `live probes updated ${new Date(probedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'live probes pending'}
-        </span>
-        <span className="muted" style={{ fontSize: 'var(--fs-xs)', marginLeft: 'auto' }}>Cards are in promotion order</span>
-      </div>
-      {err && !rows ? <ErrorNote>Could not load environments ({err}).</ErrorNote>
-        : !rows ? <Skeleton rows={3} />
-        : (
-          <ul className="re-grid">
-            {ordered.map((r, i) => (
-              <li key={r.environment}>
-                <Node r={r} step={i + 1} p={probeMap.get(r.environment)} col={colFor(r.environment)} dv={derived.get(r.environment)} probed={!!probes} />
-              </li>
-            ))}
-          </ul>
+    <div className="envs-section">
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">Environment Fleet</h2>
+          <p className="section-subtitle">
+            Live cluster health, active runtime versions and deployment status across all tiers
+          </p>
+        </div>
+
+        {envFilter && (
+          <button
+            type="button"
+            className="btn btn-sm btn-secondary"
+            onClick={() => setEnvFilter(null)}
+          >
+            Clear Filter ({envFilter})
+          </button>
         )}
-    </section>
+      </div>
+
+      <div className="envs-grid">
+        {sortedEnvs.map((env) => {
+          const probe = probes[env.environment.toLowerCase()];
+          const dv = derivedMap[env.environment];
+          const isSelected = envFilter === env.environment;
+          const region = regionOf(env.environment, probe?.host);
+          const slug = env.environment.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+          // Health status
+          const probeStatus = probe?.status ?? 'UNKNOWN';
+          const isProbeHealthy = probeStatus === 'HEALTHY';
+          const isProbeDegraded = probeStatus === 'DEGRADED';
+          const isProbeOffline = probeStatus === 'OFFLINE';
+
+          return (
+            <div
+              key={env.environment}
+              id={`env-${slug}`}
+              className={`env-card ${env.is_production ? 'is-production' : ''} ${
+                isSelected ? 'is-selected' : ''
+              }`}
+            >
+              {/* Card Top: Name + Badges */}
+              <div className="env-card-top">
+                <div className="env-title-block">
+                  <div className="env-name-row">
+                    <Server size={15} className={env.is_production ? 'text-prod' : 'text-accent'} />
+                    <h3 className="env-name">{env.environment}</h3>
+                  </div>
+                  <div className="env-badges-row">
+                    <span className="env-region-chip">{region}</span>
+                    {env.is_production && <span className="env-prod-chip">PROD</span>}
+                  </div>
+                </div>
+
+                {/* Live Probe Latency */}
+                {probe && (
+                  <div
+                    className={`env-probe-pill status-${probeStatus.toLowerCase()}`}
+                    title={probe.url ? `Probing: ${probe.url}` : undefined}
+                  >
+                    <span className="probe-dot" />
+                    <span className="probe-latency tnum">{probe.latencyMs}ms</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Stale / Failure Warning Banner */}
+              {dv?.banner && (
+                <div className={`env-card-alert tone-${dv.banner.tone}`}>
+                  <AlertTriangle size={12} className="flex-none" />
+                  <span>{dv.banner.text}</span>
+                </div>
+              )}
+
+              {/* Active Versions (FE / BE) */}
+              <div className="env-components-box">
+                {/* Frontend */}
+                <div className="comp-row">
+                  <span className="comp-tag is-fe">FE</span>
+                  <div className="comp-details">
+                    <span className="comp-branch tnum" title={dv?.fe?.branch || env.branch || '—'}>
+                      {dv?.fe?.branch || env.branch || '—'}
+                    </span>
+                    {dv?.fe?.version && realVersion(dv.fe.version) && (
+                      <span className="comp-version">{dv.fe.version}</span>
+                    )}
+                  </div>
+                  <span className="comp-time">{dv?.fe?.at ? ago(dv.fe.at) : ''}</span>
+                </div>
+
+                {/* Backend */}
+                <div className="comp-row">
+                  <span className="comp-tag is-be">BE</span>
+                  <div className="comp-details">
+                    <span className="comp-branch tnum" title={dv?.be?.branch || env.branch || '—'}>
+                      {dv?.be?.branch || env.branch || '—'}
+                    </span>
+                    {dv?.be?.version && realVersion(dv.be.version) && (
+                      <span className="comp-version">{dv.be.version}</span>
+                    )}
+                  </div>
+                  <span className="comp-time">{dv?.be?.at ? ago(dv.be.at) : ''}</span>
+                </div>
+              </div>
+
+              {/* Card Footer: Status + Actions */}
+              <div className="env-card-footer">
+                <div className="env-deploy-meta">
+                  {env.status ? (
+                    <StatusPill status={env.status} />
+                  ) : (
+                    <span className="muted-text">No runs recorded</span>
+                  )}
+                  {env.last_deployed_at && (
+                    <span className="env-deploy-time tnum" title={new Date(env.last_deployed_at).toLocaleString()}>
+                      {ago(env.last_deployed_at)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="env-actions">
+                  <button
+                    type="button"
+                    className={`env-filter-btn ${isSelected ? 'is-active' : ''}`}
+                    onClick={() => setEnvFilter(isSelected ? null : env.environment)}
+                    title="Filter deployment history by this environment"
+                  >
+                    <Filter size={13} />
+                    <span>{isSelected ? 'Filtered' : 'Filter'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

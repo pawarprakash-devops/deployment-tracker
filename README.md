@@ -6,16 +6,14 @@ Deployment tracking, release-governance and delivery-metrics dashboard for VidAI
 
 ## Pages
 
-Everything is one page with tabs: `/?tab=<id>` (the default, `/`, is Deployments). The tab and the shell (top bar, theme, health dots) are shared; the old URLs redirect (`next.config.ts`): `/classic` → `/`, `/jira` → `?tab=tickets`, `/admin` → `?tab=insights`, `/health` → `?tab=health`, `/home` → `?tab=my-view`, `/pipeline` → `?tab=pipeline`.
+The tracker focuses on two dedicated views with shared topbar telemetry, live fleet health indicators, and a working `⌘K` command palette:
 
 | Tab | What it is |
 |-----|-----------|
-| **Deployments** (`/`) | Admin toolbar (Refresh, Export JSON, sign-in; when admin: Deploy release, Targets, Import JSON, Sign out), telemetry tiles and 14-day timeline, environment cards (live probe, FE/BE branch + version, last FE/BE deploy, failure/stale banner), promotion radar and QA release windows (approval gate), then the full deployment history: filters, sorting, select-two compare (commits and files via `/api/compare`), detail drawer, Edit/Delete for admins; the Ticket / Notes column shows the workflow-run link, FE/BE/PR links and notes |
-| **Pipeline** | Board of tickets by furthest environment with a ticket drawer (journey stepper, per-env state) from `GET /api/pipeline` |
-| **My view** | Role lenses (Developer, QA, Release, Management); the lens is kept in `localStorage` `tracker-lens` and `?as=dev\|qa\|rel\|mgmt`. A lens changes the view only, it grants no permissions |
-| **Tickets** | The Jira dashboard, **open to everyone** (no sign-in; set `JIRA_PUBLIC_READ=false` to require an admin session again): filter bar, KPI tiles, sprint, bugs, ready-to-ship, stuck tickets, bug trends, lead time, release notes, ticket explorer with CSV export, tickets-by-environment. Needs `JIRA_*` env vars |
-| **Insights** | Delivery metrics (admin sign-in): headline tiles, DORA suite, by environment / status, recent failures, longest runs, operator leaderboard, recovery audit trail (`GET /api/admin/stats`) |
-| **Health** | Per-environment live probe (`/api/cluster-health`), freshness and last successful deploy (`/api/health`) |
+| **Deployments** (`/`) | Main fleet dashboard: admin toolbar (Deploy release, Targets, Import/Export JSON, session sign-in), focal status pulse, headline telemetry tiles and 14-day delivery timeline, environment fleet cards (live health probe latency, FE/BE active branch and version, stale/failure warning), promotion radar with unmerged commit drift analysis and QA release windows, and the complete filterable deployment history table with compare modal and detail slide-over drawer |
+| **Insights** (`/?tab=insights`) | Delivery engineering metrics (operator sign-in): headline tiles, full DORA suite (Deployment Frequency, Lead Time for Changes, Change Failure Rate, Mean Time to Recovery), distribution by environment and status, recent failures, longest runs, operator leaderboard, and automated recovery audit trail (`GET /api/admin/stats`) |
+
+Legacy URLs redirect automatically (`next.config.ts`): `/classic`, `/jira`, `/tickets`, `/health`, `/home`, `/pipeline`, `/my-view` → `/`, and `/admin` → `/?tab=insights`.
 
 Sections inside a tab are standalone components that talk through window events: `tracker:data-changed`, `tracker:refresh`, `tracker:compare`, `tracker:edit-deployment`, `tracker:delete-deployment`, `tracker:auth-changed`. `AdminGate` shows a sign-in card on Tickets and Insights for non-admins.
 
@@ -50,13 +48,11 @@ The deploy workflows add an optional `tracker` object to the `POST /api/webhook`
 
 | Surface | From metadata | Fallback |
 |---|---|---|
-| Board columns (`lib/pipeline.ts`) | `column_id`, `column_label`, rank from `env_group` (preview 0, demo/qa 1, stage 2, preprod 3 for column `preprod` else 3.5, prod 4, lms/other 1 or 4 if production) | `columnOf` name regexes (`lib/env-meta.ts`) |
-| Ticket journey / QA lens | column `group` (`PipelineColumn.group`) | group derived from the column id |
-| Tickets matrix order | `display_order` | `ENV_ORDER` list (`/api/environments` unavailable) |
+| Environment cards order | `display_order` | `environments` table order |
 | Compare branch | `branch` | `ENV_DEFAULT_BRANCH` |
 | Drift pairs | every env with `promotes_from` + `branch` (deduped, overrides the same pair) | static `PAIRS` |
 | Insights region · cluster chip | `region`, `cluster` | `ENV_CLUSTER` / name regex |
-| Live probes + card region | `api_url`, `region` | static `PROBE_TARGETS` for envs without an `api_url` (merged by env name and URL, nothing probed twice) / host regex |
+| Live probes + card region | `api_url`, `region` | static `PROBE_TARGETS` for envs without an `api_url` / host regex |
 
 Tests for the validation and column/rank mapping: `npm test` (`node --test`, no extra dependency).
 

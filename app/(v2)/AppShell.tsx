@@ -1,75 +1,226 @@
 'use client';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
-import { LENSES, useShell } from './ctx';
-import TicketDrawer from './TicketDrawer';
+import { useEffect, useState } from 'react';
+import {
+  Rocket,
+  BarChart3,
+  Search,
+  RefreshCw,
+  Sun,
+  Moon,
+  Shield,
+  Activity,
+  CheckCircle2,
+  AlertTriangle,
+} from 'lucide-react';
+import { useShell, type FleetCluster } from './ctx';
 import { TABS, isTab, tabHref } from './tabs';
-import { EnvDot, type Tone } from './ui';
-
-type ThemeMode = 'light' | 'dark' | null;
+import CommandPalette from './CommandPalette';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const rawTab = useSearchParams().get('tab');
   const tab = isTab(rawTab) ? rawTab : 'deployments';
-  const { lens, setLens, pipeline, updatedAt } = useShell();
-  const [theme, setTheme] = useState<ThemeMode>(null);
-  const searchRef = useRef<HTMLButtonElement>(null);
+  const {
+    theme,
+    toggleTheme,
+    setSearchOpen,
+    updatedAt,
+    refresh,
+    clusters,
+    setClusters,
+  } = useShell();
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Check auth session
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('tracker-theme');
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- browser-only storage read after hydration
-      if (saved === 'light' || saved === 'dark') setTheme(saved);
-    } catch { /* ignore */ }
+    fetch('/api/auth/session')
+      .then((r) => r.json())
+      .then((d) => setIsAdmin(!!d.authenticated))
+      .catch(() => setIsAdmin(false));
+
+    const onAuth = () => {
+      fetch('/api/auth/session')
+        .then((r) => r.json())
+        .then((d) => setIsAdmin(!!d.authenticated))
+        .catch(() => setIsAdmin(false));
+    };
+    window.addEventListener('tracker:auth-changed', onAuth);
+    return () => window.removeEventListener('tracker:auth-changed', onAuth);
   }, []);
-  const toggleTheme = () => {
-    const dark = theme ? theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const next: ThemeMode = dark ? 'light' : 'dark';
-    setTheme(next);
-    try { localStorage.setItem('tracker-theme', next as string); } catch { /* ignore */ }
+
+  // Fetch cluster health probes for topbar fleet summary
+  useEffect(() => {
+    let alive = true;
+    const loadHealth = async () => {
+      try {
+        const res = await fetch('/api/cluster-health', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = (await res.json()) as { clusters?: FleetCluster[] };
+        if (alive && Array.isArray(data.clusters)) {
+          setClusters(data.clusters);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    loadHealth();
+    const interval = setInterval(loadHealth, 90_000);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, [setClusters]);
+
+  const handleManualRefresh = () => {
+    setIsRefreshing(true);
+    refresh();
+    setTimeout(() => setIsRefreshing(false), 600);
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); searchRef.current?.focus(); }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
-
-  const dots = (pipeline?.columns ?? []).map((c) => {
-    const s = (c.health.latest?.status ?? '').toLowerCase();
-    const tone: Tone = !s ? 'neutral' : /fail/.test(s) ? 'bad' : /progress|awaiting approval/.test(s) ? 'info' : /success/.test(s) ? 'ok' : 'warn';
-    return { id: c.id, tone, label: `${c.name}: ${c.health.latest?.status ?? 'no deployments'}` };
-  });
+  // Fleet health calculation
+  const totalClusters = clusters?.length ?? 0;
+  const offlineCount = clusters?.filter((c) => c.status === 'OFFLINE').length ?? 0;
+  const degradedCount = clusters?.filter((c) => c.status === 'DEGRADED').length ?? 0;
+  const isAllHealthy = totalClusters > 0 && offlineCount === 0 && degradedCount === 0;
 
   return (
-    <div className="v2" data-theme={theme ?? undefined}>
-      <div className="app">
-        <header className="topbar">
-          <span className="logo"><b>Vid</b>AI Delivery</span>
-          {tab === 'my-view' && (
-            <div className="lens" role="group" aria-label="Role lens">
-              {LENSES.map((l) => (
-                <button key={l.id} aria-pressed={lens === l.id} onClick={() => setLens(l.id)}>{l.label}</button>
-              ))}
+    <div className="v3" data-theme={theme}>
+      <header className="topbar">
+        <div className="topbar-left">
+          <Link href="/" className="logo">
+            <div className="logo-icon-wrap">
+              <Rocket size={17} className="logo-icon" />
+            </div>
+            <span className="logo-text">
+              <span className="logo-highlight">Vid</span>AI Delivery
+            </span>
+          </Link>
+
+          {/* Fleet Health Quick Pill */}
+          {totalClusters > 0 && (
+            <div
+              className={`fleet-health-pill ${
+                offlineCount > 0 ? 'is-offline' : degradedCount > 0 ? 'is-degraded' : 'is-healthy'
+              }`}
+              title={
+                isAllHealthy
+                  ? `All ${totalClusters} environments online and responsive`
+                  : `${offlineCount} offline, ${degradedCount} degraded of ${totalClusters}`
+              }
+            >
+              <span className="fleet-health-dot" />
+              <span className="fleet-health-text">
+                {isAllHealthy ? (
+                  <>
+                    <CheckCircle2 size={12} className="inline-icon" />
+                    <span>{totalClusters} Systems Healthy</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle size={12} className="inline-icon" />
+                    <span>
+                      {offlineCount > 0 ? `${offlineCount} Offline` : `${degradedCount} Degraded`}
+                    </span>
+                  </>
+                )}
+              </span>
             </div>
           )}
-          <span className="spacer" />
-          <button className="search" ref={searchRef} aria-label="Search tickets, versions, branches (coming soon)">Search ticket, version…<kbd>⌘K</kbd></button>
-          <div className="dots" aria-label="Environment health">{dots.map((d) => <EnvDot key={d.id} tone={d.tone} label={d.label} />)}</div>
-          <span className="muted tnum" style={{ fontSize: 'var(--fs-xs)', whiteSpace: 'nowrap' }} suppressHydrationWarning>
-            {updatedAt ? `updated ${new Date(updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'loading…'}
-          </span>
-          <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle light or dark theme">Theme</button>
-        </header>
-        <nav className="nav" aria-label="Main">
-          {TABS.map((t) => <Link key={t.id} href={tabHref(t.id)} aria-current={tab === t.id ? 'page' : undefined}>{t.label}</Link>)}
+        </div>
+
+        {/* Center Nav Tabs */}
+        <nav className="tab-nav" aria-label="Main Navigation">
+          {TABS.map((t) => {
+            const active = tab === t.id;
+            return (
+              <Link
+                key={t.id}
+                href={tabHref(t.id)}
+                className={`tab-link ${active ? 'is-active' : ''}`}
+                aria-current={active ? 'page' : undefined}
+              >
+                {t.id === 'deployments' ? (
+                  <Rocket size={14} className="tab-icon" />
+                ) : (
+                  <BarChart3 size={14} className="tab-icon" />
+                )}
+                <span>{t.label}</span>
+              </Link>
+            );
+          })}
         </nav>
-        <main className="main" id="main">{children}</main>
-      </div>
-      <TicketDrawer />
+
+        {/* Right Actions */}
+        <div className="topbar-right">
+          {/* Command Search Trigger */}
+          <button
+            type="button"
+            className="search-trigger"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search deployments and actions (⌘K)"
+          >
+            <Search size={14} className="search-icon" />
+            <span className="search-placeholder">Quick search...</span>
+            <kbd className="search-kbd">⌘K</kbd>
+          </button>
+
+          {/* Refresh Button */}
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={handleManualRefresh}
+            title="Refresh fleet data"
+            aria-label="Refresh data"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'spin' : ''} />
+          </button>
+
+          {/* Theme Toggle */}
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+
+          {/* Admin badge */}
+          {isAdmin && (
+            <div className="admin-status-badge" title="Operator mode active">
+              <Shield size={12} />
+              <span>Admin</span>
+            </div>
+          )}
+
+          {/* Live updated stamp */}
+          <div className="updated-stamp" suppressHydrationWarning>
+            {updatedAt ? (
+              <span>
+                {new Date(updatedAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+              </span>
+            ) : (
+              'Syncing...'
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content View */}
+      <main className="main-content" id="main">
+        {children}
+      </main>
+
+      {/* Global ⌘K Command Palette */}
+      <CommandPalette />
     </div>
   );
 }

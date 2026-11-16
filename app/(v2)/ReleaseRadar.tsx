@@ -1,246 +1,340 @@
 'use client';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Card, Chip, Skeleton, ago } from './ui';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  GitPullRequest,
+  GitCommit,
+  Clock,
+  ArrowRight,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Loader2,
+  Layers,
+  Sparkles,
+} from 'lucide-react';
+import { useShell } from './ctx';
 
-type Which = 'backend' | 'frontend';
-interface Commit { sha: string; message: string; author?: string; url: string }
-interface Promotion { number: number; url: string; mergedAt: string }
-interface Pair { baseRef?: string; from: string; to: string; fromEnv: string; toEnv: string; basis?: 'promotion-pr' | 'branch-compare'; promotion?: Promotion; pending?: number; error?: string; missingBranch?: string }
-interface Detail { loading: boolean; error?: string; commits: Commit[]; total: number; truncated: boolean; compareUrl?: string }
+type Repo = 'backend' | 'frontend';
 
-const SHOWN = 30;
-const WINDOWS = [{ label: '1:30 PM', start: 13.5 * 3600 }, { label: '4:00 PM', start: 16 * 3600 }];
-const OPEN_SECS = 15 * 60; // a window stays open for 15 minutes (matches the legacy countdown)
-const CSS = '.rr-row:hover{background:rgba(127,127,127,.09)}.rr-btn:focus-visible,.rr-h:focus-visible{outline:2px solid var(--focus-ring,currentColor);outline-offset:2px;border-radius:4px}';
-const key = (p: { from: string; to: string }) => `${p.from}>${p.to}`;
-
-// Seconds since midnight in IST (fixed UTC+5:30, no DST).
-const istSecs = (ms: number) => Math.floor((ms + 5.5 * 3600_000) / 1000) % 86400;
-const fmt = (s: number) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; };
-
-const mono = { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)' } as const;
-const mutedText = { color: 'var(--muted, #8a8f98)' } as const;
-const sectionH = { margin: 0, fontSize: 'var(--fs-sm, 13px)', fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase' as const, ...mutedText };
-
-function CheckIcon() {
-  return (
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none', color: 'var(--ok, #2da44e)' }}><circle cx="12" cy="12" r="9" /><path d="m8 12.5 2.8 2.8L16 9.5" /></svg>
-  );
+interface Commit {
+  sha: string;
+  message: string;
+  author?: string;
+  url: string;
 }
 
-function WaitingToShip() {
-  const uid = useId();
-  const [which, setWhich] = useState<Which>('backend');
-  const [pairs, setPairs] = useState<Pair[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
-  const [detail, setDetail] = useState<Detail | null>(null);
-  const [filter, setFilter] = useState('');
-  const whichRef = useRef<Which>('backend');
-  const reqRef = useRef(0);
-
-  // Open a pair's commit list (always opens, never closes).
-  const show = useCallback((p: Pair) => {
-    const req = ++reqRef.current;
-    setFilter('');
-    setOpen(key(p));
-    setDetail({ loading: true, commits: [], total: p.pending ?? 0, truncated: false });
-    const fail = (error: string) => { if (req === reqRef.current) setDetail({ loading: false, error, commits: [], total: p.pending ?? 0, truncated: false }); };
-    fetch(`/api/drift/commits?repo=${whichRef.current}&base=${encodeURIComponent(p.baseRef || p.to)}&head=${encodeURIComponent(p.from)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) return fail(String(d.error));
-        if (req === reqRef.current) setDetail({ loading: false, commits: d.commits ?? [], total: d.total ?? 0, truncated: !!d.truncated, compareUrl: d.compareUrl });
-      })
-      .catch((e) => fail(e instanceof Error ? e.message : 'Failed to load'));
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    const load = () => {
-      fetch(`/api/drift?repo=${which}`, { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((d) => {
-          if (!alive) return;
-          if (d.error || !Array.isArray(d.pairs)) { setFailed(true); return; }
-          setFailed(false); setPairs(d.pairs);
-        })
-        .catch(() => { if (alive) setFailed(true); });
-    };
-    load();
-    const t = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 300_000);
-    return () => { alive = false; clearInterval(t); };
-  }, [which]);
-
-  const choose = useCallback((w: Which) => {
-    whichRef.current = w; reqRef.current++;
-    setWhich(w); setPairs(null); setFailed(false); setOpen(null); setDetail(null); setFilter('');
-  }, []);
-
-  const collapse = () => { reqRef.current++; setOpen(null); setDetail(null); setFilter(''); };
-  const toggle = (p: Pair) => (open === key(p) ? collapse() : show(p));
-
-  const waiting = (pairs ?? []).filter((p) => !p.error && (p.pending ?? 0) > 0).sort((a, b) => (b.pending ?? 0) - (a.pending ?? 0));
-  const errored = (pairs ?? []).filter((p) => p.error);
-  const synced = (pairs ?? []).filter((p) => !p.error && (p.pending ?? 0) === 0);
-  const inSync = synced.length;
-  const total = waiting.reduce((n, p) => n + (p.pending ?? 0), 0);
-
-  const toggles = (
-    <div role="group" aria-label="Repository" style={{ display: 'flex', gap: 6 }}>
-      {(['backend', 'frontend'] as const).map((w) => (
-        <button key={w} type="button" className="btn" aria-pressed={which === w} onClick={() => choose(w)}>{w === 'backend' ? 'Backend' : 'Frontend'}</button>
-      ))}
-    </div>
-  );
-
-  const panel = (p: Pair, id: string) => {
-    const shown = detail?.commits.filter((c) => !filter || `${c.message} ${c.author ?? ''}`.toLowerCase().includes(filter.toLowerCase())).slice(0, SHOWN) ?? [];
-    return (
-      <div id={id} role="region" aria-labelledby={`${id}-h`} style={{ padding: '4px 8px 14px' }}>
-        <h3 id={`${id}-h`} className="rr-h" style={{ margin: '0 0 6px', fontSize: 'var(--fs-sm, 13px)', fontWeight: 600 }}>Commits waiting: {p.fromEnv} → {p.toEnv}</h3>
-        {detail?.loading && <Skeleton rows={3} />}
-        {detail?.error && <p className="muted" style={{ margin: 0 }}>Could not load commits ({detail.error}).</p>}
-        {detail && !detail.loading && !detail.error && detail.commits.length === 0 && <p className="muted" style={{ margin: 0 }}>No pending commits.</p>}
-        {detail && !detail.loading && detail.commits.length > 0 && (
-          <>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '4px 0 8px' }}>
-              <input type="search" className="search" aria-label="Filter commits" placeholder="Filter by message or author" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
-              {detail.compareUrl && <a href={detail.compareUrl} target="_blank" rel="noopener noreferrer">Open compare ↗</a>}
-            </div>
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, fontSize: 'var(--fs-sm, 13px)', maxHeight: 360, overflowY: 'auto' }}>
-              {shown.map((c) => (
-                <li key={c.sha}><a href={c.url} target="_blank" rel="noopener noreferrer"><Chip>{c.sha}</Chip></a> {c.message} {c.author && <span className="muted">· {c.author}</span>}</li>
-              ))}
-              {shown.length === 0 && <li className="muted">No commits match the filter.</li>}
-            </ul>
-            {(detail.truncated || detail.total > SHOWN) && (
-              <p className="muted" style={{ margin: '8px 0 0', fontSize: 'var(--fs-sm, 13px)' }}>Showing the newest {Math.min(SHOWN, detail.commits.length)} of {detail.total}{detail.truncated ? ' (list truncated by GitHub)' : ''}.</p>
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <section className="panel-quiet fade-in" aria-labelledby={`${uid}-title`} style={{ scrollMarginTop: 16 }}>
-      <style>{CSS}</style>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 'var(--space-2, 8px)' }}>
-        <h2 id={`${uid}-title`} className="section-h" style={sectionH}>Waiting to ship</h2>
-        {toggles}
-      </div>
-      <p className="muted" style={{ margin: '0 0 var(--space-3, 12px)', fontSize: 13 }}>Commits merged upstream since the last promotion PR. A leading ~ means no promotion PR was found, so the count can over-state.</p>
-      <div aria-live="polite">
-        {failed && <p className="muted" style={{ margin: 0 }}>Promotion drift is unavailable (needs GH_TOKEN)</p>}
-        {!failed && !pairs && <Skeleton rows={3} />}
-        {!failed && pairs && pairs.length === 0 && <p className="muted" style={{ margin: 0 }}>No promotion pairs configured.</p>}
-        {!failed && pairs && pairs.length > 0 && waiting.length === 0 && errored.length === 0 && (
-          <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}><CheckIcon />Nothing is waiting to ship</p>
-        )}
-      </div>
-      {!failed && pairs && (waiting.length > 0 || errored.length > 0 || synced.length > 0) && (
-        <>
-          {waiting.length > 0 && <p className="tnum" style={{ margin: '0 0 6px', fontSize: 13, ...mutedText }}>{total} commits waiting across {waiting.length} {waiting.length === 1 ? 'pair' : 'pairs'} · {inSync} in sync</p>}
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--border, rgba(127,127,127,.25))' }}>
-            {waiting.map((p, i) => {
-              const k = key(p), isOpen = open === k, id = `${uid}-p${i}`;
-              const n = p.pending ?? 0;
-              return (
-                <li key={k} style={{ borderBottom: '1px solid var(--border, rgba(127,127,127,.25))' }}>
-                  <div className="rr-row" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, minHeight: 40, padding: '0 8px' }}>
-                    <button type="button" className="rr-btn" aria-expanded={isOpen} aria-controls={isOpen ? id : undefined} onClick={() => toggle(p)} style={{ all: 'unset', boxSizing: 'border-box', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, minHeight: 40, fontSize: 14 }}>
-                      <span aria-hidden="true" style={{ fontSize: 12, width: 12 }}>{isOpen ? '▾' : '▸'}</span>
-                      <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{p.fromEnv} → {p.toEnv}</span>
-                      <span className="mono tnum" style={mono}>· {p.basis === 'branch-compare' ? '~' : ''}{n} {n === 1 ? 'commit' : 'commits'}</span>
-                    </button>
-                    <span style={{ fontSize: 13, ...mutedText }}>
-                      {p.promotion ? (
-                        <>· last promotion <a href={p.promotion.url} target="_blank" rel="noopener noreferrer">PR #{p.promotion.number} ↗</a> · {ago(p.promotion.mergedAt)}</>
-                      ) : '· no promotion PR found'}
-                    </span>
-                  </div>
-                  {isOpen && panel(p, id)}
-                </li>
-              );
-            })}
-            {synced.map((p) => (
-              <li key={key(p)} style={{ borderBottom: '1px solid var(--border, rgba(127,127,127,.25))', display: 'flex', flexWrap: 'wrap', gap: '0 10px', alignItems: 'center', minHeight: 40, padding: '0 8px', fontSize: 14 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><CheckIcon /><span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{p.fromEnv} → {p.toEnv}</span></span>
-                <span className="mono tnum" style={mono}>· in sync</span>
-                <span style={{ fontSize: 13, ...mutedText }}>
-                  {p.promotion ? (
-                    <>· last promotion <a href={p.promotion.url} target="_blank" rel="noopener noreferrer">PR #{p.promotion.number} ↗</a> · {ago(p.promotion.mergedAt)}</>
-                  ) : '· no promotion PR found'}
-                </span>
-              </li>
-            ))}
-            {errored.map((p) => (
-              <li key={key(p)} style={{ borderBottom: '1px solid var(--border, rgba(127,127,127,.25))', display: 'flex', gap: 8, alignItems: 'center', minHeight: 40, padding: '0 8px', fontSize: 13, ...mutedText }} title={p.error}>
-                <span style={{ fontWeight: 600 }}>{p.fromEnv} → {p.toEnv}</span><span>· {p.missingBranch ? `${p.missingBranch} not created yet` : 'unavailable'}</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </section>
-  );
+interface Pair {
+  baseRef?: string;
+  from: string;
+  to: string;
+  fromEnv: string;
+  toEnv: string;
+  pending?: number;
+  error?: string;
+  missingBranch?: string;
 }
 
-function QaWindows() {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    const first = setTimeout(tick, 0);
-    const t = setInterval(tick, 30_000);
-    return () => { clearTimeout(first); clearInterval(t); };
-  }, []);
+interface CommitDetail {
+  loading: boolean;
+  error?: string;
+  commits: Commit[];
+  total: number;
+  compareUrl?: string;
+}
 
-  const secs = now === null ? null : istSecs(now);
-  const state = (w: (typeof WINDOWS)[number]) => (secs === null ? 'pending' : secs >= w.start + OPEN_SECS ? 'done' : secs >= w.start ? 'open' : 'pending');
-  const open = WINDOWS.find((w) => state(w) === 'open');
-  const next = WINDOWS.find((w) => state(w) === 'pending');
-  let headline: string | null = null;
-  if (secs !== null) {
-    if (open) headline = `Open now: ${open.label} IST · ${fmt(open.start + OPEN_SECS - secs)} left`;
-    else if (next) headline = `Next: ${next.label} IST · in ${fmt(next.start - secs)}`;
-    else headline = `Next: tomorrow ${WINDOWS[0].label} IST · in ${fmt(86400 + WINDOWS[0].start - secs)}`;
+const WINDOWS = [
+  { label: '1:30 PM IST', start: 13.5 * 3600 },
+  { label: '4:00 PM IST', start: 16.0 * 3600 },
+];
+
+function istSecondsNow(): number {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60_000;
+  const ist = new Date(utc + 5.5 * 3600_000);
+  return ist.getHours() * 3600 + ist.getMinutes() * 60 + ist.getSeconds();
+}
+
+function nextWindowText(): string {
+  const secs = istSecondsNow();
+  for (const w of WINDOWS) {
+    if (secs < w.start) {
+      const diff = w.start - secs;
+      const h = Math.floor(diff / 3600);
+      const m = Math.floor((diff % 3600) / 60);
+      return `${w.label} (in ${h > 0 ? `${h}h ` : ''}${m}m)`;
+    }
   }
-  const statusText = (w: (typeof WINDOWS)[number]) => {
-    const s = state(w);
-    if (s === 'open') return `Open now · ${fmt(w.start + OPEN_SECS - (secs ?? 0))} left`;
-    if (s === 'done') return 'Done for today';
-    return `Upcoming · in ${fmt(w.start - (secs ?? 0))}`;
-  };
-
-  return (
-    <Card title="QA release windows">
-      <div className={`mono tnum${open ? ' is-live' : ''}`} style={{ ...mono, display: 'flex', alignItems: 'center', gap: 8, fontSize: 18, lineHeight: '28px', fontWeight: 600, minHeight: 28 }} aria-live="polite">
-        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none', ...mutedText }}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-        <span>{headline ?? <span className="muted">Calculating…</span>}</span>
-      </div>
-      <ul style={{ listStyle: 'none', margin: 'var(--space-3, 12px) 0', padding: 0, borderTop: '1px solid var(--border, rgba(127,127,127,.25))' }}>
-        {WINDOWS.map((w) => (
-          <li key={w.label} style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', minHeight: 38, borderBottom: '1px solid var(--border, rgba(127,127,127,.25))' }}>
-            <span className="mono tnum" style={{ ...mono, fontSize: 14 }}>{w.label} IST</span>
-            <span className="tnum" style={{ fontSize: 13, ...mutedText }}>{secs === null ? '' : statusText(w)}</span>
-          </li>
-        ))}
-      </ul>
-      <div style={{ margin: '0 0 var(--space-2, 8px)', padding: '8px 12px', borderLeft: '3px solid var(--warn, #d29922)', background: 'var(--warn-bg, rgba(210,153,34,.12))', borderRadius: '0 var(--r-sm, 6px) var(--r-sm, 6px) 0', fontSize: 13, display: 'flex', flexWrap: 'wrap', columnGap: 8, alignItems: 'baseline' }}>
-        <strong style={{ color: 'var(--warn-text, inherit)' }}>Gate: mandatory approval</strong>
-        <span className="muted" style={{ overflowWrap: 'anywhere' }} title="DevOps approval required from Prakash Pawar">@pawarprakash-devops</span>
-      </div>
-      <p className="muted" style={{ margin: 0, fontSize: 13 }}>QA deploys only run in these windows or on manual dispatch</p>
-    </Card>
-  );
+  // Past today's windows: next is 1:30 PM tomorrow
+  const diff = 86400 - secs + WINDOWS[0].start;
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  return `Tomorrow 1:30 PM IST (in ${h}h ${m}m)`;
 }
 
 export default function ReleaseRadar() {
+  const { refreshKey } = useShell();
+  const [repo, setRepo] = useState<Repo>('backend');
+  const [pairs, setPairs] = useState<Pair[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [openPairKey, setOpenPairKey] = useState<string | null>(null);
+  const [detailMap, setDetailMap] = useState<Record<string, CommitDetail>>({});
+  const [windowNotice, setWindowNotice] = useState('');
+
+  // Update QA window countdown
+  useEffect(() => {
+    setWindowNotice(nextWindowText());
+    const t = setInterval(() => setWindowNotice(nextWindowText()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Fetch drift pairs
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetch(`/api/drift?repo=${repo}`, { cache: 'no-store' })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        if (alive) {
+          if (Array.isArray(d.pairs)) {
+            setPairs(d.pairs);
+            setError(null);
+          } else {
+            setError(d.error || 'Invalid drift response');
+          }
+          setLoading(false);
+        }
+      })
+      .catch((e) => {
+        if (alive) {
+          setError(e instanceof Error ? e.message : 'Failed to fetch drift');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [repo, refreshKey]);
+
+  const togglePair = useCallback(
+    (p: Pair) => {
+      const key = `${p.from}>${p.to}`;
+      if (openPairKey === key) {
+        setOpenPairKey(null);
+        return;
+      }
+      setOpenPairKey(key);
+
+      // If already fetched, don't refetch
+      if (detailMap[key] && !detailMap[key].loading) return;
+
+      setDetailMap((prev) => ({
+        ...prev,
+        [key]: { loading: true, commits: [], total: p.pending ?? 0 },
+      }));
+
+      const base = p.baseRef || p.to;
+      fetch(
+        `/api/drift/commits?repo=${repo}&base=${encodeURIComponent(base)}&head=${encodeURIComponent(
+          p.from
+        )}`
+      )
+        .then((r) => r.json())
+        .then((d) => {
+          setDetailMap((prev) => ({
+            ...prev,
+            [key]: {
+              loading: false,
+              commits: d.commits || [],
+              total: d.total ?? p.pending ?? 0,
+              compareUrl: d.compareUrl,
+              error: d.error,
+            },
+          }));
+        })
+        .catch((e) => {
+          setDetailMap((prev) => ({
+            ...prev,
+            [key]: {
+              loading: false,
+              commits: [],
+              total: p.pending ?? 0,
+              error: e instanceof Error ? e.message : 'Failed to load commits',
+            },
+          }));
+        });
+    },
+    [openPairKey, detailMap, repo]
+  );
+
   return (
-    <div className="grid g2" style={{ alignItems: 'start' }}>
-      <WaitingToShip />
-      <QaWindows />
+    <div className="radar-section">
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">Promotion Radar &amp; Drift</h2>
+          <p className="section-subtitle">
+            Unpromoted upstream commits awaiting release across promotion stages
+          </p>
+        </div>
+
+        <div className="radar-header-actions">
+          {/* QA Window Notice */}
+          <div className="qa-window-badge" title="Target deploy windows for QA validation">
+            <Clock size={13} className="text-accent" />
+            <span>Next QA Window:</span>
+            <strong>{windowNotice}</strong>
+          </div>
+
+          {/* Repo Switcher */}
+          <div className="repo-toggle-group">
+            <button
+              type="button"
+              className={`repo-btn ${repo === 'backend' ? 'is-active' : ''}`}
+              onClick={() => {
+                setRepo('backend');
+                setOpenPairKey(null);
+              }}
+            >
+              Backend
+            </button>
+            <button
+              type="button"
+              className={`repo-btn ${repo === 'frontend' ? 'is-active' : ''}`}
+              onClick={() => {
+                setRepo('frontend');
+                setOpenPairKey(null);
+              }}
+            >
+              Frontend
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {loading && !pairs ? (
+        <div className="radar-loading">
+          <Loader2 size={18} className="spin text-muted" />
+          <span>Analyzing promotion branch drift for {repo}...</span>
+        </div>
+      ) : error ? (
+        <div className="radar-empty">
+          <p className="text-danger">{error}</p>
+        </div>
+      ) : (
+        <div className="radar-grid">
+          {pairs?.map((p) => {
+            const pairKey = `${p.from}>${p.to}`;
+            const isOpen = openPairKey === pairKey;
+            const detail = detailMap[pairKey];
+            const hasPending = (p.pending ?? 0) > 0;
+
+            return (
+              <div
+                key={pairKey}
+                className={`radar-card ${hasPending ? 'has-drift' : 'is-synced'} ${
+                  isOpen ? 'is-expanded' : ''
+                }`}
+              >
+                <div className="radar-card-main" onClick={() => togglePair(p)}>
+                  <div className="radar-stages">
+                    <div className="radar-stage">
+                      <span className="stage-env">{p.fromEnv}</span>
+                      <code className="stage-branch">{p.from}</code>
+                    </div>
+
+                    <ArrowRight size={14} className="stage-arrow text-muted" />
+
+                    <div className="radar-stage">
+                      <span className="stage-env">{p.toEnv}</span>
+                      <code className="stage-branch">{p.to}</code>
+                    </div>
+                  </div>
+
+                  <div className="radar-status-area">
+                    {p.error ? (
+                      <span className="radar-tag tag-error">{p.error}</span>
+                    ) : p.missingBranch ? (
+                      <span className="radar-tag tag-missing">Branch not created</span>
+                    ) : hasPending ? (
+                      <span className="radar-tag tag-drift">
+                        <strong>{p.pending}</strong> commits pending
+                      </span>
+                    ) : (
+                      <span className="radar-tag tag-synced">
+                        <CheckCircle2 size={13} className="text-success" />
+                        <span>In sync</span>
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      className="radar-expand-btn"
+                      aria-label={isOpen ? 'Collapse details' : 'Expand commits'}
+                    >
+                      {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded Commits Drawer */}
+                {isOpen && (
+                  <div className="radar-commits-drawer">
+                    {detail?.loading ? (
+                      <div className="commits-loading">
+                        <Loader2 size={14} className="spin text-muted" />
+                        <span>Fetching pending commit diffs...</span>
+                      </div>
+                    ) : detail?.error ? (
+                      <div className="commits-error">{detail.error}</div>
+                    ) : detail?.commits && detail.commits.length > 0 ? (
+                      <div className="commits-list">
+                        <div className="commits-header">
+                          <span>
+                            Showing {detail.commits.length} of {detail.total} pending commits
+                          </span>
+                          {detail.compareUrl && (
+                            <a
+                              href={detail.compareUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="compare-link"
+                            >
+                              <span>View GitHub diff</span>
+                              <ExternalLink size={12} />
+                            </a>
+                          )}
+                        </div>
+
+                        {detail.commits.map((c) => (
+                          <a
+                            key={c.sha}
+                            href={c.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="commit-row"
+                          >
+                            <GitCommit size={14} className="commit-icon flex-none text-muted" />
+                            <code className="commit-sha">{c.sha.slice(0, 7)}</code>
+                            <span className="commit-msg">{c.message}</span>
+                            {c.author && <span className="commit-author">by {c.author}</span>}
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="commits-empty">No unmerged commits found.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

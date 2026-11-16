@@ -7,21 +7,19 @@ import ReleaseRadar from './ReleaseRadar';
 import ReleaseStatus from './ReleaseStatus';
 import ReleaseStats from './ReleaseStats';
 
-// Landing page of vidai-deployments.vercel.app: environment status first, then what is waiting
-// to ship, then the full deployment history. Sections talk through window events
-// (tracker:data-changed, tracker:refresh, tracker:compare, tracker:edit-deployment,
-// tracker:delete-deployment, tracker:auth-changed) so each one stays a standalone component.
 export default function DeploymentsTab() {
   return (
     <>
-      <div className="page-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+      <div className="tab-page-header">
         <div>
-          <h1>Deployments</h1>
-          <p>What is running where, what is waiting to ship, and what just changed.</p>
+          <h1 className="tab-page-title">Deployments</h1>
+          <p className="tab-page-subtitle">
+            What is running where, what is waiting to ship, and what just changed.
+          </p>
         </div>
         <ReleaseAdmin />
       </div>
-      <div className="stack" style={{ marginTop: 0 }}>
+      <div className="tab-page-stack">
         <ReleaseStatus />
         <ReleaseStats />
         <ReleaseEnvs />

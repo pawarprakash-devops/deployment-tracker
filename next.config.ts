@@ -1,15 +1,17 @@
 import type { NextConfig } from "next";
 
-// Everything lives on one page with tabs (/?tab=...). Old URLs keep working.
+// Only Deployments (/) and Insights (/?tab=insights). Old URLs redirect cleanly.
 const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/classic", destination: "/", permanent: false },
-      { source: "/jira", destination: "/?tab=tickets", permanent: false },
+      { source: "/jira", destination: "/", permanent: false },
+      { source: "/tickets", destination: "/", permanent: false },
+      { source: "/health", destination: "/", permanent: false },
+      { source: "/home", destination: "/", permanent: false },
+      { source: "/pipeline", destination: "/", permanent: false },
+      { source: "/my-view", destination: "/", permanent: false },
       { source: "/admin", destination: "/?tab=insights", permanent: false },
-      { source: "/health", destination: "/?tab=health", permanent: false },
-      { source: "/home", destination: "/?tab=my-view", permanent: false },
-      { source: "/pipeline", destination: "/?tab=pipeline", permanent: false },
     ];
   },
 };
