@@ -159,9 +159,11 @@ export default function ReleaseEnvs() {
         setProbes(map);
       }
 
-      if (dRes.status === 'fulfilled' && Array.isArray(dRes.value?.deployments)) {
+      if (dRes.status === 'fulfilled') {
+        const val = dRes.value;
+        const dList: Dep[] = Array.isArray(val) ? val : Array.isArray(val?.deployments) ? val.deployments : [];
         const byEnv: Record<string, Dep[]> = {};
-        for (const d of dRes.value.deployments as Dep[]) {
+        for (const d of dList) {
           if (!byEnv[d.environment]) byEnv[d.environment] = [];
           byEnv[d.environment].push(d);
         }

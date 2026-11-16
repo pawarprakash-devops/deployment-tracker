@@ -121,10 +121,9 @@ export default function ReleaseHistory() {
       const res = await fetch('/api/deployments?limit=1000', { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (Array.isArray(data.deployments)) {
-        setRows(data.deployments);
-        setTotal(data.deployments.length);
-      }
+      const list = Array.isArray(data) ? data : Array.isArray(data?.deployments) ? data.deployments : [];
+      setRows(list);
+      setTotal(list.length);
     } catch {
       /* ignore */
     } finally {
