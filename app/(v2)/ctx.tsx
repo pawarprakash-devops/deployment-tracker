@@ -1,64 +1,111 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { PipelineResponse } from '@/lib/pipeline-types';
-import { usePipeline } from './ui';
+import type { ReactNode } from 'react';
 
-export type Lens = 'dev' | 'qa' | 'rel' | 'mgmt';
-export const LENSES: { id: Lens; label: string }[] = [
-  { id: 'dev', label: 'Developer' },
-  { id: 'qa', label: 'QA' },
-  { id: 'rel', label: 'Release' },
-  { id: 'mgmt', label: 'Management' },
-];
-
-interface Shell {
-  lens: Lens;
-  setLens: (l: Lens) => void;
-  pipeline: PipelineResponse | null;
-  error: string | null;
-  updatedAt: number | null;
-  openTicket: string | null;
-  setOpenTicket: (key: string | null) => void;
+export interface FleetCluster {
+  environment: string;
+  url?: string;
+  status: 'HEALTHY' | 'DEGRADED' | 'OFFLINE';
+  latencyMs: number;
+  message?: string;
 }
-const Ctx = createContext<Shell | null>(null);
-export const useShell = () => {
-  const c = useContext(Ctx);
-  if (!c) throw new Error('useShell outside ShellProvider');
-  return c;
-};
 
-const LENS_KEY = 'tracker-lens';
+export interface ShellContextType {
+  updatedAt: number | null;
+  refreshKey: number;
+  refresh: () => void;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
+  searchOpen: boolean;
+  setSearchOpen: (open: boolean) => void;
+  envFilter: string | null;
+  setEnvFilter: (env: string | null) => void;
+  statusFilter: string | null;
+  setStatusFilter: (status: string | null) => void;
+  clusters: FleetCluster[] | null;
+  setClusters: (clusters: FleetCluster[] | null) => void;
+}
 
-export function ShellProvider({ children }: { children: React.ReactNode }) {
-  const { data, error, updatedAt } = usePipeline();
-  const [lens, setLensState] = useState<Lens>('dev');
-  const [openTicket, setOpenTicket] = useState<string | null>(null);
+const ShellCtx = createContext<ShellContextType | null>(null);
 
+export function useShell(): ShellContextType {
+  const ctx = useContext(ShellCtx);
+  if (!ctx) throw new Error('useShell must be used within ShellProvider');
+  return ctx;
+}
+
+const THEME_KEY = 'tracker-theme';
+
+export function ShellProvider({ children }: { children: ReactNode }) {
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [envFilter, setEnvFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [clusters, setClusters] = useState<FleetCluster[] | null>(null);
+
+  // Initialize theme from localStorage or OS preference
   useEffect(() => {
     try {
-      const fromUrl = new URLSearchParams(window.location.search).get('as');
-      const saved = fromUrl || localStorage.getItem(LENS_KEY);
-      if (saved && LENSES.some((l) => l.id === saved)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- browser-only storage read after hydration
-        setLensState(saved as Lens);
-        if (fromUrl) localStorage.setItem(LENS_KEY, saved);
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'light' || saved === 'dark') {
+        setTheme(saved);
+      } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+        setTheme('light');
       }
-    } catch { /* storage unavailable: keep default */ }
+    } catch {
+      /* ignore */
+    }
+    setUpdatedAt(Date.now());
   }, []);
 
-  const setLens = useCallback((l: Lens) => {
-    setLensState(l);
-    try { localStorage.setItem(LENS_KEY, l); } catch { /* ignore */ }
-    try {
-      const u = new URL(window.location.href);
-      u.searchParams.set('as', l);
-      window.history.replaceState(null, '', u);
-    } catch { /* ignore */ }
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem(THEME_KEY, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   }, []);
+
+  const refresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    setUpdatedAt(Date.now());
+    window.dispatchEvent(new CustomEvent('tracker:refresh'));
+  }, []);
+
+  // Periodic automatic refresh every 60s when visible
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [refresh]);
 
   const value = useMemo(
-    () => ({ lens, setLens, pipeline: data, error, updatedAt, openTicket, setOpenTicket }),
-    [lens, setLens, data, error, updatedAt, openTicket]
+    () => ({
+      updatedAt,
+      refreshKey,
+      refresh,
+      theme,
+      toggleTheme,
+      searchOpen,
+      setSearchOpen,
+      envFilter,
+      setEnvFilter,
+      statusFilter,
+      setStatusFilter,
+      clusters,
+      setClusters,
+    }),
+    [updatedAt, refreshKey, refresh, theme, toggleTheme, searchOpen, envFilter, statusFilter, clusters]
   );
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+
+  return <ShellCtx.Provider value={value}>{children}</ShellCtx.Provider>;
 }

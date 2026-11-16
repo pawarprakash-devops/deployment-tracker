@@ -7,8 +7,8 @@ import ClientOnly from './ClientOnly';
 import { ShellProvider } from './ctx';
 
 export const metadata: Metadata = {
-  title: 'VidAI Delivery',
-  description: 'Role-based deployment and ticket tracker',
+  title: 'VidAI Delivery — Fleet & Deployment Tracker',
+  description: 'Enterprise deployment tracking, fleet health monitoring, promotion radar and DORA metrics',
 };
 
 export default function V2Layout({ children }: { children: React.ReactNode }) {
