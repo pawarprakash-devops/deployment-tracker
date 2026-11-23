@@ -14,6 +14,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useShell } from './ctx';
+import RadarScope from './RadarScope';
+import ReleaseNotes from './ReleaseNotes';
 
 type Repo = 'backend' | 'frontend';
 
@@ -81,6 +83,7 @@ export default function ReleaseRadar() {
   const [openPairKey, setOpenPairKey] = useState<string | null>(null);
   const [detailMap, setDetailMap] = useState<Record<string, CommitDetail>>({});
   const [windowNotice, setWindowNotice] = useState('');
+  const [notesFor, setNotesFor] = useState<Pair | null>(null);
 
   // Update QA window countdown
   useEffect(() => {
@@ -226,6 +229,16 @@ export default function ReleaseRadar() {
           <p className="text-danger">{error}</p>
         </div>
       ) : (
+        <>
+        <RadarScope
+          pairs={(pairs ?? []).map((p) => ({ key: `${p.from}>${p.to}`, fromEnv: p.fromEnv, toEnv: p.toEnv, pending: p.pending, error: p.error, missingBranch: p.missingBranch }))}
+          openKey={openPairKey}
+          onSelect={(key) => {
+            const p = pairs?.find((x) => `${x.from}>${x.to}` === key);
+            if (p) togglePair(p);
+            document.getElementById(`radar-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }}
+        />
         <div className="radar-grid">
           {pairs?.map((p) => {
             const pairKey = `${p.from}>${p.to}`;
@@ -236,6 +249,7 @@ export default function ReleaseRadar() {
             return (
               <div
                 key={pairKey}
+                id={`radar-${pairKey}`}
                 className={`radar-card ${hasPending ? 'has-drift' : 'is-synced'} ${
                   isOpen ? 'is-expanded' : ''
                 }`}
@@ -297,6 +311,9 @@ export default function ReleaseRadar() {
                           <span>
                             Showing {detail.commits.length} of {detail.total} pending commits
                           </span>
+                          <button type="button" className="release-notes-btn" onClick={() => setNotesFor(p)}>
+                            📝 Release notes
+                          </button>
                           {detail.compareUrl && (
                             <a
                               href={detail.compareUrl}
@@ -334,6 +351,16 @@ export default function ReleaseRadar() {
             );
           })}
         </div>
+        </>
+      )}
+      {notesFor && (
+        <ReleaseNotes
+          from={notesFor.from}
+          base={notesFor.baseRef || notesFor.to}
+          fromEnv={notesFor.fromEnv}
+          toEnv={notesFor.toEnv}
+          onClose={() => setNotesFor(null)}
+        />
       )}
     </div>
   );

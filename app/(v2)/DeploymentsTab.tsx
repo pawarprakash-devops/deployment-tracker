@@ -6,6 +6,8 @@ import ReleaseHistory from './ReleaseHistory';
 import ReleaseRadar from './ReleaseRadar';
 import ReleaseStatus from './ReleaseStatus';
 import ReleaseStats from './ReleaseStats';
+import ReleaseFreeze from './ReleaseFreeze';
+import FleetGlobe from './FleetGlobe';
 
 export default function DeploymentsTab() {
   return (
@@ -20,8 +22,10 @@ export default function DeploymentsTab() {
         <ReleaseAdmin />
       </div>
       <div className="tab-page-stack">
+        <ReleaseFreeze />
         <ReleaseStatus />
         <ReleaseStats />
+        <FleetGlobe />
         <ReleaseEnvs />
         <ReleaseRadar />
         <ReleaseHistory />

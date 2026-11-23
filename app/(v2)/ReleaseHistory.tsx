@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useShell } from './ctx';
 import { StatusPill, Chip, ago, fmtDate, fmtDateTime, formatDuration } from './ui';
+import { freezeFor, useFreezes } from './ReleaseFreeze';
 
 export interface DeploymentRow {
   id: string;
@@ -96,6 +97,7 @@ const ALL_STATUSES = [
 
 export default function ReleaseHistory() {
   const { refreshKey, envFilter, setEnvFilter, statusFilter, setStatusFilter } = useShell();
+  const freezes = useFreezes();
 
   const [rows, setRows] = useState<DeploymentRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -380,6 +382,14 @@ export default function ReleaseHistory() {
                       {/* Status */}
                       <td className="cell-status">
                         <StatusPill status={row.status} />
+                        {(() => {
+                          const fz = freezeFor(freezes, row.environment, row.started_at);
+                          return fz ? (
+                            <span className="freeze-badge" title={`Deployed during a freeze: ${fz.reason}${fz.created_by ? ` (set by ${fz.created_by})` : ''}`}>
+                              ❄️ in freeze
+                            </span>
+                          ) : null;
+                        })()}
                       </td>
 
                       {/* Environment */}
