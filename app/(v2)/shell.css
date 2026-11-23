@@ -79,7 +79,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+  background: linear-gradient(135deg, #f0a088 0%, var(--accent) 50%, #9c3f25 100%);
   border-radius: var(--r-sm);
   color: #ffffff;
   box-shadow: 0 2px 8px var(--accent-glow);
@@ -964,7 +964,7 @@
 
 .env-filter-btn.is-active {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -1827,7 +1827,7 @@
 
 .btn-accent {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   box-shadow: 0 1px 3px var(--accent-glow);
 }
 
@@ -2146,3 +2146,16 @@
   .radar-blip, .heatmap-col, .freeze-flake { animation: none !important; }
   .is-tilting, .radar-scope { transform: none !important; }
 }
+
+/* ---- shared <Card> (ui.tsx): was unstyled, so Insights cards rendered bare; mirrors .pulse-chart-card ---- */
+.tracker-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  box-shadow: var(--elev-1);
+}
+.tracker-card .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.tracker-card .card-title-row { display: flex; align-items: center; gap: 8px; }
+.tracker-card .card-title { font-size: 14px; font-weight: 600; margin: 0; color: var(--text); }
+.tracker-card .card-subtitle { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
