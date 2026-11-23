@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useShell } from './ctx';
 import { StatusPill, Chip, ago, formatDuration } from './ui';
+import { regionOf } from './regions';
 
 interface HealthRow {
   environment: string;
@@ -71,14 +72,6 @@ const SEMVER = /^v?\d+\.\d+\.\d+([-+][\w.-]+)?$/;
 const realVersion = (v?: string | null) =>
   v && SEMVER.test(v.trim()) && !/^v?0\.0\.0$/.test(v.trim()) ? v.trim() : null;
 
-function regionOf(envName: string, host?: string): string {
-  const l = `${envName} ${host || ''}`.toLowerCase();
-  if (/euc|eu-central-1|egypt/.test(l)) return 'eu-central-1';
-  if (/usw|us-west-1|citmer/.test(l)) return 'us-west-1';
-  if (/euw2|eu-west-2|london/.test(l)) return 'eu-west-2';
-  if (/use1|us-east-1/.test(l)) return 'us-east-1';
-  return 'ap-south-1';
-}
 
 function derive(deps: Dep[]): Derived {
   const sorted = deps

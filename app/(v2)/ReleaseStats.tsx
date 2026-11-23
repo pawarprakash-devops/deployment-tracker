@@ -10,6 +10,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useShell } from './ctx';
+import { CountUp } from './motion';
 
 interface SummaryData {
   total: number;
@@ -90,7 +91,7 @@ export default function ReleaseStats() {
             <Activity size={16} className="stat-icon text-accent" />
           </div>
           <div className="stat-value-row">
-            <span className="stat-value tnum">{data.total.toLocaleString()}</span>
+            <span className="stat-value tnum"><CountUp value={data.total} /></span>
           </div>
           <div className="stat-subtext">All-time recorded pipelines</div>
         </div>
@@ -126,7 +127,7 @@ export default function ReleaseStats() {
                 />
               </svg>
             </div>
-            <span className="stat-value tnum">{successRate.toFixed(1)}%</span>
+            <span className="stat-value tnum"><CountUp value={successRate} decimals={1} suffix="%" /></span>
           </div>
           <div className="stat-subtext">
             {data.success.toLocaleString()} succeeded · {data.failed} failed
@@ -140,7 +141,7 @@ export default function ReleaseStats() {
             <Calendar size={16} className="stat-icon text-info" />
           </div>
           <div className="stat-value-row">
-            <span className="stat-value tnum">{data.today}</span>
+            <span className="stat-value tnum"><CountUp value={data.today} /></span>
           </div>
           <div className="stat-subtext">
             {data.days.slice(-7).reduce((acc, d) => acc + d.total, 0)} deploys in last 7 days

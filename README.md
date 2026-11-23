@@ -15,7 +15,21 @@ The tracker focuses on two dedicated views with shared topbar telemetry, live fl
 
 Legacy URLs redirect automatically (`next.config.ts`): `/classic`, `/jira`, `/tickets`, `/health`, `/home`, `/pipeline`, `/my-view` → `/`, and `/admin` → `/?tab=insights`.
 
-Sections inside a tab are standalone components that talk through window events: `tracker:data-changed`, `tracker:refresh`, `tracker:compare`, `tracker:edit-deployment`, `tracker:delete-deployment`, `tracker:auth-changed`. `AdminGate` shows a sign-in card on Tickets and Insights for non-admins.
+Sections inside a tab are standalone components that talk through window events: `tracker:data-changed`, `tracker:refresh`, `tracker:compare`, `tracker:edit-deployment`, `tracker:delete-deployment`, `tracker:auth-changed`, `tracker:freeze-changed`. `AdminGate` shows a sign-in card on Tickets and Insights for non-admins.
+
+### 3D motion and release tools (2026-11-23)
+
+| Feature | Where | Notes |
+|---|---|---|
+| **3D tilt + entrances** | Stat cards, environment cards, radar cards | One delegated pointer listener (`useTilt3D` in `app/(v2)/motion.tsx`) sets `--tilt-x/--tilt-y`; CSS does the transform. Stat cards rise in and environment cards flip in one after another. Off on touch devices |
+| **Micro-motion** | Stats, Insights bars, status pills | `CountUp` numbers, bars grow in, the success checkmark spins in once |
+| **Fleet globe** | Deployments, under the stats | `FleetGlobe.tsx`: rotating CSS 3D globe with a pin per AWS region (`regions.ts`, shared with `ReleaseEnvs`), coloured by the worst latest-deploy status there (failed / deploying / healthy) |
+| **3D drift radar** | Top of Promotion Radar | `RadarScope.tsx`: tilted radar with a sweep; one blip per promotion pair, further out = more unpromoted commits (log scale); click a blip to open that pair |
+| **Release notes** | 📝 button in an opened radar pair | `ReleaseNotes.tsx`: pulls both repos' `base...head` commits from `/api/drift/commits`, groups them (features / fixes / perf / refactors / chores / other), drops merge noise, links PRs; copy for Slack or download `.md` |
+| **Deploy calendar** | Insights | `DeployHeatmap.tsx`: 26-week GitHub-style heatmap of deploys per IST day, red outline on days with a failure; click a day to list its deploys. Pages `/api/deployments` with `offset` to cover the full window |
+| **Deploy freeze windows** | Banner at the top of Deployments; ❄️ badge in history | `ReleaseFreeze.tsx` + `/api/freeze`. Admins schedule a freeze for one environment or all (max 14 days, IST times, reason + name); the board shows active (red) and next-7-days (blue) freezes, and history rows deployed inside a freeze get **❄️ in freeze**. Freezes are cancelled, never deleted. Informational only: they don't block the webhook or the workflows |
+
+Every animation is disabled under `prefers-reduced-motion`, and all colours come from `tokens.css`, so both themes work (the light/dark toggle is in the top bar).
 
 ## Environments are self-registering
 
@@ -176,6 +190,7 @@ All `GET`s are public. `POST/PUT/PATCH/DELETE` need admin auth (see `AUTHENTICAT
 | `GET /api/jira/issues?keys=` · `GET /api/jira/stats?days=` · `GET /api/jira/deployed` | Jira data (**admin session or `Bearer ADMIN_TOKEN` required** — unlike other GETs, because summaries/assignees are internal). `issues` resolves up to 100 keys; `stats` returns exact counts over all issues of `JIRA_PROJECT_KEYS` (Jira's approximate-count API), counts per workflow stage, open bugs, and the active sprint(s) from the Agile API (assignee breakdown samples the 500 most recently updated open issues); `deployed` maps keys → environments from the last 300 successful deployments. Uses Jira's `POST /rest/api/3/search/jql` |
 | `GET /api/pipeline?sinceDays=` | Tickets grouped by furthest environment for `/home` and `/pipeline`. `sinceDays` 1–90 (default 30) bounds the non-success rows; successes are always the latest 300 non-tracker deployments. Ticket keys come from notes, branches, versions and ticket link (`JIRA_PROJECT_KEYS` filter). `Rerun - Success` counts as success; cancelled rows are ignored. Response: `generatedAt`, `configured`, `jiraAuthorised`, `jiraError`, `window {deployments, oldest, truncated}`, `columns[]` (id, name, environments, rank, `group` (preview/demo/qa/stage/preprod/prod/lms/other), isProduction, `health`, `activeDeploy`, `ticketCount`), `tickets[]` (max 150, newest first: `key`, `column`, `reached`, per-environment `environments` entries with state/first/last time/versions/deployer/run URL, `ageInStageDays`, `badges` hotfix/rolled_back/failed/stuck, plus Jira fields), `unlinked.deployments`, `notInJira`, `truncated`. **Deployment data is public; Jira fields** (`summary`, `type`, `priority`, `status`, `stage`, `assignee`, `url`) **are filled only for an admin session and only when `JIRA_*` is configured** — otherwise they are `null`. `Cache-Control`: `public, s-maxage=30, stale-while-revalidate=60` for anonymous, `private, max-age=30` for admin |
 | `GET /api/admin/stats` | Aggregates + DORA metrics for the Insights tab (admin session required) |
+| `GET /api/freeze` · `POST /api/freeze` · `DELETE /api/freeze/[id]` | Deploy freeze windows. GET (public): windows not cancelled that end in the future or ended in the last 90 days, with `active` and the server `now`. POST (admin): `{environment: "*" \| name, starts_at, ends_at (ISO), reason, created_by}`, max 14 days. DELETE (admin) sets `cancelled_at`. The `freeze_windows` table is created on first use (`lib/freeze.ts`); no migrate step |
 | `GET/POST /api/migrate` | One-off schema/data maintenance (adds FE/BE columns, widens columns to TEXT, renames `Demo`→`Demo-Preview`, dedupes superseded failed rows). Idempotent; both POST and GET need admin |
 | `POST /api/auth`, `DELETE /api/auth`, `GET /api/auth/session` | Admin login / logout / role check |
 

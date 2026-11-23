@@ -17,8 +17,10 @@ import {
 import { useShell, type FleetCluster } from './ctx';
 import { TABS, isTab, tabHref } from './tabs';
 import CommandPalette from './CommandPalette';
+import { useTilt3D } from './motion';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  useTilt3D();
   const rawTab = useSearchParams().get('tab');
   const tab = isTab(rawTab) ? rawTab : 'deployments';
   const {

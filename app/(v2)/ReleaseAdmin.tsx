@@ -58,7 +58,7 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: '13px', minHeight: 32, minWidth: 0, width: '100%', fontFamily: 'inherit', boxSizing: 'border-box',
 };
 
-function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
+export function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const id = useId();
   const opener = useRef<Element | null>(null);

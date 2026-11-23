@@ -5,6 +5,7 @@ import InsightsLists, { type ListsStats } from './InsightsLists';
 import { Card, Chip, Empty, ErrorNote, Pill, Skeleton, StatusPill, Tile, type Tone } from './ui';
 import type { EnvMetaRow } from '@/lib/env-meta';
 import { useEnvMeta } from './useEnvMeta';
+import DeployHeatmap from './DeployHeatmap';
 
 // ---- types: mirror of GET /api/admin/stats -----------------------------------------------------------
 type Tier = 'Elite' | 'High' | 'Medium' | 'Low';
@@ -252,6 +253,8 @@ function InsightsBody() {
         <Tile label="Today" value={stats.deploymentsToday} hint="Since midnight" />
         <Tile label="Last 7 days" value={stats.deploymentsThisWeek} hint="Rolling week" />
       </div>
+
+      <DeployHeatmap />
 
       <Card
         title="DORA metrics"
