@@ -2244,3 +2244,42 @@
 @media (prefers-reduced-motion: reduce) {
   .live-dot, .skeleton-bar { animation: none !important; }
 }
+
+/* =====================================================================
+   Small screens: the top bar was one fixed 56px row (~565px of content),
+   so every tab scrolled sideways on phones, and the tab nav was hidden
+   below 900px with no other way to switch tabs. Now it wraps to two rows
+   with the tabs full width, and drops low-value extras on phones.
+   ===================================================================== */
+@media (max-width: 900px) {
+  .topbar { height: auto; flex-wrap: wrap; row-gap: 8px; padding: 8px 14px; }
+  .topbar-left, .topbar-right { min-width: 0; gap: 8px; }
+  .tab-nav { display: flex; order: 3; width: 100%; }
+  .tab-nav .tab-link { flex: 1 1 0; justify-content: center; }
+}
+@media (max-width: 640px) {
+  .search-kbd, .updated-stamp, .fleet-health-text { display: none; }
+  .admin-status-badge span { display: none; }
+  .logo-text { font-size: 14px; }
+  .fleet-health-pill { padding: 4px 6px; }
+  .search-trigger { padding: 6px 8px; }
+  .tab-page-header { flex-wrap: wrap; gap: 12px; }
+}
+
+/* Content on phones: single-column stacks/grids must be allowed to shrink below their widest child
+   (radar cards had a 360px minimum, env cards 290px, wider than a phone's content area). */
+.stack { grid-template-columns: minmax(0, 1fr); }
+.tab-page-stack > * { min-width: 0; }
+.table-responsive { overflow-x: auto; max-width: 100%; }
+@media (max-width: 640px) {
+  .envs-grid, .radar-grid, .stats-cards-grid { grid-template-columns: minmax(0, 1fr); }
+  .tab-page-header p, .page-h p { overflow-wrap: anywhere; }
+}
+@media (max-width: 640px) {
+  /* 14-day pulse: 14 fixed columns don't fit; scroll inside the card instead of widening the page */
+  .pulse-chart-body { overflow-x: auto; max-width: 100%; }
+  .pulse-bars-grid { min-width: 520px; }
+  /* alerts banner: label on top, chips full width below */
+  .status-banner { flex-direction: column; align-items: stretch; }
+  .status-banner-chips { width: 100%; }
+}
