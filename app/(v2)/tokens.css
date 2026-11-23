@@ -94,6 +94,23 @@
   --font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-data: var(--font-code);
 
+  /* Spacing + type scale (used by Insights and the shared ui.tsx components) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --fs-2xs: 10.5px;
+  --lh-2xs: 14px;
+  --fs-xs: 11.5px;
+  --lh-xs: 16px;
+  --fs-sm: 13px;
+  --lh-sm: 18px;
+  --fs-md: 14px;
+  --fs-xl: 24px;
+  --lh-xl: 30px;
+
   /* Radii */
   --r-xs: 4px;
   --r-sm: 6px;

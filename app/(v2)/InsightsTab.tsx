@@ -121,17 +121,17 @@ function Distribution({ entries, total, tone, cluster }: {
   const envMeta = useEnvMeta();
   if (entries.length === 0) return <Empty>No deployments recorded yet.</Empty>;
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
       {entries.map(([name, count]) => {
         const share = total > 0 ? (count / total) * 100 : 0;
         const t = tone(name);
         const cc = cluster ? clusterChip(name, envMeta?.get(name)) : null;
         return (
-          <div key={name}>
+          <div key={name} style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                 {cluster ? <strong style={{ fontSize: 'var(--fs-sm)' }}>{name}</strong> : <StatusPill status={name} />}
-                {cc && <Chip title="Region and cluster">{cc}</Chip>}
+                {cc && <Chip title={`Region and cluster: ${cc}`}>{cc}</Chip>}
               </span>
               <span className="tnum" style={{ fontSize: 'var(--fs-sm)' }}>
                 <strong>{count}</strong> <span className="muted">({pct(share)})</span>
