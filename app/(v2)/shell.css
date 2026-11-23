@@ -79,7 +79,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+  background: linear-gradient(135deg, #f0a088 0%, var(--accent) 50%, #9c3f25 100%);
   border-radius: var(--r-sm);
   color: #ffffff;
   box-shadow: 0 2px 8px var(--accent-glow);
@@ -964,7 +964,7 @@
 
 .env-filter-btn.is-active {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -1827,7 +1827,7 @@
 
 .btn-accent {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   box-shadow: 0 1px 3px var(--accent-glow);
 }
 
@@ -2145,4 +2145,141 @@
   .stat-card, .env-card, .pill.tone-ok .pill-icon, .bar > span, .globe-spin, .globe-pin, .radar-scope-sweep,
   .radar-blip, .heatmap-col, .freeze-flake { animation: none !important; }
   .is-tilting, .radar-scope { transform: none !important; }
+}
+
+/* ---- shared <Card> (ui.tsx): was unstyled, so Insights cards rendered bare; mirrors .pulse-chart-card ---- */
+.tracker-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  box-shadow: var(--elev-1);
+}
+.tracker-card .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.tracker-card .card-title-row { display: flex; align-items: center; gap: 8px; }
+.tracker-card .card-title { font-size: 14px; font-weight: 600; margin: 0; color: var(--text); }
+.tracker-card .card-subtitle { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+
+/* =====================================================================
+   Insights tab + shared ui.tsx components. These classes were used but never
+   styled, so Insights rendered as a plain list. Matches the Deployments tab.
+   ===================================================================== */
+.stack { display: grid; gap: var(--space-4); }
+.page-h { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.page-h h1, .page-h h2 { margin: 0; font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+.page-h p { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--muted); }
+.muted { color: var(--muted); }
+.subtle { color: var(--faint); font-size: var(--fs-xs); }
+
+/* grids */
+.grid { display: grid; gap: var(--space-3); }
+.grid.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .grid.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .grid.g2, .grid.g4 { grid-template-columns: 1fr; } }
+
+/* headline tiles (ui.tsx <Tile>) */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); }
+.metric-tile {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 14px 16px; box-shadow: var(--elev-1); display: grid; gap: 4px; min-width: 0;
+}
+.metric-tile.tone-ok { border-top: 2px solid var(--ok); }
+.metric-tile.tone-warn { border-top: 2px solid var(--warn); }
+.metric-tile.tone-bad { border-top: 2px solid var(--bad); }
+.metric-tile.tone-info { border-top: 2px solid var(--info); }
+.tile-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tile-label { font-size: var(--fs-xs); font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.tile-icon { color: var(--faint); display: inline-flex; }
+.tile-value { font-size: var(--fs-xl); line-height: var(--lh-xl); font-weight: 700; color: var(--text); font-family: var(--font-data); }
+.metric-tile.tone-ok .tile-value { color: var(--ok-text); }
+.metric-tile.tone-warn .tile-value { color: var(--warn-text); }
+.metric-tile.tone-bad .tile-value { color: var(--bad-text); }
+.tile-hint { font-size: var(--fs-xs); color: var(--faint); }
+.spark { width: 100%; height: 28px; display: block; }
+
+/* plain cards used directly in Insights (DORA cards) */
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px 16px; box-shadow: var(--elev-1); min-width: 0; }
+.card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.card-h h3, .card-h h2, .card-h strong { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+.tracker-card .card-action { flex: none; }
+.tracker-card { min-width: 0; }
+.tracker-card .card-body, .tracker-card .card-body > * { min-width: 0; }
+
+/* chips + dots */
+.vchip { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; font-size: var(--fs-2xs); line-height: var(--lh-2xs); padding: 1px 7px; border-radius: var(--r-pill); border: 1px solid var(--neutral-border); background: var(--neutral-bg); color: var(--neutral-text); white-space: nowrap; }
+.vchip.chip-fe { border-color: var(--fe-border); background: var(--fe-bg); color: var(--fe-text); }
+.vchip.chip-be { border-color: var(--be-border); background: var(--be-bg); color: var(--be-text); }
+.vchip.chip-prod { border-color: var(--prod-border); background: var(--prod-bg); color: var(--prod-text); }
+.envdot { display: inline-grid; place-items: center; width: 10px; height: 10px; border-radius: 50%; background: var(--neutral-bg); flex: none; }
+.envdot .dot-inner { width: 6px; height: 6px; border-radius: 50%; background: var(--neutral); }
+.envdot.tone-ok .dot-inner { background: var(--ok); } .envdot.tone-ok { background: var(--ok-bg); }
+.envdot.tone-warn .dot-inner { background: var(--warn); } .envdot.tone-warn { background: var(--warn-bg); }
+.envdot.tone-bad .dot-inner { background: var(--bad); } .envdot.tone-bad { background: var(--bad-bg); }
+.envdot.tone-info .dot-inner { background: var(--info); } .envdot.tone-info { background: var(--info-bg); }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--info); box-shadow: 0 0 0 3px var(--info-bg); animation: live-dot-pulse 1.6s ease-in-out infinite; }
+.live-dot.tone-ok { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+.live-dot.tone-warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-bg); }
+.live-dot.tone-bad { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-bg); }
+@keyframes live-dot-pulse { 50% { opacity: 0.45; } }
+.pill-text { white-space: nowrap; }
+.pill-glyph { font-size: 12px; line-height: 1; }
+.tracker-kbd { font-family: var(--font-code); font-size: var(--fs-2xs); padding: 1px 5px; border-radius: var(--r-xs); border: 1px solid var(--border-ctl); background: var(--panel-2); color: var(--text-dim); }
+
+/* empty, skeleton, error banner */
+.tracker-empty { display: grid; justify-items: center; gap: 6px; text-align: center; padding: var(--space-5) var(--space-4); border: 1px dashed var(--border-bright); border-radius: var(--r-md); color: var(--muted); }
+.empty-icon { color: var(--faint); }
+.empty-title { margin: 0; font-size: var(--fs-md); color: var(--text); font-weight: 600; }
+.empty-desc { margin: 0; font-size: var(--fs-sm); }
+.skeleton-wrap { display: grid; }
+.skeleton-bar { background: linear-gradient(90deg, var(--skeleton-a), var(--skeleton-b), var(--skeleton-a)); background-size: 200% 100%; animation: skeleton-shimmer 1.4s linear infinite; }
+@keyframes skeleton-shimmer { to { background-position: -200% 0; } }
+.banner { border-radius: var(--r-md); padding: 10px 14px; border: 1px solid var(--border); background: var(--panel-2); }
+.banner.banner-error { background: var(--bad-bg); border-color: var(--bad-border); color: var(--bad-text); }
+.banner-content { display: flex; gap: 10px; align-items: flex-start; }
+.banner-icon { flex: none; margin-top: 2px; }
+.banner-msg { font-size: var(--fs-sm); }
+.banner-detail { font-size: var(--fs-xs); opacity: 0.85; margin-top: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot, .skeleton-bar { animation: none !important; }
+}
+
+/* =====================================================================
+   Small screens: the top bar was one fixed 56px row (~565px of content),
+   so every tab scrolled sideways on phones, and the tab nav was hidden
+   below 900px with no other way to switch tabs. Now it wraps to two rows
+   with the tabs full width, and drops low-value extras on phones.
+   ===================================================================== */
+@media (max-width: 900px) {
+  .topbar { height: auto; flex-wrap: wrap; row-gap: 8px; padding: 8px 14px; }
+  .topbar-left, .topbar-right { min-width: 0; gap: 8px; }
+  .tab-nav { display: flex; order: 3; width: 100%; }
+  .tab-nav .tab-link { flex: 1 1 0; justify-content: center; }
+}
+@media (max-width: 640px) {
+  .search-kbd, .updated-stamp, .fleet-health-text { display: none; }
+  .admin-status-badge span { display: none; }
+  .logo-text { font-size: 14px; }
+  .fleet-health-pill { padding: 4px 6px; }
+  .search-trigger { padding: 6px 8px; }
+  .tab-page-header { flex-wrap: wrap; gap: 12px; }
+}
+
+/* Content on phones: single-column stacks/grids must be allowed to shrink below their widest child
+   (radar cards had a 360px minimum, env cards 290px, wider than a phone's content area). */
+.stack { grid-template-columns: minmax(0, 1fr); }
+.tab-page-stack > * { min-width: 0; }
+.table-responsive { overflow-x: auto; max-width: 100%; }
+@media (max-width: 640px) {
+  .envs-grid, .radar-grid, .stats-cards-grid { grid-template-columns: minmax(0, 1fr); }
+  .tab-page-header p, .page-h p { overflow-wrap: anywhere; }
+}
+@media (max-width: 640px) {
+  /* 14-day pulse: 14 fixed columns don't fit; scroll inside the card instead of widening the page */
+  .pulse-chart-body { overflow-x: auto; max-width: 100%; }
+  .pulse-bars-grid { min-width: 520px; }
+  /* alerts banner: label on top, chips full width below */
+  .status-banner { flex-direction: column; align-items: stretch; }
+  .status-banner-chips { width: 100%; }
 }
