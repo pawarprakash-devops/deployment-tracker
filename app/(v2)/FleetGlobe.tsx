@@ -51,11 +51,11 @@ export default function FleetGlobe() {
   if (!rows) return null;
 
   return (
-    <section className="fleet-globe-section tracker-card">
-      <div className="card-header">
+    <section className="fleet-globe-section pulse-chart-card">
+      <div className="pulse-header">
         <div>
-          <h2 className="card-title">Fleet around the world</h2>
-          <p className="card-subtitle">Where we deploy, coloured by each region&apos;s latest deploy.</p>
+          <h3 className="pulse-title">Fleet around the world</h3>
+          <span className="pulse-subtitle">Where we deploy, coloured by each region&apos;s latest deploy</span>
         </div>
       </div>
       <div className="fleet-globe-body">
