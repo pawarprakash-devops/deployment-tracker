@@ -31,6 +31,12 @@ Sections inside a tab are standalone components that talk through window events:
 
 Every animation is disabled under `prefers-reduced-motion`, and all colours come from `tokens.css`, so both themes work (the light/dark toggle is in the top bar).
 
+### Look and layout (2026-11-23, #39)
+
+- **VidAI terracotta palette** (`tokens.css` v4): warm charcoal dark theme with VidAI's coral `#e17e61`, warm off-white light theme with a deeper `#b8553a` for contrast. Failures use crimson so they never read as the accent. Text on an accent background uses `--on-accent` (≥ 4.5:1 in both themes). Spacing and type tokens (`--space-*`, `--fs-*`, `--lh-*`) feed the shared `ui.tsx` components.
+- **Insights** cards, tiles, chips and banners are styled in `shell.css` (they used to render unstyled).
+- **Phones:** at ≤ 900 px the top bar wraps and the tabs go full width under it; at ≤ 640 px the search hint, updated stamp and fleet-health text hide, card grids go to one column, and wide charts scroll sideways instead of stretching the page.
+
 ## Environments are self-registering
 
 **A new environment = a `tracker` block in that environment's vidai-devops `clusters.json` entry. Nothing changes in this repo.** Its first deploy webhook creates the `environments` row and every view (board column, ordering, compare branch, drift pair, region/cluster chip, live probe) picks it up from there.
@@ -220,7 +226,9 @@ app/
     InsightsTab.tsx InsightsLists.tsx   # DORA + telemetry
     HealthTab.tsx     # live probes + freshness
     tokens.css shell.css   # design tokens and shell styles, scoped to .v2
-  api/{deployments,environments,webhook,health,cluster-health,compare,admin/stats,jira,migrate,auth}/
+    motion.tsx        # useTilt3D, CountUp, useReducedMotion
+    FleetGlobe.tsx RadarScope.tsx ReleaseNotes.tsx DeployHeatmap.tsx ReleaseFreeze.tsx regions.ts
+  api/{deployments,environments,webhook,health,cluster-health,compare,drift,freeze,admin/stats,jira,migrate,auth}/
   api/pipeline/route.ts   # GET /api/pipeline
 lib/pipeline.ts       # buildPipeline(): deployments -> tickets/columns, optional Jira enrichment
 lib/pipeline-types.ts # client-safe response types for /api/pipeline
@@ -228,6 +236,7 @@ lib/db.ts             # pg Pool + types
 lib/alerts.ts         # Google Chat failure / recovery alerts (called by the webhook)
 lib/auth.ts           # isAdminRequest for GET routes with internal data
 lib/jira.ts           # Jira Cloud client, key extraction, admin check for /api/jira/*
+lib/freeze.ts         # freeze_windows table (created on first use)
 middleware.ts         # admin auth for non-GET /api/*
 scripts/              # importers
 .github/workflows/    # deploy.yaml

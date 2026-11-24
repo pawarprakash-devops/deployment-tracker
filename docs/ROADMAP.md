@@ -137,7 +137,7 @@ On every successful deployment to `prod_ank` or `prod_neo`:
 
 ## 3. Deployment Tracker Enhancements
 
-The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already been upgraded with the **DevOps Cyber Cockpit** theme on the Deployments and Insights tabs (formerly `/` and `/admin`). The following architectural enhancements will transform it into an end-to-end mission control system.
+The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has since been restyled (2026-11-23) with the **VidAI terracotta** theme, 3D motion, a fleet globe, a 3D drift radar with release notes, a deploy calendar and deploy freeze windows (PRs #38, #39) on the Deployments and Insights tabs (formerly `/` and `/admin`). The following architectural enhancements will transform it into an end-to-end mission control system.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -244,6 +244,7 @@ The Deployment Tracker (`pawarprakash-devops/deployment-tracker`) has already be
   - **Window Status Badges:** Transitions dynamically through `COUNTDOWN` ➔ `CLOSING IN` (within 30m) ➔ `WINDOW ACTIVE` (during 15m deployment window).
   - **Approval Gate Indicator:** Visual badge displaying `GATE: MANDATORY APPROVAL (@pawarprakash-devops)`.
   - Windows are hardcoded in `app/(v2)/ReleaseRadar.tsx` (`W1` = 13:30, `W2` = 16:00 IST, 15-minute window each); keep in sync with `QA-DEPLOY-SCHEDULE-AND-AUTO-DEPLOY-REMOVAL-2026-10-06.md`.
+  - **Deploy freeze windows** (2026-11-23, #38): admins can now schedule ad-hoc freezes per environment (`/api/freeze`); shown as a banner and a ❄️ badge on history rows. Informational only, the workflows still decide whether to deploy.
 
 ---
 
